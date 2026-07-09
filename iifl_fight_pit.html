@@ -1,0 +1,2190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iron Island Fight League — Fight Pit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-base:#1B1714; --bg-panel:#241D17; --bg-raised:#312820; --bg-raised-2:#3A2F25;
+    --ink-red:#A6342A; --ink-red-dim:#7C2620; --brass:#C9A23C; --brass-dim:#8E7228;
+    --bone:#EDE3CF; --bone-dim:#C9BFA9; --muted:#8B8070; --line:#43392D; --good:#5A8C5C;
+    --display:'Anton',sans-serif; --label:'Oswald',sans-serif; --body:'Work Sans',sans-serif; --mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:radial-gradient(ellipse at top, #241D17 0%, #1B1714 55%, #14110D 100%);
+    color:var(--bone); font-family:var(--body); min-height:100vh; display:flex; align-items:flex-start; justify-content:center;
+    padding:32px 16px 80px; line-height:1.4;
+  }
+  .app{ width:100%; max-width:820px; }
+  .ticket-header{
+    background:var(--bg-panel); border:1px solid var(--line); border-bottom:none; padding:18px 24px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .ticket-eyebrow{ font-family:var(--label); font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--brass); }
+  .ticket-title{ font-family:var(--display); font-size:26px; letter-spacing:1px; color:var(--bone); text-transform:uppercase; }
+  .ticket-sub{ font-family:var(--mono); font-size:11px; color:var(--muted); text-align:right; }
+  .panel{ background:var(--bg-panel); border:1px solid var(--line); border-top:none; padding:32px; min-height:420px; }
+  .section-label{
+    font-family:var(--label); font-size:12px; letter-spacing:2.5px; text-transform:uppercase; color:var(--brass);
+    margin-bottom:14px; display:flex; align-items:center; gap:10px;
+  }
+  .section-label::after{ content:""; flex:1; height:1px; background:var(--line); }
+  .btn{
+    font-family:var(--label); letter-spacing:1.5px; text-transform:uppercase; font-size:13px; font-weight:500;
+    padding:13px 28px; border:1px solid var(--brass); background:transparent; color:var(--brass); cursor:pointer; transition:all .15s ease;
+  }
+  .btn:hover{ background:var(--brass); color:var(--bg-base); }
+  .btn:disabled{ opacity:0.3; cursor:not-allowed; pointer-events:none; }
+  .btn-primary{ background:var(--ink-red); border-color:var(--ink-red); color:var(--bone); }
+  .btn-primary:hover{ background:#C03F32; border-color:#C03F32; color:var(--bone); }
+  .btn-row{ display:flex; justify-content:space-between; margin-top:24px; gap:12px; flex-wrap:wrap; }
+  .empty-note{ text-align:center; padding:50px 20px; color:var(--muted); font-family:var(--body); font-size:14px; }
+
+  /* fighter select */
+  .fighter-grid{ display:grid; gap:10px; }
+  .fighter-row{
+    background:var(--bg-raised); border:1px solid var(--line); border-left:4px solid var(--fr-color, var(--brass));
+    padding:13px 16px; display:flex; align-items:flex-start; gap:14px; transition:all .15s ease;
+  }
+  .fr-avatar{ width:30px; height:42px; flex-shrink:0; display:flex; align-items:flex-end; }
+  .fr-avatar svg{ width:100%; height:100%; }
+  .fr-name{ font-family:var(--label); font-size:15px; font-weight:600; color:var(--bone); }
+  .fr-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:2px; }
+  .fr-season-actions{ display:flex; gap:8px; margin-top:9px; flex-wrap:wrap; }
+  .fr-season-btn{
+    font-family:var(--label); font-size:10.5px; letter-spacing:.5px; text-transform:uppercase;
+    padding:8px 12px; border:1px solid var(--line); background:var(--bg-raised-2); color:var(--brass);
+    cursor:pointer; transition:all .12s ease;
+  }
+  .fr-season-btn:hover:not(:disabled){ border-color:var(--brass); }
+  .fr-season-btn:disabled{ opacity:.35; cursor:not-allowed; color:var(--muted); }
+
+  /* pit select */
+  .pit-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .pit-card{
+    background:var(--bg-raised); border:1px solid var(--line); border-left:4px solid var(--pc-color, var(--brass));
+    padding:14px 16px; cursor:pointer; transition:all .15s ease;
+  }
+  .pit-card:hover{ background:var(--bg-raised-2); }
+  .pit-name{ font-family:var(--label); font-size:14.5px; font-weight:600; color:var(--bone); }
+  .pit-meta{ font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:4px; }
+
+  /* league offer cards */
+  .offer-grid{ display:grid; gap:12px; }
+  .offer-card{
+    background:var(--bg-raised); border:1px solid var(--line); border-left:4px solid var(--pc-color, var(--brass));
+    padding:14px 16px; cursor:pointer; transition:all .15s ease;
+  }
+  .offer-card:hover{ background:var(--bg-raised-2); }
+  .offer-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .offer-strength-tag{
+    font-family:var(--label); font-size:10px; letter-spacing:1px; text-transform:uppercase;
+    color:var(--brass); border:1px solid var(--brass-dim); padding:3px 8px; flex-shrink:0;
+  }
+  .offer-blurb{ font-family:var(--body); font-size:12.5px; color:var(--bone-dim); margin:8px 0; line-height:1.5; }
+  .offer-row{ display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-family:var(--mono); font-size:11px; }
+  .offer-row-label{ color:var(--muted); }
+  .offer-row-val{ color:var(--bone-dim); text-align:right; max-width:65%; }
+  .offer-stars{ color:var(--brass); letter-spacing:1px; }
+
+  /* season screen */
+  .season-head{ display:flex; align-items:center; gap:16px; margin-bottom:22px; }
+  .season-avatar{ width:50px; height:70px; flex-shrink:0; display:flex; align-items:flex-end; }
+  .season-avatar svg{ width:100%; height:100%; }
+  .season-name{ font-family:var(--display); font-size:22px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .season-meta{ font-family:var(--mono); font-size:11.5px; color:var(--muted); margin-top:3px; }
+
+  .progress-bar{ height:8px; background:var(--bg-base); border:1px solid var(--line); margin:6px 0 22px; position:relative; overflow:hidden; }
+  .progress-fill{ position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, var(--ink-red-dim), var(--ink-red)); transition:width .4s ease; }
+
+  .stat-card-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:24px; }
+  .stat-card{ background:var(--bg-raised); border:1px solid var(--line); padding:12px; text-align:center; }
+  .stat-card .scv{ font-family:var(--mono); font-size:20px; font-weight:700; color:var(--brass); }
+  .stat-card .scl{ font-family:var(--label); font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-top:2px; }
+
+  /* vs / bout */
+  .vs-wrap{ display:flex; align-items:center; justify-content:center; gap:18px; margin:20px 0; }
+  .vs-fighter{ flex:1; text-align:center; }
+  .vs-fighter .vsa{ width:60px; height:84px; margin:0 auto 8px; display:flex; align-items:flex-end; justify-content:center; }
+  .vs-fighter .vsa svg{ width:100%; height:100%; }
+  .vs-fighter .vname{ font-family:var(--display); font-size:17px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .vs-fighter .vdisc{ font-family:var(--label); font-size:11px; color:var(--brass); margin-top:2px; text-transform:uppercase; }
+  .vs-mid{ font-family:var(--display); font-size:24px; color:var(--ink-red); }
+
+  .arena-card{ background:var(--bg-raised); border:1px solid var(--line); padding:14px 16px; margin-bottom:18px; }
+  .arena-name{ font-family:var(--display); font-size:17px; letter-spacing:.5px; text-transform:uppercase; color:var(--brass); }
+  .arena-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:4px; }
+
+  .fight-log{ display:flex; flex-direction:column; gap:9px; margin-bottom:6px; }
+  .log-round{ font-family:var(--label); font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-top:12px; display:flex; align-items:center; gap:10px; }
+  .log-round::after{ content:""; flex:1; height:1px; background:var(--line); }
+  .log-line{ font-family:var(--body); font-size:14px; color:var(--bone-dim); line-height:1.5; opacity:0; animation:line-in .35s ease forwards; }
+  @keyframes line-in{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
+  .log-line.finish{ color:var(--ink-red); font-weight:600; }
+  .log-line.decision{ color:var(--brass); font-weight:600; }
+
+  .result-banner{ text-align:center; padding:20px 10px; background:var(--bg-raised); border:1px solid var(--brass-dim); margin-bottom:18px; }
+  .result-winner{ font-family:var(--display); font-size:24px; letter-spacing:1px; text-transform:uppercase; color:var(--brass); }
+  .result-method{ font-family:var(--label); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:var(--bone-dim); margin-top:6px; }
+
+  .rep-meter{ height:8px; background:var(--bg-base); border:1px solid var(--line); position:relative; overflow:hidden; margin-top:6px; }
+  .rep-fill{ position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, var(--brass-dim), var(--brass)); transition:width .4s ease; }
+
+  .stub-screen{ text-align:center; padding:24px 10px 10px; }
+  .stub-screen h2{ font-family:var(--display); font-size:24px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink-red); margin-bottom:14px; }
+  .stub-screen p{ font-family:var(--body); color:var(--bone-dim); font-size:14px; max-width:440px; margin:0 auto 22px; }
+
+  /* bracket view */
+  .bracket-round{ margin-bottom:20px; }
+  .bracket-round-title{
+    font-family:var(--label); font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--brass);
+    margin-bottom:8px; display:flex; align-items:center; gap:10px;
+  }
+  .bracket-round-title::after{ content:""; flex:1; height:1px; background:var(--line); }
+  .bracket-match{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--bg-raised); border:1px solid var(--line); padding:8px 12px; margin-bottom:6px;
+    font-family:var(--body); font-size:12.5px;
+  }
+  .bracket-match.live{ border-color:var(--ink-red); background:var(--bg-raised-2); }
+  .bracket-side{ flex:1; color:var(--bone-dim); }
+  .bracket-side.winner{ color:var(--good); font-weight:600; }
+  .bracket-side.you{ color:var(--brass); font-weight:700; }
+  .bracket-vs{ color:var(--muted); font-family:var(--mono); font-size:10px; flex-shrink:0; }
+  .bracket-arrow{ color:var(--muted); font-family:var(--mono); font-size:11px; flex-shrink:0; }
+
+  /* tale of the tape */
+  .tape-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px; }
+  .tape-side{ background:var(--bg-raised); border:1px solid var(--line); padding:14px 16px; text-align:center; }
+  .tape-avatar{ width:50px; height:70px; margin:0 auto 8px; display:flex; align-items:flex-end; justify-content:center; }
+  .tape-avatar svg{ width:100%; height:100%; }
+  .tape-name{ font-family:var(--display); font-size:17px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .tape-disc{ font-family:var(--label); font-size:11px; color:var(--brass); text-transform:uppercase; margin-top:2px; }
+  .tape-facts{ font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:10px; line-height:1.9; text-align:left; }
+  .tape-facts b{ color:var(--bone-dim); }
+  .tape-ovr{ font-family:var(--mono); font-size:26px; font-weight:700; color:var(--brass); margin-top:8px; }
+
+  .tape-stat-row{ margin-bottom:13px; }
+  .tape-stat-label{ text-align:center; font-family:var(--label); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+  .tape-stat-bars{ display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:center; }
+  .tape-side-l, .tape-side-r{ display:flex; align-items:center; gap:8px; }
+  .tape-side-l{ flex-direction:row-reverse; }
+  .tape-bar-track{ flex:1; height:7px; background:var(--bg-base); border:1px solid var(--line); position:relative; overflow:hidden; }
+  .tape-bar-fill-l{ position:absolute; right:0; top:0; bottom:0; background:linear-gradient(270deg, var(--ink-red-dim), var(--ink-red)); }
+  .tape-bar-fill-r{ position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, var(--brass-dim), var(--brass)); }
+  .tape-val{ font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--bone); width:22px; text-align:center; flex-shrink:0; }
+
+  .press-note{ background:var(--bg-raised); border:1px solid var(--brass-dim); padding:16px 18px; margin:22px 0; }
+  .press-title{ font-family:var(--label); font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--brass); margin-bottom:8px; }
+  .press-note p{ font-family:var(--body); font-size:14px; color:var(--bone-dim); line-height:1.6; }
+
+  @media (max-width:600px){
+    .pit-grid{ grid-template-columns:1fr; }
+    .stat-card-row{ grid-template-columns:1fr 1fr; }
+    .ticket-header{ flex-direction:column; align-items:flex-start; gap:6px; }
+    .tape-grid{ grid-template-columns:1fr; }
+  }
+
+  /* ---- fighter card modal ---- */
+  .clickable-name{ cursor:pointer; text-decoration:underline; text-decoration-color:transparent; transition:text-decoration-color .12s ease; }
+  .clickable-name:hover{ text-decoration-color:var(--brass); color:var(--brass); }
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(10,8,6,0.78); display:flex; align-items:flex-start; justify-content:center;
+    padding:40px 16px; z-index:1000; overflow-y:auto;
+  }
+  .modal-card{ background:var(--bg-panel); border:1px solid var(--brass-dim); max-width:520px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.55); }
+  .modal-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .modal-title{ font-family:var(--display); font-size:20px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .modal-close{ background:transparent; border:1px solid var(--line); color:var(--muted); width:30px; height:30px; cursor:pointer; font-family:var(--mono); font-size:14px; }
+  .modal-close:hover{ border-color:var(--ink-red); color:var(--ink-red); }
+  .modal-body{ padding:20px; }
+  .mf-head{ display:flex; gap:14px; align-items:center; margin-bottom:18px; }
+  .mf-avatar{ width:50px; height:70px; flex-shrink:0; display:flex; align-items:flex-end; }
+  .mf-avatar svg{ width:100%; height:100%; }
+  .mf-name{ font-family:var(--display); font-size:20px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .mf-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:3px; }
+  .mf-disc{ font-family:var(--label); font-size:11.5px; color:var(--brass); text-transform:uppercase; margin-top:3px; }
+  .mf-stats-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:18px; }
+  .mf-stat{ background:var(--bg-raised); border:1px solid var(--line); text-align:center; padding:8px 4px; }
+  .mf-stat .msv{ font-family:var(--mono); font-size:15px; font-weight:700; color:var(--brass); }
+  .mf-stat .msl{ font-family:var(--label); font-size:8.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-top:2px; }
+  .mf-section-title{
+    font-family:var(--label); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--brass);
+    margin:14px 0 8px; padding-top:12px; border-top:1px solid var(--line);
+  }
+  .mf-quotes{ display:flex; flex-direction:column; gap:6px; }
+  .mf-quote{ font-family:var(--body); font-size:12px; color:var(--bone-dim); line-height:1.5; font-style:italic; }
+  .mf-quote-name{ font-family:var(--label); font-style:normal; font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); margin-right:4px; }
+  .mf-growth-bar{ height:7px; background:var(--bg-base); border:1px solid var(--line); position:relative; overflow:hidden; }
+  .mf-growth-fill{ position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, var(--brass-dim), var(--brass)); }
+  .mf-growth-text{ font-family:var(--body); font-size:12px; color:var(--bone-dim); margin-top:6px; line-height:1.5; }
+
+  .mf-tier-tabs{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+  .mf-tier-tab{ font-family:var(--label); font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; padding:7px 11px; border:1px solid var(--line); background:var(--bg-raised); color:var(--muted); cursor:pointer; }
+  .mf-tier-tab.active{ background:var(--ink-red); border-color:var(--ink-red); color:var(--bone); }
+  .mf-history-row{ display:grid; grid-template-columns:70px 1fr auto; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-family:var(--body); font-size:12.5px; }
+  .mf-history-row:last-child{ border-bottom:none; }
+  .mfh-date{ font-family:var(--mono); font-size:10px; color:var(--muted); }
+  .mfh-opp{ color:var(--bone-dim); }
+  .mfh-opp b{ color:var(--bone); }
+  .mfh-loc{ font-family:var(--mono); font-size:10px; color:var(--muted); display:block; margin-top:1px; }
+  .mfh-result{ font-family:var(--mono); font-size:11.5px; font-weight:700; }
+  .mfh-result.win{ color:var(--good); }
+  .mfh-result.loss{ color:var(--ink-red); }
+  .mf-empty{ text-align:center; padding:24px 10px; color:var(--muted); font-family:var(--body); font-size:13px; }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<div id="modal-root"></div>
+
+<script>
+/* ============================ SHARED DATA ============================ */
+
+const ROSTER_KEY = 'iifl_roster_v1';
+
+const PROVINCES = [
+  { id:'alexandretta', name:'Alexandretta Province', color:'#5C7C5E', pit:'The Forge Pit', primary:['boxer','karate'], secondary:['wrestler'] },
+  { id:'kolsati', name:'Kolsati District', color:'#5E7A93', pit:'The Concrete Ring', primary:['brawler','mma'], secondary:['boxer'] },
+  { id:'sherwood', name:'Sherwood Province', color:'#A0623B', pit:'Frontenac Fight House', primary:['mma','brawler'], secondary:['boxer'] },
+  { id:'gazon', name:'Gazon Province', color:'#C8943F', pit:'The Dust Circle', primary:['boxer'], secondary:[] },
+  { id:'ditiero', name:'Di Tiero Province', color:'#7C5491', pit:"Big Jim's Fightin' Pit", primary:['karate'], secondary:['brawler'] },
+  { id:'carpathia', name:'Carpathia Province', color:'#5B4070', pit:'The Hollow Ring', primary:['sambo'], secondary:['judo'] },
+  { id:'northeast', name:'Northeast Territory', color:'#9C4242', pit:'Dojo Reach', primary:['sambo','judo'], secondary:['catch'] },
+  { id:'bay', name:'Bay Province', color:'#6E8C9C', pit:'The Fairground Ring', primary:['wrestler','catch'], secondary:[] },
+];
+
+const DISCIPLINE_NAMES = {
+  boxer:'Boxer', brawler:'Street Brawler', wrestler:'Wrestler', sambo:'Russian Sambo',
+  mma:'MMA', karate:'Karate', judo:'Judo', catch:'Catch Wrestling'
+};
+const ALL_DISCIPLINES = Object.keys(DISCIPLINE_NAMES);
+
+const MATCHUP = {
+  boxer:    { boxer:0, brawler:1, wrestler:-1, sambo:-1, mma:-1, karate:1, judo:-1, catch:-1 },
+  brawler:  { boxer:-1, brawler:0, wrestler:-1, sambo:-2, mma:-1, karate:0, judo:-2, catch:-1 },
+  wrestler: { boxer:1, brawler:1, wrestler:0, sambo:-1, mma:0, karate:1, judo:0, catch:1 },
+  sambo:    { boxer:1, brawler:2, wrestler:1, sambo:0, mma:0, karate:1, judo:-1, catch:0 },
+  mma:      { boxer:1, brawler:1, wrestler:0, sambo:0, mma:0, karate:1, judo:0, catch:1 },
+  karate:   { boxer:-1, brawler:0, wrestler:-1, sambo:-1, mma:-1, karate:0, judo:-1, catch:0 },
+  judo:     { boxer:1, brawler:2, wrestler:0, sambo:1, mma:0, karate:1, judo:0, catch:1 },
+  catch:    { boxer:1, brawler:1, wrestler:-1, sambo:0, mma:-1, karate:0, judo:-1, catch:0 },
+};
+const MATCHUP_SCALE = 5;
+
+const SKIN_TONES = ['#3E2A1E','#5C3A24','#8C5A35','#C68642','#E0AC69','#F1C27D'];
+const HAIR_COLORS = ['#0E0C0A','#3B2417','#6B4226','#A85C2A','#C9A23C','#D9D2C5','none'];
+const DEFAULT_APPEARANCE = { skin:'#C68642', hair:'#2B1B12', build:'athletic' };
+
+function buildMult(b){ return { lean:0.8, athletic:1, stocky:1.25 }[b] || 1; }
+function buildSilhouetteSM(app){
+  app = app || DEFAULT_APPEARANCE;
+  const stroke = (3 * buildMult(app.build)).toFixed(1);
+  const hair = app.hair === 'none' ? '' : `<path d="M13 7 Q20 -2 27 7" stroke="${app.hair}" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+  return `<svg width="40" height="56" viewBox="0 0 40 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="20" cy="10" r="7" fill="${app.skin}"/>
+    ${hair}
+    <path d="M8 56 L11 30 Q12 22 20 22 Q28 22 29 30 L32 56" stroke="${app.skin}" stroke-width="${stroke}" fill="none" stroke-linecap="round"/>
+    <path d="M11 28 L4 38 M29 28 L36 38" stroke="${app.skin}" stroke-width="${stroke}" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function rand(lo, hi){ return Math.floor(Math.random()*(hi-lo+1))+lo; }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+function heightLabel(inches){ const ft=Math.floor(inches/12), inch=inches%12; return `${ft}'${inch}"`; }
+function weightedPick(weights){
+  const r = Math.random(); let acc = 0;
+  for(const [k,w] of Object.entries(weights)){ acc += w; if(r <= acc) return k; }
+  return Object.keys(weights)[Object.keys(weights).length-1];
+}
+
+/* ============================ ROSTER STORAGE ============================ */
+
+function loadRoster(){
+  try{ const raw = localStorage.getItem(ROSTER_KEY); return raw ? JSON.parse(raw) : []; }
+  catch(err){ console.error('IIFL roster load failed:', err); return []; }
+}
+function saveRoster(list){
+  try{ localStorage.setItem(ROSTER_KEY, JSON.stringify(list)); return true; }
+  catch(err){ console.error('IIFL roster save failed:', err); return false; }
+}
+/*
+  Adolescent growth spurt, roughly bounded (not a runaway ratio-based curve) — biggest
+  gains 12-15, tapering off by 17-18. Keyed by the NEW age being transitioned into.
+  lastGrowthAge tracks how far growth has actually been applied so a fighter who's
+  already aged past 12 without this system catches up retroactively on next load.
+*/
+const HEIGHT_GROWTH_BY_AGE = { 13:[2,4], 14:[2,4], 15:[1,3], 16:[1,2], 17:[0,1], 18:[0,1] };
+const WEIGHT_GROWTH_BY_AGE = { 13:[8,16], 14:[8,16], 15:[8,18], 16:[6,15], 17:[5,12], 18:[5,10] };
+
+function growHeightWeight(f, newAge){
+  const hRange = HEIGHT_GROWTH_BY_AGE[newAge] || [0,1];
+  const wRange = WEIGHT_GROWTH_BY_AGE[newAge] || [3,8];
+  const buildMult = { lean:0.9, athletic:1.0, stocky:1.15 }[(f.appearance && f.appearance.build) || 'athletic'] || 1.0;
+  f.heightIn = (f.heightIn || 60) + rand(hRange[0], hRange[1]);
+  f.weightLb = (f.weightLb || 100) + Math.round(rand(wRange[0], wRange[1]) * buildMult);
+}
+
+function applyPendingGrowth(f){
+  while(f.lastGrowthAge < (f.age || 12)){
+    const nextAge = f.lastGrowthAge + 1;
+    growHeightWeight(f, nextAge);
+    f.lastGrowthAge = nextAge;
+  }
+}
+
+function ensureFighterDefaults(f){
+  if(!f.record) f.record = { wins:0, losses:0 };
+  if(!f.fightLog) f.fightLog = [];
+  if(!f.juvenileSeason) f.juvenileSeason = null;
+  if(!f.juvenileSeasonHistory) f.juvenileSeasonHistory = [];
+  if(!f.amateurSeason) f.amateurSeason = null;
+  if(!f.amateurSeasonHistory) f.amateurSeasonHistory = [];
+  if(!f.age) f.age = 12;
+  if(!f.talentTier) f.talentTier = 'normal';
+  if(f.juvenileHomeProvinceId === undefined) f.juvenileHomeProvinceId = null; // one-time Juvenile league declaration
+  if(f.amateurLeagueId === undefined) f.amateurLeagueId = null; // one-time Amateur league commitment
+  if(!f.pendingAmateurOffers) f.pendingAmateurOffers = [];
+  if(f.lastGrowthAge === undefined) f.lastGrowthAge = 12; // every career starts at 12 — safe retroactive catch-up point
+  applyPendingGrowth(f);
+  return f;
+}
+function getRoster(){
+  const roster = loadRoster().map(ensureFighterDefaults);
+  saveRoster(roster); // persist any newly-applied defaults/growth so repeated reads stay stable, not re-randomized
+  return roster;
+}
+function getFighterById(id){ return getRoster().find(f=> f.id === id); }
+function updateFighter(id, mutateFn){
+  const roster = loadRoster().map(ensureFighterDefaults);
+  const f = roster.find(r=> r.id === id);
+  if(f){ mutateFn(f); saveRoster(roster); }
+  return f;
+}
+
+/* ============================ FIELD FIGHTER POOL (persistent Amateur registry) ============================ */
+/*
+  Instead of inventing a brand-new stranger every fight, both Amateur AND Juvenile
+  competition draw from a real, persistent pool of registered fighters per province —
+  generated once, then remembered. Records update as the player fights them, so
+  "who's out there" is an actual answerable question instead of a random generator.
+
+  Pool sizes aren't arbitrary — they're reverse-engineered from the Pro draft math:
+  16 teams × 10 men's roster spots, ~20% annual churn (32 vacancies), a 3-round/48-pick
+  draft wants a 60-100-deep pool of draft-eligible 18/19yos, which (using the existing
+  Novice/Developing/Contender/Elite split as the "draft-caliber" filter at ~33%) implies
+  needing ~240 active 18yo fighters, which (assuming ~30% retention from age 12 given
+  dropout/injury/never-good-enough over 6 years) implies ~800 registered 12-year-olds
+  entering the Juvenile ranks island-wide per year. That 800 is distributed by each
+  province's actual population (from the settlement data), with light flavor bumps —
+  Kolsati/Sherwood up (GDD: "lots of fighting opportunities"), Gazon down ("underdeveloped"),
+  Carpathia down for cultural isolation despite decent raw population. The browsable
+  standing pool below is a representative, UI-practical sample sized proportionally —
+  not the literal 800, which would be unusable as a list.
+*/
+const FIELD_KEY = 'iifl_field_fighters_v2';
+const AMATEUR_POOL_COMPOSITION = { Novice:8, Developing:8, Contender:5, Elite:3 }; // 24 per province
+
+// Standing Juvenile pool size per province (ages 12-17), population-weighted.
+const JUVENILE_POOL_SIZES = {
+  kolsati:86, sherwood:54, ditiero:50, northeast:30,
+  alexandretta:28, carpathia:27, bay:27, gazon:18,
+};
+// Relative share of each juvenile age in a standing population with realistic dropout —
+// younger cohorts are always more numerous than older ones since attrition is cumulative.
+const JUVENILE_AGE_WEIGHTS = { 12:0.263, 13:0.214, 14:0.174, 15:0.141, 16:0.115, 17:0.093 };
+
+function loadFieldPools(){
+  try{
+    const raw = localStorage.getItem(FIELD_KEY);
+    return raw ? JSON.parse(raw) : { amateur:{}, juvenile:{} };
+  }catch(err){ console.error('IIFL field pool load failed:', err); return { amateur:{}, juvenile:{} }; }
+}
+function saveFieldPools(pools){
+  try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
+  catch(err){ console.error('IIFL field pool save failed:', err); return false; }
+}
+
+function generateAmateurFieldFighter(division, weightClass, province, leagueId){
+  const range = AMATEUR_DIVISIONS[division];
+  const targetOVR = rand(range[0], range[1]);
+  const stats = {};
+  ['speed','quickness','toughness','power','agility'].forEach(k=>{
+    stats[k] = clamp(targetOVR + rand(-4,4), 1, 35);
+  });
+  const opp = finalizeOpponent(stats, targetOVR, weightClass, province);
+  opp.division = division;
+  opp.weightClass = weightClass;
+  opp.provinceId = province.id;
+  opp.leagueId = leagueId;
+  // Draft-eligible-age skew: most amateurs are in the 14-17 window Jr Leagues scout,
+  // a minority are older veterans who went undrafted or declined and are still grinding.
+  opp.age = Math.random() < 0.65 ? rand(14,17) : rand(18,24);
+  return opp;
+}
+
+function generateJuvenileFieldFighter(weightClass, province){
+  const age = parseInt(weightedPick(JUVENILE_AGE_WEIGHTS), 10);
+  const tier = rollTalentTier(0.46);
+  const rawCenter = rand(10,90);
+  const stats = {};
+  ['speed','quickness','toughness','power','agility'].forEach(k=>{
+    const raw = clamp(rawCenter + rand(-15,15), 1, 99);
+    stats[k] = compressStat(raw, age, tier);
+  });
+  const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
+  const opp = finalizeOpponent(stats, avgOvr, weightClass, province);
+  opp.age = age;
+  opp.talentTier = tier;
+  opp.weightClass = weightClass;
+  opp.provinceId = province.id;
+  return opp;
+}
+
+function ensureAmateurFieldPoolForLeague(leagueId){
+  const pools = loadFieldPools();
+  if(!pools.amateur) pools.amateur = {};
+  if(pools.amateur[leagueId] && pools.amateur[leagueId].length) return pools;
+  const league = getLeague(leagueId);
+  if(!league) return pools;
+  const province = PROVINCES.find(p=>p.id===league.provinceId);
+  const weightClasses = ['Light','Middle','Heavy'];
+  const pool = [];
+  const composition = league.atRisk
+    ? { Novice:4, Developing:3, Contender:2, Elite:1 } // small at-risk leagues have thinner pools
+    : (LEAGUE_STRENGTH_COMPOSITION[league.strength] || AMATEUR_POOL_COMPOSITION);
+  Object.entries(composition).forEach(([division, count])=>{
+    for(let i=0;i<count;i++){
+      pool.push(generateAmateurFieldFighter(division, pick(weightClasses), province, leagueId));
+    }
+  });
+  pools.amateur[leagueId] = pool;
+  saveFieldPools(pools);
+  return pools;
+}
+
+function ensureJuvenileFieldPoolForProvince(provinceId){
+  const pools = loadFieldPools();
+  if(!pools.juvenile) pools.juvenile = {};
+  if(pools.juvenile[provinceId] && pools.juvenile[provinceId].length) return pools;
+  const province = PROVINCES.find(p=>p.id===provinceId);
+  const weightClasses = ['Light','Middle','Heavy'];
+  const size = JUVENILE_POOL_SIZES[provinceId] || 25;
+  const pool = [];
+  for(let i=0;i<size;i++){
+    pool.push(generateJuvenileFieldFighter(pick(weightClasses), province));
+  }
+  pools.juvenile[provinceId] = pool;
+  saveFieldPools(pools);
+  return pools;
+}
+
+function getFieldFighterById(id){
+  const pools = loadFieldPools();
+  for(const key of Object.keys(pools.amateur || {})){
+    const f = pools.amateur[key].find(x=>x.id===id);
+    if(f) return f;
+  }
+  for(const key of Object.keys(pools.juvenile || {})){
+    const f = pools.juvenile[key].find(x=>x.id===id);
+    if(f) return f;
+  }
+  return null;
+}
+
+// A hard cutoff (e.g. "only trust this filter if it has >=3 matches") can still
+// permanently lock a division's weight-matched subset in if that subset happens to sit
+// right at the threshold. Instead: probabilistically prefer weight-matched fighters, but
+// always leave a real, non-vanishing chance of drawing anyone else in the bucket too —
+// this guarantees full eventual coverage of the pool with no one permanently excluded.
+function weightedFighterDraw(pool, division, weightClass){
+  const divisionPool = pool.filter(f=> f.division===division);
+  const narrowPool = divisionPool.filter(f=> f.weightClass===weightClass);
+  const useNarrow = narrowPool.length > 0 && Math.random() < 0.55;
+  const candidates = useNarrow ? narrowPool : (divisionPool.length ? divisionPool : pool);
+  return pick(candidates);
+}
+
+function drawFromFieldPool(leagueId, weightClass, divisionWeights){
+  const pools = ensureAmateurFieldPoolForLeague(leagueId);
+  const pool = pools.amateur[leagueId] || [];
+  const division = weightedPick(divisionWeights);
+  return weightedFighterDraw(pool, division, weightClass);
+}
+
+function drawFromCombinedFieldPools(weightClass, divisionWeights){
+  // National tournament stage pulls from the whole island, not just one league or province.
+  activeLeagues().forEach(l=> ensureAmateurFieldPoolForLeague(l.id));
+  const pools = loadFieldPools();
+  const division = weightedPick(divisionWeights);
+  let combined = [];
+  Object.values(pools.amateur).forEach(list=>{ combined = combined.concat(list); });
+  return weightedFighterDraw(combined, division, weightClass);
+}
+
+function drawFromProvinceLeaguePools(provinceId, weightClass, divisionWeights){
+  // Province stage: pooled "city champions" from every league within the same province.
+  const leagues = leaguesInProvince(provinceId).filter(l=> isLeagueActive(l.id));
+  if(!leagues.length) return drawFromCombinedFieldPools(weightClass, divisionWeights);
+  leagues.forEach(l=> ensureAmateurFieldPoolForLeague(l.id));
+  const pools = loadFieldPools();
+  const division = weightedPick(divisionWeights);
+  let combined = [];
+  leagues.forEach(l=>{ combined = combined.concat(pools.amateur[l.id] || []); });
+  if(!combined.length) return drawFromCombinedFieldPools(weightClass, divisionWeights);
+  return weightedFighterDraw(combined, division, weightClass);
+}
+
+function drawJuvenileFromFieldPool(provinceId, weightClass, playerAge){
+  const pools = ensureJuvenileFieldPoolForProvince(provinceId);
+  const pool = pools.juvenile[provinceId];
+  const closeAge = pool.filter(f=> Math.abs(f.age-playerAge)<=1);
+  const narrowPool = closeAge.filter(f=> f.weightClass===weightClass);
+  const useNarrow = narrowPool.length > 0 && Math.random() < 0.55;
+  const candidates = useNarrow ? narrowPool : (closeAge.length ? closeAge : pool);
+  return pick(candidates);
+}
+
+function updateFieldFighterRecord(fighterId, poolKey, won, isJuvenile){
+  const pools = loadFieldPools();
+  const bucket = isJuvenile ? pools.juvenile : pools.amateur;
+  const pool = bucket ? bucket[poolKey] : null;
+  if(!pool) return;
+  const f = pool.find(x=>x.id===fighterId);
+  if(!f) return;
+  if(won) f.record.wins += 1; else f.record.losses += 1;
+  saveFieldPools(pools);
+}
+
+/* ============================ FIGHT MATH ============================ */
+
+function calcOVR(stats){ return Math.round((stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5); }
+
+/*
+  Earned growth — the direct answer to "how does a fighter get better." No automatic
+  jumps. Every fight is a chance to develop, weighted by:
+  - Potential (the existing 1-99 stat) — the main driver of growth rate
+  - Performance — a win grows you more than a loss, a finish more than a decision,
+    and beating someone tougher than you grows you more than beating a pushover
+  - Room to grow — ticks slow down the closer a stat sits to its current ceiling
+  A fighter's ceiling is their age-band (Juvenile) — Amateur-tier fighters are already
+  age-agnostic and capped by the flat Amateur ceiling (35) regardless of exact age.
+*/
+function growFighterStats(f, playerWon, method, oppOVR, isAmateurContext){
+  const tier = f.talentTier || 'normal';
+  // Amateur competition is age-agnostic (adult ranks) — use the age-18 ceiling
+  // regardless of literal age, which naturally keeps normal/prodigy capped at 35
+  // while still letting a Generational Talent keep climbing toward 85+.
+  const ceiling = isAmateurContext ? bandCeiling(18, tier) : bandCeiling(f.age || 12, tier);
+  const potentialFactor = clamp((f.potential || 50) / 99, 0, 1);
+  const ownOVR = calcOVR(f.stats);
+
+  let growthTicks = 0;
+  if(playerWon){
+    growthTicks += 1;
+    if(method !== 'Decision') growthTicks += 1;
+    if(oppOVR > ownOVR) growthTicks += 1; // beat someone tougher — real development moment
+  } else if(Math.random() < 0.3){
+    growthTicks += 1; // you can still learn something from a loss
+  }
+
+  growthTicks = Math.round(growthTicks * (0.4 + potentialFactor * 0.9));
+  if(!isAmateurContext) growthTicks = Math.round(growthTicks * juvenileHomeGrowthMultiplier(f));
+  if(growthTicks <= 0) return;
+
+  const statKeys = ['speed','quickness','toughness','power','agility'];
+  for(let i=0;i<growthTicks;i++){
+    const key = pick(statKeys);
+    const current = f.stats[key];
+    if(current >= ceiling) continue;
+    const room = 1 - (current/ceiling);
+    if(Math.random() < 0.45 + room*0.4){
+      f.stats[key] = clamp(current+1, 1, ceiling);
+    }
+  }
+}
+function matchupBonus(myDisc, oppDisc){ const row=MATCHUP[myDisc]; return row && row[oppDisc]!==undefined ? row[oppDisc]*MATCHUP_SCALE : 0; }
+function winProbability(effA, effB){ return 1/(1+Math.pow(10, -(effA-effB)/12)); }
+
+function weightClassOf(weightLb){
+  if(weightLb <= 98) return 'Light';
+  if(weightLb <= 117) return 'Middle';
+  return 'Heavy';
+}
+
+const ARENA_NAMES = ['The Iron Drum','The Salt Pit','Cinderblock Yard','Foghorn Hall','The Anvil Room','Lantern Court','The Tin Roof','Drydock Arena','The Splinter Yard','Hollow Bell Hall'];
+const FLOOR_TYPES = ['sport court','rubber mat over cement','grass','hard-packed clay','dirt with glass in it'];
+function generateArena(){ return { name: pick(ARENA_NAMES), floor: pick(FLOOR_TYPES), capacity: rand(3,25)*100 }; }
+
+/*
+  Ethnic name pools per province, matching each region's real-world flavor theme.
+  Alexandretta splits north (Irish) / south (English) by settlement. Carpathia's
+  surname pool includes the Dracul family line as a deliberate recurring bloodline.
+  ~25 first + ~25 last per pool gives 600+ unique combinations per region instead of
+  the same dozen names cycling everywhere.
+*/
+const ALEXANDRETTA_NORTH_SETTLEMENTS = ['Blackford','Mosshead','Cowborough','Wolverbridge'];
+
+const NAME_POOLS = {
+  alexandretta_north: { // Irish
+    first: ['Liam','Sean','Declan','Cormac','Rory','Finn','Aidan','Cian','Eoin','Niall','Tadhg','Brendan','Colm','Fergus','Ronan','Patrick','Michael','Conor','Kieran','Darragh','Oisin','Padraig','Seamus','Donal','Ruairi','Cathal','Eamon','Diarmuid','Turlough','Brian','Fintan','Oscar','Art','Cathaoir','Diarmait','Eoghan','Fiachra','Gearoid','Lorcan','Malachy','Naoise','Odhran','Piaras','Riordan','Ultan','Aengus','Breandan','Caolan','Eanna','Tiernan'],
+    last: ["O'Brien",'Murphy','Kelly','Ryan','Sullivan','Walsh','Byrne','Doyle','McCarthy','Gallagher','Doherty','Kennedy','Lynch','Fitzgerald','Nolan','Flynn','Duffy','Boyle','Hogan','Reilly','Quinn','Casey','Sheehan','Brennan','Maguire','O\'Connor','O\'Neill','O\'Sullivan','McMahon','Coyle','Donovan','Fahey','Grady','Hennessy','Kavanagh','Lynskey','Moran','Nagle','O\'Dwyer','Purcell','Rafferty','Shanahan','Tierney','Whelan','Costello','Devlin','Egan','Farrell','Guinane','Healy'],
+  },
+  alexandretta_south: { // English
+    first: ['William','Henry','Edward','Arthur','George','Charles','Thomas','Oliver','James','Frederick','Albert','Walter','Edmund','Percy','Reginald','Geoffrey','Nigel','Cedric','Bertram','Cuthbert','Humphrey','Leonard','Norman','Sidney','Vernon','Wilfred','Ambrose','Clarence','Douglas','Ernest','Herbert','Cecil','Alfred','Roland','Bernard','Hubert','Rupert','Lionel','Neville','Basil','Aubrey','Maurice','Stanley','Sylvester','Theodore','Wallace','Alistair','Barnaby','Crispin','Desmond'],
+    last: ['Whitfield','Ashworth','Pemberton','Sutcliffe','Hargreaves','Fairweather','Winterbourne','Blackwood','Thornbury','Camden','Radcliffe','Ellsworth','Harrington','Fenwick','Carrington','Ashford','Beaumont','Chatham','Dunmore','Kingsley','Marlowe','Pembroke','Stanhope','Wycliffe','Barrington','Aldridge','Blackmore','Cavendish','Dashwood','Elmhurst','Falkner','Grantham','Hollingsworth','Ingram','Kirkland','Lockwood','Middleton','Norwood','Osborne','Prescott','Rutherford','Sherbourne','Thackeray','Underwood','Vane','Wetherby','Yardley','Ashcombe','Bramwell','Farringdon'],
+  },
+  kolsati: { // Italian
+    first: ['Marco','Luca','Matteo','Giovanni','Antonio','Salvatore','Franco','Dante','Enzo','Vincenzo','Alessandro','Roberto','Nico','Gianni','Rocco','Paolo','Stefano','Fabrizio','Massimo','Leonardo','Emilio','Guido','Aldo','Renato','Silvio','Tommaso','Carlo','Domenico','Pietro','Angelo','Bruno','Cesare','Dino','Ettore','Fabio','Gino','Ivo','Lorenzo','Mario','Nicola','Orlando','Pasquale','Riccardo','Sandro','Tullio','Umberto','Valerio','Alfio','Bartolomeo','Cosimo'],
+    last: ['Romano','Ferrara','Russo','Marino','Greco','Bruno','Rizzo','Costa','Fontana','Caruso','Moretti','Barbieri','Conti','De Luca','Gallo','Leone','Mancini','Ricci','Rossi','Santoro','Serra','Vitale','Colombo','Esposito','Marchetti','Bianchi','Bergamo','Cattaneo','D\'Amico','Ferraro','Gatti','Lombardi','Longo','Mariani','Martini','Milani','Monti','Orlando','Pellegrini','Ferretti','Ricciardi','Sartori','Testa','Valentini','Vecchi','Amato','Basile','Cardinale','Donati','Falcone'],
+  },
+  sherwood: { // Scottish
+    first: ['Angus','Callum','Duncan','Ewan','Fraser','Graham','Hamish','Ian','Lachlan','Malcolm','Rory','Stuart','Alistair','Gordon','Kenneth','Robert','Douglas','Neil','Craig','Colin','Andrew','Iain','Cameron','Kyle','Ross','Blair','Keith','Murdo','Aonghas','Tavish','Ruaridh','Alasdair','Broc','Cailean','Dougal','Eachann','Fearghas','Gilleasbuig','Hector','Innes','Jamie','Lennox','Magnus','Niall','Osgar','Quintin','Robb','Seumas','Tearlach','Padraig'],
+    last: ['MacLeod','Campbell','Stewart','Fraser','Robertson','MacDonald','Cameron','Wallace','Grant','Murray','Ross','Mackay','MacKenzie','Sinclair','Ferguson','Buchanan','Munro','Drummond','Elliot','Hamilton','Kerr','Lennox','Napier','Tait','Urquhart','MacGregor','MacIntyre','MacPherson','MacKay','MacLean','MacNeil','MacRae','MacTavish','Anderson','Brodie','Carmichael','Dalziel','Erskine','Forbes','Gillespie','Home','Irvine','Johnstone','Leslie','Melville','Ogilvie','Pringle','Rennie','Scrimgeour','Wemyss'],
+  },
+  gazon: { // African tribal (mixed West/East)
+    first: ['Kwame','Kofi','Abiodun','Chidi','Emeka','Sekou','Themba','Jabari','Obi','Tendai','Kojo','Adisa','Femi','Bakari','Kesi','Kwabena','Yaw','Kwesi','Kwaku','Obinna','Uche','Ikenna','Chukwuemeka','Olumide','Tunde','Segun','Ayodele','Chike','Dayo','Ebo','Fela','Gyasi','Hakim','Idi','Jelani','Lutalo','Mandla','Nnamdi','Oba','Panya','Quame','Rashidi','Sipho','Taye','Uzoma','Wale','Xolani','Yao','Chibueze','Damani'],
+    last: ['Achebe','Okafor','Mensah','Diallo','Kamau','Adeyemi','Nwosu','Osei','Toure','Banda','Mwangi','Abara','Chukwu','Danso','Eze','Faraji','Gueye','Jalloh','Konate','Mbeki','Ndiaye','Okoro','Sowande','Traore','Zuberi','Adisa','Boateng','Camara','Diop','Fofana','Gyasi','Haruna','Ibe','Jawara','Keita','Lumumba','Modise','Nkosi','Onyango','Quaye','Sanogo','Tiwa','Umeh','Vusi','Wanjiru','Xaba','Yeboah','Ade','Bello','Cisse'],
+  },
+  ditiero: { // Louisiana French / Cajun-Creole
+    first: ['Etienne','Remy','Thibault','Gaston','Armand','Beauregard','Cyprien','Desmond','Fontaine','Laurent','Marcel','Pascal','Reynard','Sebastien','Theo','Auguste','Baptiste','Claude','Emile','Felix','Gerard','Henri','Jacques','Leon','Maurice','Octave','Philippe','Raoul','Valmont','Xavier','Alphonse','Anatole','Cyril','Edmond','Fernand','Gustave','Hilaire','Isidore','Jerome','Lucien','Napoleon','Onesime','Prosper','Romain','Serge','Thadee','Ulysse','Valere','Wilfrid','Zenon'],
+    last: ['Boudreaux','Thibodeaux','Landry','Broussard','Hebert','Guidry','Fontenot','Comeaux','Melancon','Prejean','Robicheaux','Trahan','Arceneaux','Babineaux','Cormier','Dugas','Gautreaux','LeBlanc','Moreau','Ory','Perrault','Richard','Savoy','Terrebonne','Villere','Aucoin','Benoit','Chauvin','Dubois','Fournier','Gaudet','Hamon','Istre','Judice','Lacombe','Mouton','Naquin','Ortego','Pitre','Rousseau','Simoneaux','Tassin','Vidrine','Waguespack','Ancelet','Blanchard','Chretien','Deveraux','Fontenette','Guillory'],
+  },
+  carpathia: { // Eastern European / Romanian, with the Dracul bloodline
+    first: ['Vlad','Radu','Mircea','Andrei','Stefan','Bogdan','Cristian','Dorin','Emil','Florin','Gheorghe','Ionut','Marius','Nicolae','Petru','Alexandru','Adrian','Catalin','Costin','Doru','Eugen','Gabriel','Horia','Iulian','Liviu','Mihai','Octavian','Sorin','Tiberiu','Valentin','Aurel','Corneliu','Dumitru','Emanuel','Grigore','Ilie','Iosif','Laurentiu','Miron','Nichifor','Ovidiu','Remus','Sergiu','Teodor','Traian','Vasile','Victor','Vlaicu','Zamfir','Codrin'],
+    last: ['Dracul','Constantinescu','Popescu','Ionescu','Stanescu','Radulescu','Munteanu','Dumitrescu','Georgescu','Marinescu','Vasilescu','Petrescu','Nistor','Barbu','Ciobanu','Lungu','Moldovan','Rusu','Serban','Toma','Voicu','Zaharia','Balan','Coman','Dinu','Draculescu','Enescu','Iliescu','Manescu','Nedelescu','Oprescu','Pavelescu','Sandulescu','Tanasescu','Ungureanu','Albu','Cretu','Dobre','Frunza','Gheorghiu','Hriscu','Iordache','Jinga','Lazar','Marin','Neagu','Oancea','Preda','Stoica','Tudor'],
+  },
+  northeast: { // Japanese/Mexican mix — a deliberate cultural blend for this province
+    first: ['Hiroshi','Kenji','Takeshi','Ryo','Daiki','Haruto','Sora','Riku','Diego','Mateo','Santiago','Emilio','Rafael','Alejandro','Cruz','Yuki','Rin','Akira','Daisuke','Hayato','Isamu','Jun','Katsu','Masato','Noboru','Osamu','Shin','Tatsuya','Yamato','Yusuke','Carlos','Eduardo','Fernando','Gabriel','Ignacio','Javier','Leonardo','Manuel','Nicolas','Octavio','Pablo','Ricardo','Kazuki','Ryota','Tomas','Julio','Kentaro','Hideo','Esteban','Ramon'],
+    last: ['Watanabe','Tanaka','Yamamoto','Nakamura','Kobayashi','Saito','Sato','Suzuki','Takahashi','Ito','Reyes','Morales','Guerrero','Delgado','Cabrera','Villanueva','Ochoa','Salazar','Vargas','Nishida','Fujimoto','Hernandez','Castillo','Navarro','Espinoza','Kimura','Matsumoto','Inoue','Kato','Yoshida','Yamada','Sasaki','Yamaguchi','Matsuda','Ono','Ramirez','Torres','Flores','Gutierrez','Chavez','Ramos','Contreras','Aguilar','Mendez','Rios','Solis','Zamora','Cortez','Pena','Duarte'],
+  },
+  bay: { // American
+    first: ['Jack','Ryan','Tyler','Brandon','Justin','Cody','Dustin','Travis','Wyatt','Colton','Hunter','Logan','Mason','Austin','Blake','Kevin','Eric','Jason','Aaron','Derek','Shane','Todd','Scott','Chad','Kurt','Brett','Trevor','Marcus','Jordan','Casey','Brian','Gregory','Timothy','Jeffrey','Sean','Patrick','Matthew','Nathan','Corey','Bryan','Dennis','Wesley','Curtis','Dwayne','Randall','Vincent','Warren','Cole','Grant','Chase'],
+    last: ['Anderson','Miller','Johnson','Davis','Thompson','Wilson','Moore','Taylor','Harris','Clark','Lewis','Walker','Young','Allen','King','Wright','Scott','Green','Baker','Adams','Nelson','Carter','Mitchell','Perez','Roberts','Turner','Phillips','Campbell','Parker','Evans','Edwards','Collins','Stewart','Morris','Rogers','Reed','Cook','Morgan','Bell','Murphy','Bailey','Cooper','Richardson','Cox','Howard','Ward','Peterson','Gray','Ramirez','James'],
+  },
+};
+
+function pickName(provinceId, settlementName){
+  let poolKey = provinceId;
+  if(provinceId === 'alexandretta'){
+    poolKey = ALEXANDRETTA_NORTH_SETTLEMENTS.includes(settlementName) ? 'alexandretta_north' : 'alexandretta_south';
+  }
+  const pool = NAME_POOLS[poolKey] || NAME_POOLS.bay;
+  return `${pick(pool.first)} ${pick(pool.last)}`;
+}
+
+function pickWeightedDiscipline(province){
+  const r = Math.random();
+  if(province.primary.length && r < 0.65) return pick(province.primary);
+  if(province.secondary.length && r < 0.85) return pick(province.secondary);
+  return pick(ALL_DISCIPLINES);
+}
+
+// Abstract province-to-province distance (0=same, 4=far), hand-authored from each
+// province's flavor/theme proximity since there's no literal map yet. Used to compute
+// the Juvenile development penalty for fighting out of a league far from home.
+const PROVINCE_DISTANCE = {
+  alexandretta: { alexandretta:0, kolsati:2, sherwood:3, gazon:3, ditiero:3, carpathia:2, northeast:4, bay:4 },
+  kolsati:      { alexandretta:2, kolsati:0, sherwood:1, gazon:4, ditiero:2, carpathia:3, northeast:4, bay:3 },
+  sherwood:     { alexandretta:3, kolsati:1, sherwood:0, gazon:4, ditiero:2, carpathia:3, northeast:4, bay:2 },
+  gazon:        { alexandretta:3, kolsati:4, sherwood:4, gazon:0, ditiero:3, carpathia:3, northeast:4, bay:4 },
+  ditiero:      { alexandretta:3, kolsati:2, sherwood:2, gazon:3, ditiero:0, carpathia:3, northeast:4, bay:3 },
+  carpathia:    { alexandretta:2, kolsati:3, sherwood:3, gazon:3, ditiero:3, carpathia:0, northeast:3, bay:4 },
+  northeast:    { alexandretta:4, kolsati:4, sherwood:4, gazon:4, ditiero:4, carpathia:3, northeast:0, bay:3 },
+  bay:          { alexandretta:4, kolsati:3, sherwood:2, gazon:4, ditiero:3, carpathia:4, northeast:3, bay:0 },
+};
+function provinceDistance(a, b){
+  return (PROVINCE_DISTANCE[a] && PROVINCE_DISTANCE[a][b] !== undefined) ? PROVINCE_DISTANCE[a][b] : 2;
+}
+// Juvenile-only: growth multiplier for fighting out of a league away from your birth
+// province. 1.0 at home, down to 0.52 at the farthest leagues. Amateur has no penalty.
+function juvenileHomeGrowthMultiplier(f){
+  if(!f.juvenileHomeProvinceId || f.juvenileHomeProvinceId === f.provinceId) return 1;
+  const d = provinceDistance(f.provinceId, f.juvenileHomeProvinceId);
+  return clamp(1 - d*0.12, 0.4, 1);
+}
+function petitionApprovalChance(f){
+  const seasonsCompleted = (f.juvenileSeasonHistory || []).length;
+  return clamp(0.35 + seasonsCompleted*0.05, 0.35, 0.65);
+}
+
+const SETTLEMENTS_SHORT = {
+  alexandretta: ['Williamsburg','St. Anne','Nattingham','Wolverbridge','Mosshead'],
+  kolsati: ['Kolsati','St. Johnson','Bakii','Briggston','Castellan Heights'],
+  sherwood: ['Frontenac City','Lawrenceville','Millbrook Heights','Caldwell Junction'],
+  gazon: ['Gazon Main','Gazon Northern','Gazon South'],
+  ditiero: ['Di Tiero','South Bender','Bellechasse','Port Maray'],
+  carpathia: ['Vyrholm','Castle Reach','Bukovene','Greywatch'],
+  northeast: ['Mizukoshi','Tsubaki Bay','Santorino','Ineawood'],
+  bay: ['Charleston','Bayport','Pinecrest Hollow',"Dell's Corner"],
+};
+
+/* ============================ AGE BANDS & TALENT TIERS ============================ */
+/* Mirrors the Character Creator's system — see that file for full rationale. */
+const AGE_BAND_TYPICAL      = { 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35 };
+const AGE_BAND_PRODIGY      = { 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35 };
+const AGE_BAND_GENERATIONAL = { 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88 };
+
+function bandCeiling(age, tier){
+  const table = tier==='generational' ? AGE_BAND_GENERATIONAL : tier==='prodigy' ? AGE_BAND_PRODIGY : AGE_BAND_TYPICAL;
+  return table[clamp(age, 12, 18)];
+}
+function rollTalentTier(rawAvg01){
+  const generationalChance = 0.005 + rawAvg01 * 0.02;
+  const prodigyChance = 0.08 + rawAvg01 * 0.28;
+  const r = Math.random();
+  if(r < generationalChance) return 'generational';
+  if(r < generationalChance + prodigyChance) return 'prodigy';
+  return 'normal';
+}
+function compressStat(rawValue, age, tier){
+  const ceiling = bandCeiling(age, tier);
+  const pct = clamp(rawValue, 1, 99) / 99;
+  return clamp(Math.round(1 + pct * (ceiling - 1)), 1, ceiling);
+}
+
+// Amateur is age-agnostic — matched by skill division + weight class instead, spanning
+// the full 1-35 Amateur ceiling. Every stage can draw from any division (upsets/soft
+// draws happen), but tournament stages weight the odds toward tougher divisions.
+/*
+  Amateur is a league of leagues, not just a province. Every province has at least one
+  named Amateur league; Kolsati (biggest population) has two. A fighter who finishes a
+  Juvenile season may receive offers from nearby leagues and picks ONE to commit to —
+  they fight in that specific league every season until drafted to Juniors. Small
+  leagues (Carpathia, Gazon) can fold if they can't sustain enough registered fighters.
+*/
+const AMATEUR_LEAGUES = [
+  { id:'kolsati_circuit', name:'Kolsati Amateur Circuit', provinceId:'kolsati', atRisk:false, strength:'Elite', scouting:5,
+    perk:'Prime-time bout slots in front of the biggest crowds on the island' },
+  { id:'bakii_alliance', name:'Bakii Amateur Alliance', provinceId:'kolsati', atRisk:false, strength:'Strong', scouting:4,
+    perk:'Deep sparring partners and a tight, competitive gym community' },
+  { id:'frontenac_league', name:'Frontenac Amateur League', provinceId:'sherwood', atRisk:false, strength:'Strong', scouting:4,
+    perk:'Well-funded gyms with real medical and recovery support' },
+  { id:'ditiero_guild', name:'Di Tiero Amateur Guild', provinceId:'ditiero', atRisk:false, strength:'Average', scouting:3,
+    perk:'Media buzz and flashy exhibition bouts that build a following fast' },
+  { id:'northeast_circuit', name:'Northeast Amateur Circuit', provinceId:'northeast', atRisk:false, strength:'Average', scouting:3,
+    perk:'Disciplined training regimen with real emphasis on technique' },
+  { id:'alexandretta_league', name:'Alexandretta Amateur League', provinceId:'alexandretta', atRisk:false, strength:'Average', scouting:2,
+    perk:'Old-school fundamentals coaching, unglamorous but reliable' },
+  { id:'bay_league', name:'Bay Amateur League', provinceId:'bay', atRisk:false, strength:'Developing', scouting:2,
+    perk:'Relaxed pace and low pressure — room to develop without the spotlight' },
+  { id:'carpathian_circuit', name:'Carpathian Amateur Circuit', provinceId:'carpathia', atRisk:true, strength:'Developing', scouting:1,
+    perk:'Small, tight-knit gym with a lot of personal attention' },
+  { id:'gazon_circuit', name:'Gazon Amateur Circuit', provinceId:'gazon', atRisk:true, strength:'Developing', scouting:1,
+    perk:'Hungry underdog culture — nothing to lose, everything to prove' },
+];
+const LEAGUE_STRENGTH_INFO = {
+  Elite:      { label:'Elite',      blurb:'The toughest competition on the island. You\'ll level up fast fighting up — but keeping a clean record here is genuinely hard.' },
+  Strong:     { label:'Strong',     blurb:'A step below Elite, still a real proving ground. Faster growth than average, tougher nights than most.' },
+  Average:    { label:'Average',    blurb:'A balanced field — normal competition, normal growth pace. The safe, steady choice.' },
+  Developing: { label:'Developing', blurb:'Lighter competition. Easier to stack wins, but growth comes slower without tougher fights to push you.' },
+};
+// Field pool composition scales with league strength — this is what actually makes a
+// "stronger league" mechanically true: more Elite/Contender opponents means more chances
+// to beat someone tougher than you, which is the biggest growth trigger in the game.
+const LEAGUE_STRENGTH_COMPOSITION = {
+  Elite:      { Novice:4, Developing:6, Contender:8, Elite:6 },
+  Strong:     { Novice:6, Developing:7, Contender:7, Elite:4 },
+  Average:    { Novice:8, Developing:8, Contender:5, Elite:3 },
+  Developing: { Novice:10, Developing:8, Contender:4, Elite:2 },
+};
+function getLeague(id){ return AMATEUR_LEAGUES.find(l=>l.id===id); }
+function leaguesInProvince(provinceId){ return AMATEUR_LEAGUES.filter(l=>l.provinceId===provinceId); }
+
+const LEAGUE_STATUS_KEY = 'iifl_league_status_v1';
+function loadLeagueStatus(){
+  try{
+    const raw = localStorage.getItem(LEAGUE_STATUS_KEY);
+    const status = raw ? JSON.parse(raw) : {};
+    AMATEUR_LEAGUES.forEach(l=>{ if(status[l.id] === undefined) status[l.id] = { active:true }; });
+    return status;
+  }catch(err){ console.error('IIFL league status load failed:', err); return {}; }
+}
+function saveLeagueStatus(status){
+  try{ localStorage.setItem(LEAGUE_STATUS_KEY, JSON.stringify(status)); return true; }
+  catch(err){ console.error('IIFL league status save failed:', err); return false; }
+}
+function isLeagueActive(id){ const s = loadLeagueStatus(); return s[id] ? s[id].active : true; }
+function activeLeagues(){ const s = loadLeagueStatus(); return AMATEUR_LEAGUES.filter(l=> s[l.id] ? s[l.id].active : true); }
+function maybeFoldLeague(id){
+  const league = getLeague(id);
+  if(!league || !league.atRisk) return false;
+  const status = loadLeagueStatus();
+  if(!status[id] || !status[id].active) return false;
+  if(Math.random() < 0.05){ // 5% chance per amateur season completion for at-risk leagues
+    status[id].active = false;
+    saveLeagueStatus(status);
+    return true;
+  }
+  return false;
+}
+
+// 1-3 offers, weighted toward leagues near the fighter's home — "most fighters stay
+// somewhat close to home" is a tendency here, not a rule (Amateur has no move penalty).
+function generateAmateurOffers(f){
+  const homeProvinceId = f.juvenileHomeProvinceId || f.provinceId;
+  const pool = activeLeagues();
+  if(!pool.length) return [];
+  const weights = {};
+  pool.forEach(l=>{ weights[l.id] = 1 / (1 + provinceDistance(homeProvinceId, l.provinceId)); });
+  const numOffers = Math.min(pool.length, rand(1,3));
+  const chosen = [];
+  const remaining = { ...weights };
+  for(let i=0;i<numOffers;i++){
+    const total = Object.values(remaining).reduce((a,b)=>a+b,0);
+    if(total <= 0) break;
+    const normalized = {};
+    Object.entries(remaining).forEach(([k,v])=> normalized[k] = v/total);
+    const pick = weightedPick(normalized);
+    chosen.push(pick);
+    delete remaining[pick];
+  }
+  return chosen;
+}
+
+const AMATEUR_DIVISIONS = { Novice:[1,10], Developing:[11,20], Contender:[21,30], Elite:[31,35] };
+const REGULAR_AMATEUR_WEIGHTS = { Novice:0.25, Developing:0.35, Contender:0.30, Elite:0.10 };
+// City: 16-fighter bracket, draws from the player's own committed league.
+// Province: 16-fighter bracket, draws from every league within the player's province
+//   (standing in for pooled city champions across the province).
+// National: 8-fighter blind-draw bracket, one slot per province, draws islandwide.
+const TOURNAMENT_TIER_WEIGHTS = {
+  City:     { Novice:0.15, Developing:0.40, Contender:0.35, Elite:0.10 },
+  Province: { Novice:0.08, Developing:0.27, Contender:0.42, Elite:0.23 },
+  National: { Novice:0.04, Developing:0.16, Contender:0.40, Elite:0.40 },
+};
+const TOURNAMENT_STAGE_SIZES = { City:16, Province:16, National:8 };
+const TOURNAMENT_ROUND_NAMES = {
+  16: ['Round of 16','Quarterfinals','Semifinals','Final'],
+  8: ['Quarterfinals','Semifinals','Final'],
+};
+
+// Draws (size-1) opponents via drawFn, lightly deduped, and combines with the player
+// into a randomly-seeded (blind draw) field of `size` total fighters.
+function pickBracketField(playerFighter, size, drawFn){
+  const seen = new Set([playerFighter.id]);
+  const field = [playerFighter];
+  let guard = 0;
+  while(field.length < size && guard < size*40){
+    const opp = drawFn();
+    guard++;
+    if(!opp || seen.has(opp.id)) continue;
+    seen.add(opp.id);
+    field.push(opp);
+  }
+  // If the pool was genuinely too thin to fill without repeats (small/at-risk league),
+  // allow repeats as a last resort rather than leaving the bracket short.
+  while(field.length < size){
+    const opp = drawFn();
+    if(opp) field.push(opp);
+    else break;
+  }
+  // Blind draw: shuffle
+  for(let i=field.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [field[i], field[j]] = [field[j], field[i]];
+  }
+  return field;
+}
+
+// Simulates the ENTIRE bracket except any match touching the player's lineage, which is
+// left "live" for the player to actually play through the normal preview/bout flow.
+// Because sibling subtrees never depend on the player's results, every one of the
+// player's future opponents (assuming they keep winning) is knowable immediately —
+// that's what powers the bracket-at-a-glance view.
+function buildBracket(field, playerId){
+  const roundNames = TOURNAMENT_ROUND_NAMES[field.length];
+  let current = field.map(f=> ({ fighter:f, pending: f.id===playerId }));
+  const rounds = [];
+  for(let r=0; r<roundNames.length; r++){
+    const matches = [];
+    const next = [];
+    for(let i=0;i<current.length;i+=2){
+      const a = current[i], b = current[i+1];
+      if(a.pending || b.pending){
+        matches.push({ a, b, winner:null, live:true });
+        next.push({ fighter:null, pending:true });
+      } else {
+        const result = simulateBout(a.fighter, b.fighter, { arena:{floor:'neutral court'}, hometownPit:false });
+        matches.push({ a, b, winner:{ fighter: result.winner }, live:false });
+        next.push({ fighter: result.winner, pending:false });
+      }
+    }
+    rounds.push({ name: roundNames[r], matches });
+    current = next;
+  }
+  return rounds;
+}
+
+function liveMatchOpponent(match){
+  return match.a.pending ? match.b.fighter : match.a.fighter;
+}
+
+function finalizeOpponent(stats, avgOvrForFlavor, weightClass, pitProvince){
+  const weightLb = weightClass === 'Light' ? rand(80,98) : weightClass === 'Middle' ? rand(99,117) : rand(118,135);
+  const heightIn = rand(56,66);
+  const settlements = SETTLEMENTS_SHORT[pitProvince.id] || ['a nearby town'];
+  const hometown = pick(settlements);
+  const recWins = clamp(Math.round(avgOvrForFlavor / 5) + rand(-1,1), 0, 9);
+  const recLosses = clamp(rand(0,4), 0, 9);
+  return {
+    id: 'rival_' + Date.now() + '_' + rand(0,9999),
+    name: pickName(pitProvince.id, hometown),
+    primaryDisc: pickWeightedDiscipline(pitProvince),
+    stats, weightLb, heightIn,
+    hometown,
+    record: { wins: recWins, losses: recLosses },
+    appearance: { skin: pick(SKIN_TONES), hair: pick(HAIR_COLORS), build: pick(['lean','athletic','stocky']) },
+  };
+}
+
+/* ============================ COMMENTARY ============================ */
+
+/* ============================ FIGHTER CARD EXTRAS ============================ */
+/* Commentator takes, growth outlook, and a doctor's adult-size projection — flavor
+   and light informational systems shown on the Fighter Card modal. */
+
+const COMMENTATOR_NAMES = ['Duke Callahan', 'Jamie Voss', 'Lena Marsh'];
+const DISCIPLINE_TAKES = {
+  boxer: ["Clean hands, doesn't waste motion.", "That jab could carry a whole career.", "Old-school boxing IQ for someone this age."],
+  brawler: ["Pure chaos in there — hard to game-plan for.", "Wild, but wild works when it lands.", "No fear whatsoever. Might be a problem down the road, might be the whole appeal."],
+  wrestler: ["Relentless on the mat. Wears people down.", "Control game is already ahead of schedule.", "Grinds you into dust, round after round."],
+  sambo: ["Throws for days — that's a Carpathian style if I've ever seen one.", "Underrated skill set. People sleep on Sambo until it's too late.", "Sneaky finishes. Blink and it's over."],
+  mma: ["Complete game, no real holes yet.", "Doesn't have one bad matchup on paper.", "The kind of fighter that makes booking a card difficult — nobody wants that smoke."],
+  karate: ["Point-fighter speed with real pop on it.", "In and out before you know what hit you.", "That karate background shows up in the footwork."],
+  judo: ["One bad grip and it's over for the other guy.", "Throws with real bad intentions.", "Judo background is criminally underused on this island — this one could change that."],
+  catch: ["Sneaky mat game, comes out of nowhere.", "Old carny tricks — and I mean that as a compliment.", "Scrambles are where this one lives and dies."],
+};
+
+function generateCommentatorTakes(f){
+  const names = [...COMMENTATOR_NAMES];
+  for(let i=names.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [names[i],names[j]]=[names[j],names[i]]; }
+
+  const statEntries = Object.entries(f.stats);
+  statEntries.sort((a,b)=> b[1]-a[1]);
+  const bottomStat = statEntries[statEntries.length-1][0];
+
+  const takes = [];
+  takes.push({ name: names[0], quote: pick(DISCIPLINE_TAKES[f.primaryDisc] || DISCIPLINE_TAKES.mma) });
+
+  let potentialLine;
+  if(f.talentTier === 'generational') potentialLine = "This isn't hype — once-a-generation type talent. Circle this name.";
+  else if(f.talentTier === 'prodigy') potentialLine = "Ahead of schedule for the age. Worth keeping an eye on.";
+  else if(f.potential !== undefined && f.potential >= 70) potentialLine = "Real ceiling here if the work gets put in.";
+  else if(f.potential !== undefined && f.potential <= 30) potentialLine = "What you see now might be close to what you get — but plenty of careers get built on exactly that.";
+  else potentialLine = "Solid, unspectacular — the kind of fighter leagues are actually built on.";
+  takes.push({ name: names[1], quote: potentialLine });
+
+  takes.push({ name: names[2], quote: `Needs to tighten up the ${bottomStat} before somebody tougher finds it.` });
+
+  return takes;
+}
+
+// Rough real-world-style maturity curve — current size as a fraction of eventual adult size.
+const MATURITY_PCT_BY_AGE = { 12:0.79, 13:0.84, 14:0.89, 15:0.93, 16:0.96, 17:0.98, 18:1.0 };
+function projectAdultSize(heightIn, weightLb, age, build){
+  const pct = MATURITY_PCT_BY_AGE[clamp(age||18, 12, 18)] || 1.0;
+  const buildMult = { lean:0.92, athletic:1.0, stocky:1.12 }[build] || 1.0;
+  return {
+    adultHeightIn: Math.round((heightIn||64) / pct),
+    adultWeightLb: Math.round(((weightLb||120) / pct) * buildMult),
+    isGrown: pct >= 1.0,
+  };
+}
+
+function growthOutlook(f){
+  const isAmateurTier = !!f.amateurLeagueId || !f.juvenileHomeProvinceId;
+  const ceiling = isAmateurTier ? bandCeiling(18, f.talentTier||'normal') : bandCeiling(f.age||12, f.talentTier||'normal');
+  const avgStat = (f.stats.speed+f.stats.quickness+f.stats.toughness+f.stats.power+f.stats.agility)/5;
+  const pctOfCeiling = clamp(avgStat/ceiling*100, 0, 100);
+  let outlook;
+  if(pctOfCeiling >= 90) outlook = 'Close to maxed out for where they are right now — future growth mostly comes from aging up.';
+  else if(pctOfCeiling >= 60) outlook = 'Solid development so far, real room left to keep climbing.';
+  else if(pctOfCeiling >= 30) outlook = 'Early in the development curve — plenty of runway left.';
+  else outlook = 'Very raw. Most of the growth curve is still ahead.';
+  return { ceiling, avgStat, pctOfCeiling, outlook };
+}
+
+const DISC_FLAVOR = {
+  boxer: ['a sharp jab-cross combo', 'a tight body-head combination', 'a stiff counter right'],
+  brawler: ['a wild looping haymaker', 'a scrappy flurry with no real plan', 'a desperate forward charge'],
+  wrestler: ['a hard level change for a takedown', 'a grinding clinch against the fence', 'a drive through to the mat'],
+  sambo: ['a sweeping hip throw', 'a tight ankle lock attempt', 'a textbook trip takedown'],
+  mma: ['a clean mix of strikes and a takedown attempt', 'a smart check-and-counter sequence', 'a probing combination from the outside'],
+  karate: ['a snapping front kick', 'a sharp reverse punch', 'a quick in-and-out point strike'],
+  judo: ['a hard hip toss', 'a shoulder throw that lands clean', 'a grip fight that ends in a sweep'],
+  catch: ['a scramble into a tight headlock', 'a leg lace fight on the mat', 'a sudden roll into a submission hunt'],
+};
+const ROUND_OPENERS = [
+  '{A} and {B} circle the {floor}, sizing each other up.',
+  'The bell sounds and {A} comes out moving, {B} matching the pace.',
+  '{A} starts working behind a stiff jab as {B} looks for an opening.',
+  'Both fighters trade cautious feints before {A} commits first.',
+];
+const ROUND_EXCHANGES = [
+  '{A} lands {flavorA}, {B} answers right back with {flavorB}.',
+  '{B} eats {flavorA} from {A} but fires back immediately.',
+  '{A} controls the center, mixing in {flavorA} that {B} can\'t quite solve.',
+  '{B} finds a home for {flavorB}, and the small crowd reacts.',
+];
+const ROUND_CLOSERS = [
+  'The horn sounds to end the round — close to call.',
+  'Round ends with both corners shouting instructions.',
+  'Round closes with {A} marginally ahead on output.',
+  'Round closes with {B} landing the harder shot at the bell.',
+];
+const FINISH_KO = [
+  '{W} catches {L} clean — {L} goes down and doesn\'t beat the count. KO, {W}!',
+  '{W} lands the perfect shot and {L} hits the {floor}. It\'s over — KO!',
+  'One shot. That\'s all it took. {L} is out. {W} wins by knockout.',
+];
+const FINISH_TKO = [
+  '{L} can\'t answer back anymore. The ref steps in — TKO, {W}!',
+  '{W} swarms {L} and the referee has seen enough. TKO.',
+  '{L}\'s corner is waving it off. TKO, {W} wins.',
+];
+const FINISH_DQ = [
+  '{L} loses all composure — an illegal shot, and the ref has no choice. DQ, {W} wins.',
+  'That\'s a blatant foul from {L}. Referee calls it — DQ, {W} takes it.',
+];
+const DECISION_LINES = [
+  'After three rounds in the pit, it goes to the scorecards.',
+  'Both fighters empty the tank — now it\'s in the judges\' hands.',
+  'No finish tonight — the small crowd waits on the decision.',
+];
+function fillTpl(text, map){ return text.replace(/{(\w+)}/g, (_,k)=> map[k]!==undefined ? map[k] : ''); }
+
+const MATCHUP_LINES_REINFORCE = [
+  "{fav}'s {favDisc} background should serve them well here against a {oppDisc} fighter.",
+  "Stylistically, this favors {fav} — {favDisc} tends to give {oppDisc} fighters trouble.",
+];
+const MATCHUP_LINES_TENSION = [
+  "It's a rough style matchup on paper — {dog} holds the {dogDisc} edge over {fav}'s {favDisc} — but the raw numbers still lean {fav}'s way.",
+  "{dog}'s {dogDisc} background is the kind that usually gives {favDisc} fighters fits, which makes this one worth watching even with {fav} favored.",
+];
+const MATCHUP_LINES_NEUTRAL = [
+  "Neither style holds a clear edge here — this one likely comes down to who's simply better on the night.",
+  "It's not an obvious style matchup either way — should come down to execution.",
+];
+const PREDICT_LINES_STRONG = [
+  "Smart money around the pit likes {fav} big tonight — {dog} would need something special to pull the upset.",
+  "This one looks fairly one-sided on paper. {fav} is the clear favorite heading in.",
+];
+const PREDICT_LINES_LEAN = [
+  "{fav} walks in the slight favorite, but {dog}'s never been one to fold easy.",
+  "Edge goes to {fav}, though nobody's ruling {dog} out.",
+];
+const PREDICT_LINES_TOSSUP = [
+  "This one's about as close to a coin flip as the pit sees all season — nobody's willing to call it with confidence.",
+  "Genuinely hard to pick. Could go either way tonight.",
+];
+
+function buildReporterPreview(f, opp, probA, matchupDiff){
+  const favIsF = probA >= 0.5;
+  const fav = favIsF ? f : opp;
+  const dog = favIsF ? opp : f;
+  const favProb = favIsF ? probA : 1 - probA;
+
+  const intro = `${f.name} (${f.record.wins}-${f.record.losses}) meets ${opp.name} (${opp.record.wins}-${opp.record.losses}) out of ${opp.hometown} tonight.`;
+
+  // matchupDiff > 0 means f's discipline has the edge over opp's; < 0 means opp has the edge over f
+  let matchupLine;
+  if(Math.abs(matchupDiff) >= 5){
+    const styleEdgeHolder = matchupDiff > 0 ? f : opp;
+    const styleDisadvantaged = matchupDiff > 0 ? opp : f;
+    if(styleEdgeHolder.id === fav.id){
+      matchupLine = fillTpl(pick(MATCHUP_LINES_REINFORCE), { fav: fav.name, favDisc: DISCIPLINE_NAMES[fav.primaryDisc], oppDisc: DISCIPLINE_NAMES[dog.primaryDisc] });
+    } else {
+      matchupLine = fillTpl(pick(MATCHUP_LINES_TENSION), { fav: fav.name, favDisc: DISCIPLINE_NAMES[fav.primaryDisc], dog: dog.name, dogDisc: DISCIPLINE_NAMES[dog.primaryDisc] });
+    }
+  } else {
+    matchupLine = pick(MATCHUP_LINES_NEUTRAL);
+  }
+
+  let predictLine;
+  if(favProb >= 0.82) predictLine = fillTpl(pick(PREDICT_LINES_STRONG), { fav: fav.name, dog: dog.name });
+  else if(favProb >= 0.62) predictLine = fillTpl(pick(PREDICT_LINES_LEAN), { fav: fav.name, dog: dog.name });
+  else predictLine = fillTpl(pick(PREDICT_LINES_TOSSUP), { fav: fav.name, dog: dog.name });
+
+  return `${intro} ${matchupLine} ${predictLine}`;
+}
+
+function simulateBout(fA, fB, ctx){
+  const ovrA = calcOVR(fA.stats), ovrB = calcOVR(fB.stats);
+  const mbA = matchupBonus(fA.primaryDisc, fB.primaryDisc);
+  const mbB = matchupBonus(fB.primaryDisc, fA.primaryDisc);
+  const homeBonusA = ctx.hometownPit ? 4 : 0; // player fighting at their own province's pit
+  const effA = ovrA + mbA + homeBonusA;
+  const effB = ovrB + mbB;
+  const probA = winProbability(effA, effB);
+  const winnerIsA = Math.random() < probA;
+  const winner = winnerIsA ? fA : fB;
+  const loser = winnerIsA ? fB : fA;
+  const gap = Math.abs(effA - effB);
+
+  let finishWeights;
+  if(gap >= 20) finishWeights = { KO:0.38, TKO:0.34, Decision:0.26, DQ:0.02 };
+  else if(gap >= 10) finishWeights = { KO:0.20, TKO:0.32, Decision:0.46, DQ:0.02 };
+  else finishWeights = { KO:0.09, TKO:0.24, Decision:0.65, DQ:0.02 };
+
+  const method = weightedPick(finishWeights);
+  const finishRound = method === 'Decision' ? 3 : parseInt(weightedPick({1:0.22, 2:0.36, 3:0.42}), 10);
+
+  const floor = ctx.arena.floor;
+  const log = [];
+  for(let r=1; r<=3; r++){
+    log.push({ type:'round-header', round:r });
+    const map = { A: fA.name, B: fB.name, floor,
+      flavorA: pick(DISC_FLAVOR[fA.primaryDisc] || DISC_FLAVOR.mma),
+      flavorB: pick(DISC_FLAVOR[fB.primaryDisc] || DISC_FLAVOR.mma) };
+    log.push({ type:'line', text: fillTpl(pick(ROUND_OPENERS), map) });
+    log.push({ type:'line', text: fillTpl(pick(ROUND_EXCHANGES), map) });
+    if(method !== 'Decision' && r === finishRound){
+      const fmap = { W: winner.name, L: loser.name, floor };
+      const lib = method === 'KO' ? FINISH_KO : method === 'TKO' ? FINISH_TKO : FINISH_DQ;
+      log.push({ type:'finish', text: fillTpl(pick(lib), fmap) });
+      break;
+    } else {
+      log.push({ type:'line', text: fillTpl(pick(ROUND_CLOSERS), map) });
+    }
+  }
+  if(method === 'Decision'){
+    log.push({ type:'decision', text: pick(DECISION_LINES) });
+    log.push({ type:'decision', text: `Judges score it for ${winner.name}.` });
+  }
+  return { winner, loser, method, finishRound, ovrA, ovrB, effA, effB, probA, log };
+}
+
+/* ============================ STATE ============================ */
+
+const state = {
+  screen: 'select', // select -> pit-select -> season -> preview -> bout -> season-summary (+ tournament-invite / tournament-summary)
+  seasonType: 'juvenile', // 'juvenile' | 'amateur'
+  mode: 'season', // 'season' | 'tournament'
+  tournamentStage: null, // 'City' | 'Province' | 'National'
+  fighterId: null,
+  opponent: null,
+  arena: null,
+  boutResult: null,
+  revealedCount: 0,
+  petitionApproved: false,
+  petitionTargetProvinceId: null,
+  simMode: false, // fast-forward fights for debugging/testing — skips preview+play-by-play
+  lastSimResult: null,
+  bracket: null, // { rounds: [...] } — full precomputed tournament bracket for the current stage
+  bracketRoundIndex: 0,
+};
+
+/* ============================ RENDER ============================ */
+
+/* ============================ FIGHTER CARD MODAL ============================ */
+
+const TIERS = ['All','Juvenile','Amateur','Semi-Pro','Pro','Exhibition'];
+let modalFighterId = null;
+let modalActiveTier = 'All';
+
+function openFighterCard(id){ modalFighterId = id; modalActiveTier = 'All'; renderModal(); }
+function closeFighterCard(){ modalFighterId = null; renderModal(); }
+
+function renderModal(){
+  const root = document.getElementById('modal-root');
+  if(!modalFighterId){ root.innerHTML = ''; return; }
+
+  const roster = getRoster();
+  let f = roster.find(r=> r.id === modalFighterId);
+  let isEphemeral = false;
+
+  if(!f && state.opponent && state.opponent.id === modalFighterId){
+    f = state.opponent;
+    isEphemeral = true;
+  }
+  if(!f){
+    const fieldFighter = getFieldFighterById(modalFighterId);
+    if(fieldFighter){ f = fieldFighter; isEphemeral = true; }
+  }
+  if(!f){ root.innerHTML = ''; return; }
+
+  const prov = PROVINCES.find(p=>p.id===f.provinceId);
+  const rec = f.record || { wins:0, losses:0 };
+
+  const commentaryHtml = generateCommentatorTakes(f).map(t=>`
+    <div class="mf-quote"><span class="mf-quote-name">${t.name}:</span> "${t.quote}"</div>
+  `).join('');
+
+  const growth = growthOutlook(f);
+  const doc = projectAdultSize(f.heightIn, f.weightLb, f.age, f.appearance ? f.appearance.build : 'athletic');
+  const growthHtml = `
+    <div class="mf-section-title">Growth Outlook</div>
+    <div class="mf-growth-bar"><div class="mf-growth-fill" style="width:${growth.pctOfCeiling}%"></div></div>
+    <p class="mf-growth-text">${Math.round(growth.pctOfCeiling)}% of current ceiling reached. ${growth.outlook}</p>
+    <div class="mf-section-title">Doctor's Review</div>
+    <p class="mf-growth-text">${doc.isGrown
+      ? `Fully grown — current size is expected to hold.`
+      : `Early projection, subject to change: expected adult height ~${heightLabel(doc.adultHeightIn)}, weight ~${doc.adultWeightLb} lb.`}</p>
+  `;
+
+  let bodyExtra;
+  if(isEphemeral && f.division){
+    const prov2 = PROVINCES.find(p=>p.id===f.provinceId);
+    bodyExtra = `<div class="mf-empty">Registered Amateur fighter — ${f.division} Division${f.leagueId && getLeague(f.leagueId) ? ', '+getLeague(f.leagueId).name : (prov2?', '+prov2.name:'')}. Record updates as you fight them; detailed round-by-round history isn't tracked for field fighters yet.</div>`;
+  } else if(isEphemeral && f.age && f.provinceId){
+    const prov2 = PROVINCES.find(p=>p.id===f.provinceId);
+    bodyExtra = `<div class="mf-empty">Registered Juvenile fighter, age ${f.age}${prov2?' — '+prov2.name:''}. Record updates as you fight them; detailed round-by-round history isn't tracked for field fighters yet.</div>`;
+  } else if(isEphemeral){
+    bodyExtra = `<div class="mf-empty">Procedural opponent — generated for this bout only, no persistent career record kept.</div>`;
+  } else {
+    const log = f.fightLog || [];
+    const filtered = modalActiveTier === 'All' ? log : log.filter(e=> e.tier === modalActiveTier);
+    const sorted = [...filtered].sort((a,b)=> new Date(b.date) - new Date(a.date));
+    const historyHtml = sorted.length ? sorted.map(e=>{
+      const dateStr = e.date ? new Date(e.date).toLocaleDateString() : '—';
+      return `
+        <div class="mf-history-row">
+          <div class="mfh-date">${dateStr}</div>
+          <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
+          <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
+        </div>
+      `;
+    }).join('') : `<div class="mf-empty">No fights on record${modalActiveTier==='All'?'':' at this level'} yet.</div>`;
+    const tabsHtml = TIERS.map(t=>{
+      const count = t==='All' ? log.length : log.filter(e=>e.tier===t).length;
+      return `<button class="mf-tier-tab ${modalActiveTier===t?'active':''}" data-mf-tab="${t}">${t} (${count})</button>`;
+    }).join('');
+    bodyExtra = `<div class="mf-tier-tabs">${tabsHtml}</div><div class="mf-history">${historyHtml}</div>`;
+  }
+
+  root.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div class="modal-title">Fighter Card</div>
+          <button class="modal-close" data-modal-close>✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="mf-head">
+            <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
+            <div>
+              <div class="mf-name">${f.name}</div>
+              <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement || f.hometown || ''}${prov?', '+prov.name:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
+              <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Career ${rec.wins}-${rec.losses}</div>
+            </div>
+          </div>
+          <div class="mf-stats-grid">
+            <div class="mf-stat"><div class="msv">${f.stats.speed}</div><div class="msl">SPD</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.quickness}</div><div class="msl">QCK</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.toughness}</div><div class="msl">TGH</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.power}</div><div class="msl">PWR</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.agility}</div><div class="msl">AGL</div></div>
+          </div>
+          <div class="mf-section-title">On the Broadcast</div>
+          <div class="mf-quotes">${commentaryHtml}</div>
+          ${growthHtml}
+          ${bodyExtra}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+document.addEventListener('click', (e)=>{
+  const openEl = e.target.closest('[data-open-fighter]');
+  if(openEl){ openFighterCard(openEl.dataset.openFighter); return; }
+  const closeEl = e.target.closest('[data-modal-close]');
+  if(closeEl){ closeFighterCard(); return; }
+  const overlayEl = e.target.closest('.modal-overlay');
+  if(overlayEl && e.target === overlayEl){ closeFighterCard(); return; }
+  const tabEl = e.target.closest('[data-mf-tab]');
+  if(tabEl){ modalActiveTier = tabEl.dataset.mfTab; renderModal(); return; }
+});
+
+const app = document.getElementById('app');
+
+const JUVENILE_TOTAL_FIGHTS = 9;
+const AMATEUR_TOTAL_FIGHTS = 24;
+const AMATEUR_HALF_SIZE = 12;
+const AMATEUR_QUALIFY_WIN_PCT = 0.70;
+
+function render(){
+  let title='FIGHTER SELECT', sub='FIGHT PIT', body='';
+  if(state.screen==='select'){ body = renderSelect(); }
+  else if(state.screen==='pit-select'){ body = renderPitSelect(); title='CHOOSE A PIT'; }
+  else if(state.screen==='season'){ body = renderSeason(); title = state.seasonType==='amateur' ? 'AMATEUR SEASON' : 'JUVENILE SEASON'; }
+  else if(state.screen==='regional-fighters'){ body = renderRegionalFighters(); title='REGIONAL FIELD'; }
+  else if(state.screen==='preview'){ body = renderPreview(); title='TALE OF THE TAPE'; }
+  else if(state.screen==='bout'){ body = renderBout(); title='FIGHT NIGHT'; }
+  else if(state.screen==='season-summary'){ body = renderSeasonSummary(); title='SEASON COMPLETE'; }
+  else if(state.screen==='tournament-invite'){ body = renderTournamentInvite(); title='TOURNAMENT INVITE'; }
+  else if(state.screen==='petition'){ body = renderPetition(); title='PETITION TO TRANSFER'; }
+  else if(state.screen==='petition-result'){ body = renderPetitionResult(); title='GOVERNING BODY DECISION'; }
+  else if(state.screen==='amateur-offers'){ body = renderAmateurOffers(); title='LEAGUE OFFERS'; }
+  else if(state.screen==='bracket-view'){ body = renderBracketView(); title=`${state.tournamentStage.toUpperCase()} BRACKET`; }
+
+  app.innerHTML = `
+    <div class="ticket-header">
+      <div><div class="ticket-eyebrow">Iron Island · Fight League</div><div class="ticket-title">${title}</div></div>
+      <div class="ticket-sub">${sub}</div>
+    </div>
+    <div class="panel">${body}</div>
+  `;
+  wireEvents();
+}
+
+function renderSelect(){
+  const roster = getRoster();
+  if(!roster.length){
+    return `<div class="empty-note">No fighters saved yet. Build one in the Character Creator first — it saves to the same shared roster this reads from.</div>`;
+  }
+  const rows = roster.map(f=>{
+    const prov = PROVINCES.find(p=>p.id===f.provinceId);
+
+    let juvStatus;
+    if(f.juvenileSeason && !f.juvenileSeason.complete) juvStatus = `Fight ${f.juvenileSeason.fightsPlayed}/${JUVENILE_TOTAL_FIGHTS} — Continue`;
+    else if(f.juvenileSeasonHistory.length) juvStatus = `${f.juvenileSeasonHistory.length} season${f.juvenileSeasonHistory.length===1?'':'s'} done`;
+    else juvStatus = 'Start Season';
+
+    const amateurUnlocked = f.juvenileSeasonHistory.length > 0;
+    let amStatus;
+    if(!amateurUnlocked) amStatus = 'Locked — finish a Juvenile season first';
+    else if(f.amateurSeason && !f.amateurSeason.complete) amStatus = `Fight ${f.amateurSeason.fightsPlayed}/${AMATEUR_TOTAL_FIGHTS} — Continue`;
+    else if(f.amateurLeagueId) amStatus = `${getLeague(f.amateurLeagueId) ? getLeague(f.amateurLeagueId).name : 'League'} — Continue`;
+    else if(f.pendingAmateurOffers && f.pendingAmateurOffers.length) amStatus = `${f.pendingAmateurOffers.length} Offer${f.pendingAmateurOffers.length===1?'':'s'} Waiting!`;
+    else amStatus = 'View Offers';
+
+    return `
+      <div class="fighter-row" style="--fr-color:${prov?prov.color:'#C9A23C'}">
+        <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
+        <div style="flex:1;">
+          <div class="fr-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
+          <div class="fr-meta">Age ${f.age} · ${DISCIPLINE_NAMES[f.primaryDisc]} · ${f.settlement} · ${weightClassOf(f.weightLb)} · Career ${f.record.wins}-${f.record.losses}</div>
+          <div class="fr-season-actions">
+            <button class="fr-season-btn" data-select-fighter="${f.id}" data-season-type="juvenile">Juvenile: ${juvStatus}</button>
+            <button class="fr-season-btn" data-select-fighter="${f.id}" data-season-type="amateur" ${amateurUnlocked?'':'disabled'}>Amateur: ${amStatus}</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `<div class="section-label">Pick a Fighter</div><div class="fighter-grid">${rows}</div>`;
+}
+
+function renderPitSelect(){
+  const f = getFighterById(state.fighterId);
+  const isAmateur = state.seasonType === 'amateur';
+  const cards = PROVINCES.map(p=>`
+    <div class="pit-card" data-pit="${p.id}" style="--pc-color:${p.color}">
+      <div class="pit-name">${p.pit}</div>
+      <div class="pit-meta">${p.name}${p.id===f.provinceId ? ' · HOMETOWN PIT (+edge)' : ''}</div>
+    </div>
+  `).join('');
+  return `
+    <div class="section-label">Choose ${f.name}'s ${isAmateur ? 'Amateur Circuit Base' : 'Fight Pit'}</div>
+    <p style="font-family:var(--body); font-size:13.5px; color:var(--bone-dim); margin-bottom:18px;">
+      ${isAmateur
+        ? 'A full Amateur Season is 24 fights across two halves. Finish in the top tier of records and you\'ll earn a tournament invite — City, then Province, then National.'
+        : 'Nine fights make a Juvenile Season.'}
+      Fighting at your hometown pit gives a small edge from the familiar crowd.
+    </p>
+    <div class="pit-grid">${cards}</div>
+    <div class="btn-row"><button class="btn" id="back-to-select">← Back</button><span></span></div>
+  `;
+}
+
+function renderSeason(){
+  const f = getFighterById(state.fighterId);
+  const isAmateur = state.seasonType === 'amateur';
+  const s = isAmateur ? f.amateurSeason : f.juvenileSeason;
+  const total = isAmateur ? AMATEUR_TOTAL_FIGHTS : JUVENILE_TOTAL_FIGHTS;
+  const wClass = weightClassOf(f.weightLb);
+  const repPct = clamp(s.reputation, 0, 100);
+  const halfLabel = isAmateur ? (s.fightsPlayed < AMATEUR_HALF_SIZE ? '1st Half' : '2nd Half') : null;
+
+  return `
+    <div class="season-head">
+      <div class="season-avatar">${buildSilhouetteSM(f.appearance)}</div>
+      <div>
+        <div class="season-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
+        <div class="season-meta">Age ${f.age} · ${s.pitName} · ${wClass} Weight · ${DISCIPLINE_NAMES[f.primaryDisc]}${halfLabel ? ' · '+halfLabel : ''}</div>
+      </div>
+    </div>
+
+    <div class="section-label">Season Progress — Fight ${s.fightsPlayed} of ${total}</div>
+    <div class="progress-bar"><div class="progress-fill" style="width:${(s.fightsPlayed/total*100).toFixed(0)}%"></div></div>
+
+    <div class="stat-card-row">
+      <div class="stat-card"><div class="scv">${s.wins}-${s.losses}</div><div class="scl">Season Record</div></div>
+      <div class="stat-card"><div class="scv">${s.finishes}</div><div class="scl">Finishes</div></div>
+      <div class="stat-card"><div class="scv">${f.record.wins}-${f.record.losses}</div><div class="scl">Career Record</div></div>
+    </div>
+
+    <div class="section-label">Reputation</div>
+    <div class="rep-meter"><div class="rep-fill" style="width:${repPct}%"></div></div>
+    <p style="font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:6px; margin-bottom:24px;">${repLabel(repPct)}</p>
+
+    ${!isAmateur ? `<p style="font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-bottom:16px;">Declared league: ${PROVINCES.find(p=>p.id===f.juvenileHomeProvinceId).name}${f.juvenileHomeProvinceId!==f.provinceId ? ` (away from home — growth is reduced ${Math.round((1-juvenileHomeGrowthMultiplier(f))*100)}%)` : ' (home)'}</p>` : `<p style="font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-bottom:16px;">Committed to ${getLeague(f.amateurLeagueId) ? getLeague(f.amateurLeagueId).name : s.pitName} — no penalty for distance, fights here until drafted to Juniors.</p>`}
+
+    <label class="check-row"><input type="checkbox" id="toggle-sim-mode" ${state.simMode?'checked':''}> ⚡ Sim Mode — skip Tale of the Tape and play-by-play, resolve fights instantly</label>
+    ${state.simMode && state.lastSimResult ? `<p style="font-family:var(--mono); font-size:11px; color:${state.lastSimResult.won?'var(--good)':'var(--ink-red)'}; margin:8px 0 0;">Last fight: ${state.lastSimResult.won?'WIN':'LOSS'} vs ${state.lastSimResult.opponent} (${state.lastSimResult.method})</p>` : ''}
+
+    <div class="btn-row">
+      <button class="btn" id="back-to-select-from-season">← Fighter Select</button>
+      <button class="btn" id="view-regional-fighters">See Who's Out There →</button>
+      ${!isAmateur ? `<button class="btn" id="petition-transfer">Petition to Transfer →</button>` : ''}
+      ${state.simMode ? `<button class="btn" id="sim-rest-of-season">Sim Rest of Season ⚡</button>` : ''}
+      <button class="btn btn-primary" id="fight-tonight">${state.simMode?'Sim Fight ⚡':'Fight Tonight →'}</button>
+    </div>
+  `;
+}
+
+function renderRegionalFighters(){
+  const f = getFighterById(state.fighterId);
+  const isAmateur = state.seasonType === 'amateur';
+  const s = isAmateur ? f.amateurSeason : f.juvenileSeason;
+  const provinceId = isAmateur
+    ? (s ? s.pitProvinceId : (f.amateurLeagueId ? getLeague(f.amateurLeagueId).provinceId : f.provinceId))
+    : (s ? s.pitProvinceId : f.provinceId);
+  const province = PROVINCES.find(p=>p.id===provinceId);
+  const leagueId = isAmateur ? (s ? s.leagueId : f.amateurLeagueId) : null;
+  const league = leagueId ? getLeague(leagueId) : null;
+
+  let fieldFighters;
+  if(isAmateur && leagueId){
+    ensureAmateurFieldPoolForLeague(leagueId);
+    const pools = loadFieldPools();
+    fieldFighters = (pools.amateur[leagueId] || []).map(x=>({ ...x, isField:true, sortKey:x.division }));
+  } else if(isAmateur){
+    fieldFighters = [];
+  } else {
+    ensureJuvenileFieldPoolForProvince(provinceId);
+    const pools = loadFieldPools();
+    fieldFighters = (pools.juvenile[provinceId] || []).map(x=>({ ...x, isField:true, sortKey:x.age }));
+  }
+
+  // Also surface any of the player's OWN other created fighters based in this province —
+  // real registered fighters, not just NPCs.
+  const roster = getRoster().filter(r=> r.provinceId === provinceId && r.id !== state.fighterId);
+  const rosterMapped = roster.map(r=> ({ ...r, isField:false, sortKey: isAmateur ? divisionFromOVR(calcOVR(r.stats)) : r.age }));
+
+  const divisionOrder = { Elite:0, Contender:1, Developing:2, Novice:3 };
+  const combined = fieldFighters.concat(rosterMapped);
+  if(isAmateur){
+    combined.sort((a,b)=> (divisionOrder[a.sortKey]??4) - (divisionOrder[b.sortKey]??4) || calcOVR(b.stats)-calcOVR(a.stats));
+  } else {
+    combined.sort((a,b)=> (b.sortKey||12) - (a.sortKey||12) || calcOVR(b.stats)-calcOVR(a.stats));
+  }
+
+  const rows = combined.map(x=>{
+    const ovr = calcOVR(x.stats);
+    const tag = isAmateur ? x.sortKey : `Age ${x.sortKey}`;
+    return `
+      <div class="fighter-row" style="--fr-color:${province.color}">
+        <div class="fr-avatar">${buildSilhouetteSM(x.appearance)}</div>
+        <div style="flex:1;">
+          <div class="fr-name clickable-name" data-open-fighter="${x.id}">${x.name}${x.isField===false ? ' <span style="color:var(--brass); font-size:10px;">(Player Fighter)</span>' : ''}</div>
+          <div class="fr-meta">${tag} · ${DISCIPLINE_NAMES[x.primaryDisc]} · OVR ${ovr} · ${x.hometown || x.settlement || ''} · ${x.record.wins}-${x.record.losses}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="section-label">${isAmateur && league ? league.name : province.name} — Registered ${isAmateur?'Amateurs':'Juveniles'}</div>
+    <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:18px;">
+      ${combined.length} fighters on file${isAmateur?' in this league, sorted by division':' for this region, sorted by age'}. This is who you might draw in a regular season fight${isAmateur?' — Regional and National tournament rounds can pull from anywhere on the island.':'.'}
+    </p>
+    <div class="fighter-grid">${rows || '<div class="empty-note">No registered fighters yet.</div>'}</div>
+    <div class="btn-row"><button class="btn" id="back-to-season-from-field">← Back</button><span></span></div>
+  `;
+}
+
+function divisionFromOVR(ovr){
+  if(ovr >= 31) return 'Elite';
+  if(ovr >= 21) return 'Contender';
+  if(ovr >= 11) return 'Developing';
+  return 'Novice';
+}
+
+function renderPetition(){
+  const f = getFighterById(state.fighterId);
+  const currentProv = PROVINCES.find(p=>p.id===f.juvenileHomeProvinceId);
+  const chance = petitionApprovalChance(f);
+  const candidates = PROVINCES.filter(p=> p.id !== f.juvenileHomeProvinceId);
+  const cards = candidates.map(p=>{
+    const dist = provinceDistance(f.provinceId, p.id);
+    const penalty = Math.round((1 - clamp(1 - dist*0.12, 0.4, 1)) * 100);
+    return `
+      <div class="pit-card" data-petition-target="${p.id}" style="--pc-color:${p.color}">
+        <div class="pit-name">${p.pit}</div>
+        <div class="pit-meta">${p.name}${p.id===f.provinceId ? ' · YOUR HOMETOWN' : ` · ~${penalty}% growth penalty if approved`}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="section-label">Petition to Transfer</div>
+    <p style="font-family:var(--body); font-size:13.5px; color:var(--bone-dim); margin-bottom:10px;">
+      ${f.name} is currently declared with ${currentProv.pit} (${currentProv.name}). Petitioning to fight elsewhere requires the governing body's approval — it's not guaranteed. Right now the odds of approval are roughly <b>${Math.round(chance*100)}%</b>, based on ${f.juvenileSeasonHistory.length} completed season${f.juvenileSeasonHistory.length===1?'':'s'} on record.
+    </p>
+    <p style="font-family:var(--body); font-size:13px; color:var(--muted); margin-bottom:18px;">
+      If approved, the new league becomes permanent (until you petition again). The farther it is from ${f.name}'s actual hometown, the bigger the ongoing development penalty.
+    </p>
+    <div class="pit-grid">${cards}</div>
+    <div class="btn-row"><button class="btn" id="back-to-season-from-petition">← Back</button><span></span></div>
+  `;
+}
+
+function renderPetitionResult(){
+  const f = getFighterById(state.fighterId);
+  const approved = state.petitionApproved;
+  const targetProv = PROVINCES.find(p=>p.id===state.petitionTargetProvinceId);
+  return `
+    <div class="stub-screen">
+      <h2>${approved ? 'Petition Approved' : 'Petition Denied'}</h2>
+      <p>${approved
+        ? `The governing body has cleared ${f.name} to fight out of ${targetProv.pit} (${targetProv.name}) going forward. This is now the permanent declared league.`
+        : `The governing body denied the request. ${f.name} stays declared with their current league for now — nothing has changed. You're free to petition again anytime.`}</p>
+      <button class="btn btn-primary" id="back-to-season-from-petition-result">Continue</button>
+    </div>
+  `;
+}
+
+function renderAmateurOffers(){
+  const f = getFighterById(state.fighterId);
+  const offers = (f.pendingAmateurOffers || []).map(id=> getLeague(id)).filter(Boolean);
+  const cards = offers.map(l=>{
+    const dist = provinceDistance(f.juvenileHomeProvinceId || f.provinceId, l.provinceId);
+    const distLabel = dist===0 ? 'Close to home' : dist<=1 ? 'Nearby' : dist<=2 ? 'A trip, but doable' : 'Far from home';
+    const strengthInfo = LEAGUE_STRENGTH_INFO[l.strength] || LEAGUE_STRENGTH_INFO.Average;
+    const scoutStars = '★'.repeat(l.scouting) + '☆'.repeat(5-l.scouting);
+    const prov = PROVINCES.find(p=>p.id===l.provinceId);
+    return `
+      <div class="offer-card" data-offer-accept="${l.id}" style="--pc-color:${prov.color}">
+        <div class="offer-head">
+          <div class="pit-name">${l.name}</div>
+          <div class="offer-strength-tag">${strengthInfo.label}</div>
+        </div>
+        <div class="pit-meta">${prov.name} · ${distLabel}</div>
+        <p class="offer-blurb">${strengthInfo.blurb}</p>
+        <div class="offer-row"><span class="offer-row-label">Scouting exposure</span><span class="offer-stars">${scoutStars}</span></div>
+        <div class="offer-row"><span class="offer-row-label">Perk</span><span class="offer-row-val">${l.perk}</span></div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="section-label">${f.name}'s League Offers</div>
+    <p style="font-family:var(--body); font-size:13.5px; color:var(--bone-dim); margin-bottom:18px;">
+      Amateur leagues have taken notice. Stronger leagues mean tougher competition and faster growth (you level up fastest beating fighters better than you) but a harder record to protect. Weaker leagues are the opposite — easier wins, slower development. Scouting exposure is how visible you'll be to Junior League scouts when draft time comes. No penalty for going far, but most fighters lean toward what's close. Once you accept, you'll fight in that league every Amateur season until you're drafted to Juniors.
+    </p>
+    <div class="offer-grid">${cards}</div>
+    <div class="btn-row"><button class="btn" id="decline-all-offers">Decline All — Stay Juvenile</button><span></span></div>
+  `;
+}
+
+function repLabel(pct){
+  if(pct >= 80) return `${pct}/100 — Local Legend. People show up just to see this kid fight.`;
+  if(pct >= 55) return `${pct}/100 — Known around the pit. Crowds are starting to pay attention.`;
+  if(pct >= 30) return `${pct}/100 — Building a name, slowly.`;
+  return `${pct}/100 — Still mostly unknown outside the family.`;
+}
+
+function statCompareRow(keyLabel, valF, valOpp, scaleMax){
+  const pctF = clamp(valF / scaleMax * 100, 0, 100);
+  const pctOpp = clamp(valOpp / scaleMax * 100, 0, 100);
+  return `
+    <div class="tape-stat-row">
+      <div class="tape-stat-label">${keyLabel}</div>
+      <div class="tape-stat-bars">
+        <div class="tape-side-l">
+          <div class="tape-val">${valF}</div>
+          <div class="tape-bar-track"><div class="tape-bar-fill-l" style="width:${pctF}%"></div></div>
+        </div>
+        <div class="tape-side-r">
+          <div class="tape-bar-track"><div class="tape-bar-fill-r" style="width:${pctOpp}%"></div></div>
+          <div class="tape-val">${valOpp}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderPreview(){
+  const f = getFighterById(state.fighterId);
+  const opp = state.opponent;
+  const r = state.boutResult;
+  const ovrF = calcOVR(f.stats), ovrOpp = calcOVR(opp.stats);
+  const matchupDiff = matchupBonus(f.primaryDisc, opp.primaryDisc) - matchupBonus(opp.primaryDisc, f.primaryDisc);
+  const previewText = buildReporterPreview(f, opp, r.probA, matchupDiff);
+  const fCeiling = state.seasonType==='amateur' ? bandCeiling(18, f.talentTier) : bandCeiling(f.age||12, f.talentTier);
+  const oppCeiling = opp.age ? bandCeiling(opp.age, opp.talentTier) : bandCeiling(18, 'normal');
+  const scaleMax = Math.max(fCeiling, oppCeiling, 10);
+
+  return `
+    <div class="section-label">Tale of the Tape</div>
+    <div class="tape-grid">
+      <div class="tape-side">
+        <div class="tape-avatar">${buildSilhouetteSM(f.appearance)}</div>
+        <div class="tape-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
+        <div class="tape-disc">${DISCIPLINE_NAMES[f.primaryDisc]}</div>
+        <div class="tape-ovr">${ovrF}</div>
+        <div class="tape-facts">
+          <div><b>Age:</b> ${f.age} &nbsp; <b>HT:</b> ${heightLabel(f.heightIn)} &nbsp; <b>WT:</b> ${f.weightLb} lb</div>
+          <div><b>From:</b> ${f.settlement}</div>
+          <div><b>Record:</b> ${f.record.wins}-${f.record.losses}</div>
+        </div>
+      </div>
+      <div class="tape-side">
+        <div class="tape-avatar">${buildSilhouetteSM(opp.appearance)}</div>
+        <div class="tape-name clickable-name" data-open-fighter="${opp.id}">${opp.name}</div>
+        <div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div>
+        <div class="tape-ovr">${ovrOpp}</div>
+        <div class="tape-facts">
+          <div>${opp.age ? `<b>Age:</b> ${opp.age} &nbsp; ` : ''}<b>HT:</b> ${heightLabel(opp.heightIn)} &nbsp; <b>WT:</b> ${opp.weightLb} lb</div>
+          <div><b>From:</b> ${opp.hometown}</div>
+          <div><b>Record:</b> ${opp.record.wins}-${opp.record.losses}</div>
+        </div>
+      </div>
+    </div>
+
+    ${statCompareRow('SPEED', f.stats.speed, opp.stats.speed, scaleMax)}
+    ${statCompareRow('QUICKNESS', f.stats.quickness, opp.stats.quickness, scaleMax)}
+    ${statCompareRow('TOUGHNESS', f.stats.toughness, opp.stats.toughness, scaleMax)}
+    ${statCompareRow('POWER', f.stats.power, opp.stats.power, scaleMax)}
+    ${statCompareRow('AGILITY', f.stats.agility, opp.stats.agility, scaleMax)}
+
+    <div class="press-note">
+      <div class="press-title">📰 Ringside Preview</div>
+      <p>${previewText}</p>
+    </div>
+
+    <div class="btn-row">
+      <span></span>
+      <button class="btn btn-primary" id="enter-arena">Enter the Arena →</button>
+    </div>
+  `;
+}
+
+function renderBout(){
+  const f = getFighterById(state.fighterId);
+  const opp = state.opponent;
+  const r = state.boutResult;
+  const arena = state.arena;
+  const s = state.seasonType === 'amateur' ? f.amateurSeason : f.juvenileSeason;
+  const pitLabel = state.mode === 'tournament' ? `${state.tournamentStage} — ${state.bracket.rounds[state.bracketRoundIndex].name}` : s.pitName;
+  const visible = r.log.slice(0, state.revealedCount);
+  const logHtml = visible.map((entry,i)=>{
+    if(entry.type==='round-header') return `<div class="log-round">ROUND ${entry.round}</div>`;
+    if(entry.type==='finish') return `<div class="log-line finish" style="animation-delay:${i*0.02}s">${entry.text}</div>`;
+    if(entry.type==='decision') return `<div class="log-line decision" style="animation-delay:${i*0.02}s">${entry.text}</div>`;
+    return `<div class="log-line" style="animation-delay:${i*0.02}s">${entry.text}</div>`;
+  }).join('');
+  const done = state.revealedCount >= r.log.length;
+
+  return `
+    <div class="arena-card">
+      <div class="arena-name">${pitLabel}</div>
+      <div class="arena-meta">${arena.name} · ${arena.capacity.toLocaleString()} capacity · ${arena.floor}</div>
+    </div>
+    <div class="vs-wrap">
+      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(f.appearance)}</div><div class="vname clickable-name" data-open-fighter="${f.id}">${f.name}</div><div class="vdisc">${DISCIPLINE_NAMES[f.primaryDisc]}</div></div>
+      <div class="vs-mid">VS</div>
+      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(opp.appearance)}</div><div class="vname clickable-name" data-open-fighter="${opp.id}">${opp.name}</div><div class="vdisc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div></div>
+    </div>
+    <div class="fight-log">${logHtml}</div>
+    <div class="btn-row">
+      <span></span>
+      <button class="btn btn-primary" id="advance-bout">${done ? 'Confirm Result →' : 'Next →'}</button>
+    </div>
+  `;
+}
+
+function renderTournamentInvite(){
+  const f = getFighterById(state.fighterId);
+  const s = f.amateurSeason;
+  return `
+    <div class="stub-screen">
+      <h2>Tournament Invite</h2>
+      <p>${f.name} closed the Amateur Season at ${s.wins}-${s.losses} — strong enough to earn a tournament invite. The path runs a 16-fighter City bracket, then a 16-fighter Province bracket, then an 8-fighter National bracket (one champion per province, blind draw). Lose any round and the run ends there; win all three brackets and you're the National Amateur Champion.</p>
+      <div class="btn-row">
+        <button class="btn" id="decline-tournament">Skip It — Bank the Season</button>
+        <button class="btn btn-primary" id="accept-tournament">Accept Invite →</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderSeasonSummary(){
+  const f = getFighterById(state.fighterId);
+  if(state.seasonType === 'amateur'){
+    const last = f.amateurSeasonHistory[f.amateurSeasonHistory.length-1];
+    let headline, extra;
+    if(last.tournamentResult === 'National Champion'){
+      headline = 'National Amateur Champion!';
+      extra = `${f.name} ran the full tournament gauntlet — City, Province, and National — and won all three. That's the top of the amateur pyramid.`;
+    } else if(last.tournamentResult && last.tournamentResult.startsWith('Eliminated')){
+      headline = 'Tournament Run Complete';
+      extra = `${f.name} earned a tournament bid and made it to the ${last.tournamentResult.replace('Eliminated - ','')} stage before falling.`;
+    } else if(last.tournamentResult === 'Declined'){
+      headline = 'Season Complete';
+      extra = `${f.name} qualified for the tournament but the invite was passed on this time.`;
+    } else {
+      headline = 'Season Complete';
+      extra = `Not quite a tournament-caliber record this season, but every fight built the resume.`;
+    }
+    return `
+      <div class="stub-screen">
+        <h2>${headline}</h2>
+        <p>${f.name} finished the Amateur Season with a record of ${last.wins}-${last.losses} (${last.finishes} finishes), closing with a reputation score of ${last.reputation}/100. ${extra}</p>
+        <p>Semi-Pro and Pro leagues aren't built yet — for now the season banks the record and reputation, and a new Amateur Season can start anytime.</p>
+        <button class="btn btn-primary" id="back-to-select-from-summary">Back to Fighter Select</button>
+      </div>
+    `;
+  }
+
+  const last = f.juvenileSeasonHistory[f.juvenileSeasonHistory.length-1];
+  const champion = last.wins >= 7;
+  return `
+    <div class="stub-screen">
+      <h2>${champion ? `${last.pitName} Champion!` : 'Season Complete'}</h2>
+      <p>${f.name} finished the Juvenile Season at ${last.pitName} with a record of ${last.wins}-${last.losses} (${last.finishes} finishes), closing with a reputation score of ${last.reputation}/100.
+      ${champion ? ' That record is good enough to call them the pit champion this season.' : ' Not quite a championship run, but every fight built the record.'}</p>
+      <p>Once a Juvenile Season is on the books, an Amateur Season unlocks from Fighter Select.</p>
+      <button class="btn btn-primary" id="back-to-select-from-summary">Back to Fighter Select</button>
+    </div>
+  `;
+}
+
+/* ============================ EVENTS ============================ */
+
+function wireEvents(){
+  document.querySelectorAll('[data-select-fighter]').forEach(btn=>{
+    btn.onclick = ()=>{
+      state.fighterId = btn.dataset.selectFighter;
+      state.seasonType = btn.dataset.seasonType;
+      state.mode = 'season';
+      const f = getFighterById(state.fighterId);
+      const season = state.seasonType === 'amateur' ? f.amateurSeason : f.juvenileSeason;
+
+      if(season && !season.complete){
+        state.screen = 'season';
+      } else if(state.seasonType === 'juvenile'){
+        if(f.juvenileHomeProvinceId){
+          // Already declared a home league — no re-picking. Auto-start the next season there.
+          const province = PROVINCES.find(p=>p.id===f.juvenileHomeProvinceId);
+          updateFighter(state.fighterId, (ff)=>{
+            ff.juvenileSeason = {
+              pitProvinceId: f.juvenileHomeProvinceId, pitName: province.pit,
+              fightsPlayed:0, wins:0, losses:0, finishes:0, reputation:10, complete:false,
+              qualifiedForTournament:false, tournamentStage:null,
+            };
+          });
+          state.screen = 'season';
+        } else {
+          state.screen = 'pit-select'; // first-ever Juvenile declaration
+        }
+      } else {
+        // Amateur: committed league → auto-start there. Pending offers → show them.
+        // Eligible with no league/offers yet → generate offers now (never a dead end).
+        if(f.amateurLeagueId){
+          const league = getLeague(f.amateurLeagueId);
+          if(league && isLeagueActive(f.amateurLeagueId)){
+            const province = PROVINCES.find(p=>p.id===league.provinceId);
+            updateFighter(state.fighterId, (ff)=>{
+              ff.amateurSeason = {
+                leagueId: f.amateurLeagueId, pitProvinceId: league.provinceId, pitName: league.name,
+                fightsPlayed:0, wins:0, losses:0, finishes:0, reputation:10, complete:false,
+                qualifiedForTournament:false, tournamentStage:null,
+              };
+            });
+            state.screen = 'season';
+          } else {
+            // Their league folded — force a fresh round of offers.
+            updateFighter(state.fighterId, (ff)=>{ ff.amateurLeagueId = null; ff.pendingAmateurOffers = generateAmateurOffers(ff); });
+            state.screen = 'amateur-offers';
+          }
+        } else {
+          if(!f.pendingAmateurOffers || !f.pendingAmateurOffers.length){
+            updateFighter(state.fighterId, (ff)=>{ ff.pendingAmateurOffers = generateAmateurOffers(ff); });
+          }
+          state.screen = 'amateur-offers';
+        }
+      }
+      render();
+    };
+  });
+
+  const backToSelect = document.getElementById('back-to-select');
+  if(backToSelect) backToSelect.onclick = ()=>{ state.screen='select'; render(); };
+
+  document.querySelectorAll('[data-pit]').forEach(card=>{
+    card.onclick = ()=>{
+      const provinceId = card.dataset.pit;
+      const province = PROVINCES.find(p=>p.id===provinceId);
+      const freshSeason = {
+        pitProvinceId: provinceId, pitName: province.pit,
+        fightsPlayed:0, wins:0, losses:0, finishes:0, reputation:10, complete:false,
+        qualifiedForTournament:false, tournamentStage:null,
+      };
+      updateFighter(state.fighterId, (f)=>{
+        f.juvenileSeason = freshSeason;
+        if(!f.juvenileHomeProvinceId) f.juvenileHomeProvinceId = provinceId; // one-time declaration, locked in
+      });
+      state.screen = 'season';
+      render();
+    };
+  });
+
+  const backToSelectFromSeason = document.getElementById('back-to-select-from-season');
+  if(backToSelectFromSeason) backToSelectFromSeason.onclick = ()=>{ state.screen='select'; render(); };
+
+  const viewRegionalFighters = document.getElementById('view-regional-fighters');
+  if(viewRegionalFighters) viewRegionalFighters.onclick = ()=>{ state.screen='regional-fighters'; render(); };
+
+  const backToSeasonFromField = document.getElementById('back-to-season-from-field');
+  if(backToSeasonFromField) backToSeasonFromField.onclick = ()=>{ state.screen='season'; render(); };
+
+  const petitionTransfer = document.getElementById('petition-transfer');
+  if(petitionTransfer) petitionTransfer.onclick = ()=>{ state.screen='petition'; render(); };
+
+  const backToSeasonFromPetition = document.getElementById('back-to-season-from-petition');
+  if(backToSeasonFromPetition) backToSeasonFromPetition.onclick = ()=>{ state.screen='season'; render(); };
+
+  document.querySelectorAll('[data-petition-target]').forEach(card=>{
+    card.onclick = ()=>{
+      const targetId = card.dataset.petitionTarget;
+      const f = getFighterById(state.fighterId);
+      const chance = petitionApprovalChance(f);
+      const approved = Math.random() < chance;
+      if(approved){
+        updateFighter(state.fighterId, (ff)=>{
+          ff.juvenileHomeProvinceId = targetId;
+          if(ff.juvenileSeason && !ff.juvenileSeason.complete){
+            const targetProv = PROVINCES.find(p=>p.id===targetId);
+            ff.juvenileSeason.pitProvinceId = targetId;
+            ff.juvenileSeason.pitName = targetProv.pit;
+          }
+        });
+      }
+      state.petitionApproved = approved;
+      state.petitionTargetProvinceId = targetId;
+      state.screen = 'petition-result';
+      render();
+    };
+  });
+
+  const backToSeasonFromPetitionResult = document.getElementById('back-to-season-from-petition-result');
+  if(backToSeasonFromPetitionResult) backToSeasonFromPetitionResult.onclick = ()=>{ state.screen='season'; render(); };
+
+  document.querySelectorAll('[data-offer-accept]').forEach(card=>{
+    card.onclick = ()=>{
+      const leagueId = card.dataset.offerAccept;
+      const league = getLeague(leagueId);
+      updateFighter(state.fighterId, (f)=>{
+        f.amateurLeagueId = leagueId;
+        f.pendingAmateurOffers = [];
+        f.amateurSeason = {
+          leagueId, pitProvinceId: league.provinceId, pitName: league.name,
+          fightsPlayed:0, wins:0, losses:0, finishes:0, reputation:10, complete:false,
+          qualifiedForTournament:false, tournamentStage:null,
+        };
+      });
+      state.seasonType = 'amateur';
+      state.screen = 'season';
+      render();
+    };
+  });
+
+  const declineAllOffers = document.getElementById('decline-all-offers');
+  if(declineAllOffers) declineAllOffers.onclick = ()=>{
+    updateFighter(state.fighterId, (f)=>{ f.pendingAmateurOffers = []; });
+    state.screen = 'select';
+    render();
+  };
+
+  function setupNextAmateurOrJuvenileFight(){
+    const f = getFighterById(state.fighterId);
+    const s = state.seasonType === 'amateur' ? f.amateurSeason : f.juvenileSeason;
+    const province = PROVINCES.find(p=>p.id===s.pitProvinceId);
+    const wClass = weightClassOf(f.weightLb);
+    // Both levels now draw from a persistent, browsable regional field pool instead of
+    // inventing a stranger each fight — Juvenile matched loosely by age, Amateur by division.
+    const opp = state.seasonType === 'amateur'
+      ? drawFromFieldPool(s.leagueId, wClass, REGULAR_AMATEUR_WEIGHTS)
+      : drawJuvenileFromFieldPool(s.pitProvinceId, wClass, f.age || 12);
+    const arena = generateArena();
+    const ctx = { arena, hometownPit: province.id === f.provinceId };
+    state.opponent = opp;
+    state.arena = arena;
+    state.boutResult = simulateBout(f, opp, ctx);
+    state.revealedCount = 0;
+    state.mode = 'season';
+  }
+
+  const fightTonight = document.getElementById('fight-tonight');
+  if(fightTonight) fightTonight.onclick = ()=>{
+    setupNextAmateurOrJuvenileFight();
+    if(state.simMode){
+      const r = state.boutResult;
+      const playerWon = r.winner.id === state.fighterId;
+      state.lastSimResult = { won: playerWon, opponent: state.opponent.name, method: r.method };
+      applyBoutResult();
+    } else {
+      state.screen = 'preview';
+    }
+    render();
+  };
+
+  const simRestOfSeason = document.getElementById('sim-rest-of-season');
+  if(simRestOfSeason) simRestOfSeason.onclick = ()=>{
+    let guard = 0;
+    while(state.screen === 'season' && guard < 30){
+      setupNextAmateurOrJuvenileFight();
+      const r = state.boutResult;
+      const playerWon = r.winner.id === state.fighterId;
+      state.lastSimResult = { won: playerWon, opponent: state.opponent.name, method: r.method };
+      applyBoutResult();
+      guard++;
+    }
+    render();
+  };
+
+  const toggleSimMode = document.getElementById('toggle-sim-mode');
+  if(toggleSimMode) toggleSimMode.onchange = (e)=>{ state.simMode = e.target.checked; render(); };
+
+  const enterArena = document.getElementById('enter-arena');
+  if(enterArena) enterArena.onclick = ()=>{ state.screen = 'bout'; render(); };
+
+  const advanceBout = document.getElementById('advance-bout');
+  if(advanceBout) advanceBout.onclick = ()=>{
+    const r = state.boutResult;
+    if(state.revealedCount < r.log.length){
+      state.revealedCount = Math.min(r.log.length, state.revealedCount + 3);
+      render();
+    } else if(state.mode === 'tournament'){
+      applyTournamentBoutResult();
+      render();
+    } else {
+      applyBoutResult();
+      render();
+    }
+  };
+
+  const backToSelectFromSummary = document.getElementById('back-to-select-from-summary');
+  if(backToSelectFromSummary) backToSelectFromSummary.onclick = ()=>{ state.screen='select'; state.fighterId=null; render(); };
+
+  const declineTournament = document.getElementById('decline-tournament');
+  if(declineTournament) declineTournament.onclick = ()=>{ finalizeAmateurSeason(false); render(); };
+
+  const acceptTournament = document.getElementById('accept-tournament');
+  if(acceptTournament) acceptTournament.onclick = ()=>{
+    state.mode = 'tournament';
+    startBracketStage('City');
+    render();
+  };
+
+  const enterBracketRoundBtn = document.getElementById('enter-bracket-round');
+  if(enterBracketRoundBtn) enterBracketRoundBtn.onclick = ()=>{
+    enterBracketRound();
+    render();
+  };
+}
+
+function startBracketStage(stageName){
+  const f = getFighterById(state.fighterId);
+  const s = f.amateurSeason;
+  const wClass = weightClassOf(f.weightLb);
+  const size = TOURNAMENT_STAGE_SIZES[stageName];
+  const weights = TOURNAMENT_TIER_WEIGHTS[stageName];
+
+  let drawFn;
+  if(stageName === 'City') drawFn = ()=> drawFromFieldPool(s.leagueId, wClass, weights);
+  else if(stageName === 'Province') drawFn = ()=> drawFromProvinceLeaguePools(s.pitProvinceId, wClass, weights);
+  else drawFn = ()=> drawFromCombinedFieldPools(wClass, weights);
+
+  const field = pickBracketField(f, size, drawFn);
+  const rounds = buildBracket(field, f.id);
+
+  state.tournamentStage = stageName;
+  state.bracket = { rounds };
+  state.bracketRoundIndex = 0;
+  state.screen = 'bracket-view';
+}
+
+function enterBracketRound(){
+  const f = getFighterById(state.fighterId);
+  const round = state.bracket.rounds[state.bracketRoundIndex];
+  const liveMatch = round.matches.find(m=> m.live);
+  const opp = liveMatchOpponent(liveMatch);
+  const arena = generateArena();
+  const ctx = { arena, hometownPit: false }; // championship bouts are away from home comforts
+  state.opponent = opp;
+  state.arena = arena;
+  state.boutResult = simulateBout(f, opp, ctx);
+  state.revealedCount = 0;
+  state.screen = 'preview';
+}
+
+function renderBracketView(){
+  const f = getFighterById(state.fighterId);
+  const rounds = state.bracket.rounds;
+  const roundsHtml = rounds.map(round=>{
+    const matchesHtml = round.matches.map(m=>{
+      const aName = m.a.fighter ? m.a.fighter.name : 'TBD';
+      const bName = m.b.fighter ? m.b.fighter.name : 'TBD';
+      const aIsPlayer = m.a.fighter && m.a.fighter.id === f.id;
+      const bIsPlayer = m.b.fighter && m.b.fighter.id === f.id;
+      const winnerId = m.winner ? m.winner.fighter.id : null;
+      const aCls = aIsPlayer ? 'you' : (winnerId && m.a.fighter && winnerId===m.a.fighter.id ? 'winner' : '');
+      const bCls = bIsPlayer ? 'you' : (winnerId && m.b.fighter && winnerId===m.b.fighter.id ? 'winner' : '');
+      return `
+        <div class="bracket-match ${m.live?'live':''}">
+          <div class="bracket-side ${aCls}">${aIsPlayer?'YOU — ':''}${aName}</div>
+          <div class="bracket-vs">${m.live ? 'LIVE' : 'vs'}</div>
+          <div class="bracket-side ${bCls}" style="text-align:right;">${bName}${bIsPlayer?' — YOU':''}</div>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="bracket-round">
+        <div class="bracket-round-title">${round.name}</div>
+        ${matchesHtml}
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="section-label">${state.tournamentStage} Bracket — ${state.bracket.rounds.length===4?'16':'8'} Fighters, Blind Draw</div>
+    <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:18px;">
+      The full bracket, seeded blind. Everyone not on your side of the draw is already resolved below — your own line stays live until you actually fight it.
+    </p>
+    ${roundsHtml}
+    <div class="btn-row"><span></span><button class="btn btn-primary" id="enter-bracket-round">Enter the Tournament →</button></div>
+  `;
+}
+
+function applyBoutResult(){
+  const r = state.boutResult;
+  const playerWon = r.winner.id === state.fighterId;
+  const isFinish = r.method !== 'Decision';
+  const isAmateur = state.seasonType === 'amateur';
+  const total = isAmateur ? AMATEUR_TOTAL_FIGHTS : JUVENILE_TOTAL_FIGHTS;
+  const tierName = isAmateur ? 'Amateur' : 'Juvenile';
+
+  updateFighter(state.fighterId, (f)=>{
+    const s = isAmateur ? f.amateurSeason : f.juvenileSeason;
+    s.fightsPlayed += 1;
+    if(playerWon){
+      s.wins += 1; f.record.wins += 1;
+      s.reputation = clamp(s.reputation + (r.method==='KO'?14 : r.method==='TKO'?11 : r.method==='DQ'?6 : 8), 0, 100);
+    } else {
+      s.losses += 1; f.record.losses += 1;
+      s.reputation = clamp(s.reputation - (isFinish ? 7 : 4), 0, 100);
+    }
+    if(isFinish) s.finishes += (playerWon ? 1 : 0);
+    f.fightLog.push({
+      tier: tierName, opponent: state.opponent.name, result: playerWon ? 'W':'L', method: r.method,
+      location: `${state.arena.name} — ${s.pitName}`, date: new Date().toISOString(),
+    });
+    growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), isAmateur);
+    if(s.fightsPlayed >= total){
+      s.complete = true;
+      f.age = clamp((f.age || 12) + 1, 12, 18); // a full season completing ≈ a year passing
+      if(isAmateur){
+        const winPct = s.wins / (s.wins + s.losses);
+        s.qualifiedForTournament = winPct >= AMATEUR_QUALIFY_WIN_PCT;
+      } else {
+        f.juvenileSeasonHistory.push({ pitName: s.pitName, wins: s.wins, losses: s.losses, finishes: s.finishes, reputation: s.reputation });
+      }
+    }
+  });
+
+  const poolKey = isAmateur ? state.opponent.leagueId : state.opponent.provinceId;
+  if(poolKey){
+    updateFieldFighterRecord(state.opponent.id, poolKey, !playerWon, !isAmateur);
+  }
+
+  const f = getFighterById(state.fighterId);
+  const s = isAmateur ? f.amateurSeason : f.juvenileSeason;
+
+  if(s.complete && isAmateur){
+    const folded = maybeFoldLeague(s.leagueId);
+    if(folded){
+      updateFighter(state.fighterId, (ff)=>{ ff.amateurLeagueId = null; });
+    }
+    if(s.qualifiedForTournament){
+      state.screen = 'tournament-invite';
+    } else {
+      finalizeAmateurSeason(false);
+    }
+  } else if(s.complete){
+    state.screen = 'season-summary';
+  } else {
+    state.screen = 'season';
+  }
+  render();
+}
+
+function applyTournamentBoutResult(){
+  const r = state.boutResult;
+  const playerWon = r.winner.id === state.fighterId;
+  const stage = state.tournamentStage;
+  const roundName = state.bracket.rounds[state.bracketRoundIndex].name;
+
+  updateFighter(state.fighterId, (f)=>{
+    if(playerWon) f.record.wins += 1; else f.record.losses += 1;
+    f.fightLog.push({
+      tier: 'Amateur', opponent: state.opponent.name, result: playerWon ? 'W':'L', method: r.method,
+      location: `${state.arena.name} — ${stage} ${roundName}`, date: new Date().toISOString(),
+    });
+    growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), true);
+  });
+
+  if(state.opponent.leagueId){
+    updateFieldFighterRecord(state.opponent.id, state.opponent.leagueId, !playerWon, false);
+  }
+
+  if(!playerWon){
+    finalizeAmateurSeason(true, `Eliminated - ${stage} ${roundName}`);
+    return;
+  }
+
+  const isLastRoundOfStage = state.bracketRoundIndex >= state.bracket.rounds.length - 1;
+  if(!isLastRoundOfStage){
+    state.bracketRoundIndex += 1;
+    enterBracketRound();
+    return;
+  }
+
+  // Won the stage's Final.
+  if(stage === 'City'){ startBracketStage('Province'); return; }
+  if(stage === 'Province'){ startBracketStage('National'); return; }
+  // Won the National Final — crowned champion.
+  finalizeAmateurSeason(true, 'National Champion');
+}
+
+function finalizeAmateurSeason(wentToTournament, tournamentResult){
+  updateFighter(state.fighterId, (f)=>{
+    const s = f.amateurSeason;
+    f.amateurSeasonHistory.push({
+      pitName: s.pitName, wins: s.wins, losses: s.losses, finishes: s.finishes, reputation: s.reputation,
+      tournamentResult: wentToTournament ? (tournamentResult || null) : 'Declined',
+    });
+    f.amateurSeason = null;
+  });
+  state.mode = 'season';
+  state.tournamentStage = null;
+  state.bracket = null;
+  state.bracketRoundIndex = 0;
+  state.screen = 'season-summary';
+}
+
+render();
+</script>
+</body>
+</html>

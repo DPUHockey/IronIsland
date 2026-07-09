@@ -1,0 +1,1866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iron Island Fight League — Junior League Draft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-base:#1B1714; --bg-panel:#241D17; --bg-raised:#312820; --bg-raised-2:#3A2F25;
+    --ink-red:#A6342A; --ink-red-dim:#7C2620; --brass:#C9A23C; --brass-dim:#8E7228;
+    --bone:#EDE3CF; --bone-dim:#C9BFA9; --muted:#8B8070; --line:#43392D; --good:#5A8C5C;
+    --display:'Anton',sans-serif; --label:'Oswald',sans-serif; --body:'Work Sans',sans-serif; --mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:radial-gradient(ellipse at top, #241D17 0%, #1B1714 55%, #14110D 100%);
+    color:var(--bone); font-family:var(--body); min-height:100vh; display:flex; align-items:flex-start; justify-content:center;
+    padding:32px 16px 80px; line-height:1.4;
+  }
+  .app{ width:100%; max-width:820px; }
+  .ticket-header{
+    background:var(--bg-panel); border:1px solid var(--line); border-bottom:none; padding:18px 24px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .ticket-eyebrow{ font-family:var(--label); font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--brass); }
+  .ticket-title{ font-family:var(--display); font-size:26px; letter-spacing:1px; color:var(--bone); text-transform:uppercase; }
+  .ticket-sub{ font-family:var(--mono); font-size:11px; color:var(--muted); text-align:right; }
+  .panel{ background:var(--bg-panel); border:1px solid var(--line); border-top:none; padding:32px; min-height:420px; }
+  .section-label{
+    font-family:var(--label); font-size:12px; letter-spacing:2.5px; text-transform:uppercase; color:var(--brass);
+    margin-bottom:14px; display:flex; align-items:center; gap:10px;
+  }
+  .section-label::after{ content:""; flex:1; height:1px; background:var(--line); }
+  .btn{
+    font-family:var(--label); letter-spacing:1.5px; text-transform:uppercase; font-size:13px; font-weight:500;
+    padding:13px 28px; border:1px solid var(--brass); background:transparent; color:var(--brass); cursor:pointer; transition:all .15s ease;
+  }
+  .btn:hover{ background:var(--brass); color:var(--bg-base); }
+  .btn:disabled{ opacity:0.3; cursor:not-allowed; pointer-events:none; }
+  .btn-primary{ background:var(--ink-red); border-color:var(--ink-red); color:var(--bone); }
+  .btn-primary:hover{ background:#C03F32; border-color:#C03F32; color:var(--bone); }
+  .btn-row{ display:flex; justify-content:space-between; margin-top:24px; gap:12px; flex-wrap:wrap; }
+  .empty-note{ text-align:center; padding:50px 20px; color:var(--muted); font-family:var(--body); font-size:14px; }
+  .stub-screen{ text-align:center; padding:24px 10px 10px; }
+  .stub-screen h2{ font-family:var(--display); font-size:24px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink-red); margin-bottom:14px; }
+  .stub-screen p{ font-family:var(--body); color:var(--bone-dim); font-size:14px; max-width:460px; margin:0 auto 18px; }
+
+  /* fighter select */
+  .fighter-grid{ display:grid; gap:10px; }
+  .fighter-row{
+    background:var(--bg-raised); border:1px solid var(--line); border-left:4px solid var(--fr-color, var(--brass));
+    padding:13px 16px; display:flex; align-items:center; gap:14px;
+  }
+  .fr-avatar{ width:30px; height:42px; flex-shrink:0; display:flex; align-items:flex-end; }
+  .fr-avatar svg{ width:100%; height:100%; }
+  .fr-name{ font-family:var(--label); font-size:15px; font-weight:600; color:var(--bone); }
+  .fr-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:2px; }
+  .fr-status{ margin-left:auto; font-family:var(--label); font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--brass); text-align:right; }
+  .fr-btn{
+    font-family:var(--label); font-size:11px; letter-spacing:.5px; text-transform:uppercase; padding:9px 14px;
+    border:1px solid var(--line); background:var(--bg-raised-2); color:var(--brass); cursor:pointer; flex-shrink:0;
+  }
+  .fr-btn:disabled{ opacity:.35; cursor:not-allowed; color:var(--muted); }
+
+  /* league board */
+  .league-board{ margin-bottom:22px; }
+  .league-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .league-name{ font-family:var(--display); font-size:18px; letter-spacing:.5px; text-transform:uppercase; color:var(--brass); }
+  .league-tier{ font-family:var(--mono); font-size:10px; color:var(--muted); }
+  .round-block{ margin-bottom:8px; }
+  .round-label{ font-family:var(--label); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin:6px 0 4px; }
+  .pick-row{
+    display:flex; justify-content:space-between; align-items:center; padding:6px 10px;
+    background:var(--bg-raised); border:1px solid var(--line); margin-bottom:3px; font-family:var(--body); font-size:12px;
+  }
+  .pick-row.you{ border-color:var(--ink-red); background:var(--bg-raised-2); }
+  .pick-team{ color:var(--muted); font-family:var(--mono); font-size:10.5px; }
+  .pick-fighter{ color:var(--bone-dim); }
+  .pick-fighter.you{ color:var(--brass); font-weight:700; }
+
+  /* offer cards */
+  .offer-grid{ display:grid; gap:12px; }
+  .offer-card{
+    background:var(--bg-raised); border:1px solid var(--line); border-left:4px solid var(--pc-color, var(--brass));
+    padding:14px 16px; cursor:pointer; transition:all .15s ease;
+  }
+  .offer-card:hover{ background:var(--bg-raised-2); }
+  .offer-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .offer-team{ font-family:var(--display); font-size:17px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .offer-tier-tag{
+    font-family:var(--label); font-size:10px; letter-spacing:1px; text-transform:uppercase;
+    color:var(--brass); border:1px solid var(--brass-dim); padding:3px 8px; flex-shrink:0;
+  }
+  .offer-meta{ font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:4px; }
+  .offer-blurb{ font-family:var(--body); font-size:12.5px; color:var(--bone-dim); margin-top:8px; line-height:1.5; }
+
+  /* roster view */
+  .roster-team-head{ text-align:center; padding:20px 10px; background:var(--bg-raised); border:1px solid var(--brass-dim); margin-bottom:20px; }
+  .roster-team-name{ font-family:var(--display); font-size:26px; letter-spacing:1px; text-transform:uppercase; color:var(--brass); }
+  .roster-team-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:6px; }
+  .roster-slot-grid{ display:grid; gap:8px; }
+  .roster-slot{
+    display:flex; justify-content:space-between; align-items:center; padding:10px 14px;
+    background:var(--bg-raised); border:1px solid var(--line); font-family:var(--body); font-size:12.5px;
+  }
+  .roster-slot.you{ border-color:var(--ink-red); background:var(--bg-raised-2); }
+  .roster-slot-wc{ font-family:var(--label); font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); width:70px; flex-shrink:0; }
+  .roster-slot-name{ flex:1; color:var(--bone-dim); }
+  .roster-slot-name.you{ color:var(--brass); font-weight:700; }
+
+  /* clickable names */
+  .clickable-name{ cursor:pointer; text-decoration:underline; text-decoration-color:transparent; transition:text-decoration-color .12s ease; }
+  .clickable-name:hover{ text-decoration-color:var(--brass); color:var(--brass); }
+
+  /* modal shared */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(10,8,6,0.78); display:flex; align-items:flex-start; justify-content:center;
+    padding:40px 16px; z-index:1000; overflow-y:auto;
+  }
+  .modal-card{ background:var(--bg-panel); border:1px solid var(--brass-dim); max-width:520px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.55); }
+  .modal-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .modal-title{ font-family:var(--display); font-size:20px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .modal-close{ background:transparent; border:1px solid var(--line); color:var(--muted); width:30px; height:30px; cursor:pointer; font-family:var(--mono); font-size:14px; }
+  .modal-close:hover{ border-color:var(--ink-red); color:var(--ink-red); }
+  .modal-body{ padding:20px; }
+
+  /* fighter card modal */
+  .mf-head{ display:flex; gap:14px; align-items:center; margin-bottom:18px; }
+  .mf-avatar{ width:50px; height:70px; flex-shrink:0; display:flex; align-items:flex-end; }
+  .mf-avatar svg{ width:100%; height:100%; }
+  .mf-name{ font-family:var(--display); font-size:20px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .mf-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:3px; }
+  .mf-disc{ font-family:var(--label); font-size:11.5px; color:var(--brass); text-transform:uppercase; margin-top:3px; }
+  .mf-stats-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:18px; }
+  .mf-stat{ background:var(--bg-raised); border:1px solid var(--line); text-align:center; padding:8px 4px; }
+  .mf-stat .msv{ font-family:var(--mono); font-size:15px; font-weight:700; color:var(--brass); }
+  .mf-stat .msl{ font-family:var(--label); font-size:8.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-top:2px; }
+  .mf-section-title{ font-family:var(--label); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--brass); margin:14px 0 8px; padding-top:12px; border-top:1px solid var(--line); }
+  .mf-quotes{ display:flex; flex-direction:column; gap:6px; }
+  .mf-quote{ font-family:var(--body); font-size:12px; color:var(--bone-dim); line-height:1.5; font-style:italic; }
+  .mf-quote-name{ font-family:var(--label); font-style:normal; font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); margin-right:4px; }
+  .mf-growth-bar{ height:7px; background:var(--bg-base); border:1px solid var(--line); position:relative; overflow:hidden; }
+  .mf-growth-fill{ position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, var(--brass-dim), var(--brass)); }
+  .mf-growth-text{ font-family:var(--body); font-size:12px; color:var(--bone-dim); margin-top:6px; line-height:1.5; }
+  .mf-tier-tabs{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+  .mf-tier-tab{ font-family:var(--label); font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; padding:7px 11px; border:1px solid var(--line); background:var(--bg-raised); color:var(--muted); cursor:pointer; }
+  .mf-tier-tab.active{ background:var(--ink-red); border-color:var(--ink-red); color:var(--bone); }
+  .mf-history-row{ display:grid; grid-template-columns:70px 1fr auto; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-family:var(--body); font-size:12.5px; }
+  .mf-history-row:last-child{ border-bottom:none; }
+  .mfh-date{ font-family:var(--mono); font-size:10px; color:var(--muted); }
+  .mfh-opp{ color:var(--bone-dim); }
+  .mfh-opp b{ color:var(--bone); }
+  .mfh-loc{ font-family:var(--mono); font-size:10px; color:var(--muted); display:block; margin-top:1px; }
+  .mfh-result{ font-family:var(--mono); font-size:11.5px; font-weight:700; }
+  .mfh-result.win{ color:var(--good); }
+  .mfh-result.loss{ color:var(--ink-red); }
+  .mf-empty{ text-align:center; padding:24px 10px; color:var(--muted); font-family:var(--body); font-size:13px; }
+  .mf-tier-summary{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; font-family:var(--mono); font-size:11px; color:var(--muted); }
+
+  /* team card modal */
+  .mt-head{ display:flex; gap:14px; align-items:center; margin-bottom:18px; }
+  .mt-logo{ width:56px; height:56px; flex-shrink:0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:var(--display); font-size:20px; color:var(--bone); border:2px solid var(--brass); }
+  .mt-name{ font-family:var(--display); font-size:19px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .mt-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:3px; }
+  .mt-record-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:18px; }
+  .mt-record-box{ background:var(--bg-raised); border:1px solid var(--line); text-align:center; padding:12px; }
+  .mt-record-box .mrv{ font-family:var(--mono); font-size:20px; font-weight:700; color:var(--brass); }
+  .mt-record-box .mrl{ font-family:var(--label); font-size:9.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-top:2px; }
+
+  /* tale of the tape / bout (reused from Fight Pit) */
+  .tape-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+  .tape-side{ background:var(--bg-raised); border:1px solid var(--line); padding:14px 16px; text-align:center; }
+  .tape-avatar{ width:50px; height:70px; margin:0 auto 8px; display:flex; align-items:flex-end; justify-content:center; }
+  .tape-avatar svg{ width:100%; height:100%; }
+  .tape-name{ font-family:var(--display); font-size:16px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .tape-disc{ font-family:var(--label); font-size:11px; color:var(--brass); text-transform:uppercase; margin-top:2px; }
+  .tape-ovr{ font-family:var(--mono); font-size:24px; font-weight:700; color:var(--brass); margin-top:6px; }
+  .tape-stat-row{ margin-bottom:12px; }
+  .tape-stat-label{ text-align:center; font-family:var(--label); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+  .tape-stat-bars{ display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:center; }
+  .tape-side-l, .tape-side-r{ display:flex; align-items:center; gap:8px; }
+  .tape-side-l{ flex-direction:row-reverse; }
+  .tape-bar-track{ flex:1; height:7px; background:var(--bg-base); border:1px solid var(--line); position:relative; overflow:hidden; }
+  .tape-bar-fill-l{ position:absolute; right:0; top:0; bottom:0; background:linear-gradient(270deg, var(--ink-red-dim), var(--ink-red)); }
+  .tape-bar-fill-r{ position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, var(--brass-dim), var(--brass)); }
+  .tape-val{ font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--bone); width:22px; text-align:center; flex-shrink:0; }
+  .check-row input{ accent-color:var(--ink-red); }
+
+  @media (max-width:600px){
+    .ticket-header{ flex-direction:column; align-items:flex-start; gap:6px; }
+    .fighter-row{ flex-wrap:wrap; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<div id="modal-root"></div>
+
+<script>
+/* ============================ SHARED DATA ============================ */
+
+const ROSTER_KEY = 'iifl_roster_v1';
+const JR_STATE_KEY = 'iifl_junior_league_v1';
+
+const PROVINCES = [
+  { id:'alexandretta', name:'Alexandretta Province', color:'#5C7C5E' },
+  { id:'kolsati', name:'Kolsati District', color:'#5E7A93' },
+  { id:'sherwood', name:'Sherwood Province', color:'#A0623B' },
+  { id:'gazon', name:'Gazon Province', color:'#C8943F' },
+  { id:'ditiero', name:'Di Tiero Province', color:'#7C5491' },
+  { id:'carpathia', name:'Carpathia Province', color:'#5B4070' },
+  { id:'northeast', name:'Northeast Territory', color:'#9C4242' },
+  { id:'bay', name:'Bay Province', color:'#6E8C9C' },
+];
+const DISCIPLINE_NAMES = {
+  boxer:'Boxer', brawler:'Street Brawler', wrestler:'Wrestler', sambo:'Russian Sambo',
+  mma:'MMA', karate:'Karate', judo:'Judo', catch:'Catch Wrestling'
+};
+const WEIGHT_CLASSES = ['Fly','Light','Middle','Heavy','Mega'];
+const ROSTER_SPOTS = 10; // 2 per weight class across 5 classes
+
+function rand(lo,hi){ return Math.floor(Math.random()*(hi-lo+1))+lo; }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+
+/*
+  Three Junior Leagues, tiered by prestige — Kolsati drafts first and gets the best
+  prospects, Northern second, Eastern last. Team home cities are drawn from each
+  league's home provinces, deliberately split so no province feeds more than one
+  league (keeps the geography coherent) and avoiding the biggest single capital in
+  each cluster, leaving room for Pro League franchises there later.
+*/
+const JR_LEAGUES = [
+  {
+    id:'kolsati_jr', name:'Kolsati Junior League', tier:1, draftOrder:1,
+    provinces:['kolsati','ditiero'],
+    teams:[
+      { city:'Kolsati', nickname:'Ironclads', provinceId:'kolsati' },
+      { city:'St. Johnson', nickname:'Wolves', provinceId:'kolsati' },
+      { city:'Bakii', nickname:'Foundry', provinceId:'kolsati' },
+      { city:'Briggston', nickname:'Vipers', provinceId:'kolsati' },
+      { city:'Castellan Heights', nickname:'Sentinels', provinceId:'kolsati' },
+      { city:'Marrow Hill', nickname:'Marauders', provinceId:'kolsati' },
+      { city:"Pell's Crossing", nickname:'Drifters', provinceId:'kolsati' },
+      { city:'Dunmore', nickname:'Rebels', provinceId:'kolsati' },
+      { city:'Iron Wharf', nickname:'Stormguard', provinceId:'kolsati' },
+      { city:'Di Tiero', nickname:'Tideburners', provinceId:'ditiero' },
+      { city:'South Bender', nickname:'Grinders', provinceId:'ditiero' },
+      { city:'Bellechasse', nickname:'Wardens', provinceId:'ditiero' },
+      { city:'Port Maray', nickname:'Outriders', provinceId:'ditiero' },
+      { city:'Cane Hollow', nickname:'Long Shots', provinceId:'ditiero' },
+      { city:'Marsh Landing', nickname:'Brawlers', provinceId:'ditiero' },
+      { city:'Bayou Verte', nickname:'Hollow Kings', provinceId:'ditiero' },
+    ],
+  },
+  {
+    id:'northern_jr', name:'Northern Junior League', tier:2, draftOrder:2,
+    provinces:['sherwood','alexandretta','bay'],
+    teams:[
+      { city:'Frontenac City', nickname:'Anchors', provinceId:'sherwood' },
+      { city:'Lawrenceville', nickname:'Timberwolves', provinceId:'sherwood' },
+      { city:'Millbrook Heights', nickname:'Ashborn', provinceId:'sherwood' },
+      { city:'Williamsburg', nickname:'Ridge Runners', provinceId:'alexandretta' },
+      { city:'St. Anne', nickname:'Sentries', provinceId:'alexandretta' },
+      { city:'Nattingham', nickname:'Longbows', provinceId:'alexandretta' },
+      { city:'Wolverbridge', nickname:'Ironhide', provinceId:'alexandretta' },
+      { city:'Charleston', nickname:'Seabreakers', provinceId:'bay' },
+      { city:'Bayport', nickname:'Riptide', provinceId:'bay' },
+      { city:'Pinecrest Hollow', nickname:'Rangers', provinceId:'bay' },
+      { city:'Maple Junction', nickname:'Fury', provinceId:'bay' },
+      { city:"Dell's Corner", nickname:'Roughnecks', provinceId:'bay' },
+    ],
+  },
+  {
+    id:'eastern_jr', name:'Eastern Junior League', tier:3, draftOrder:3,
+    provinces:['northeast','carpathia','gazon'],
+    teams:[
+      { city:'Mizukoshi', nickname:'Shoguns', provinceId:'northeast' },
+      { city:'Tsubaki Bay', nickname:'Tide', provinceId:'northeast' },
+      { city:'Santorino', nickname:'Ronin', provinceId:'northeast' },
+      { city:'Ineawood', nickname:'Silent Blades', provinceId:'northeast' },
+      { city:'Vyrholm', nickname:'Nightwatch', provinceId:'carpathia' },
+      { city:'Castle Reach', nickname:'Wraiths', provinceId:'carpathia' },
+      { city:'Bukovene', nickname:'Hollowmen', provinceId:'carpathia' },
+      { city:'Greywatch', nickname:'Gravekeepers', provinceId:'carpathia' },
+      { city:'Gazon Main', nickname:'Dust Runners', provinceId:'gazon' },
+      { city:'Gazon Northern', nickname:'Sandstorm', provinceId:'gazon' },
+      { city:'Gazon South', nickname:'Scavengers', provinceId:'gazon' },
+      { city:'Hollowmere', nickname:'Shades', provinceId:'gazon' },
+    ],
+  },
+];
+function getJrLeague(id){ return JR_LEAGUES.find(l=>l.id===id); }
+function jrTeam(leagueId, teamIndex){ const l = getJrLeague(leagueId); return l ? l.teams[teamIndex] : null; }
+function jrTeamCity(leagueId, teamIndex){ const t = jrTeam(leagueId, teamIndex); return t ? t.city : 'Unknown'; }
+function jrTeamNickname(leagueId, teamIndex){ const t = jrTeam(leagueId, teamIndex); return t ? t.nickname : 'Team'; }
+function jrTeamName(leagueId, teamIndex){ const t = jrTeam(leagueId, teamIndex); return t ? `${t.city} ${t.nickname}` : 'Unknown Team'; }
+
+// Round-by-round OVR thresholds per league tier — Kolsati (tier 1) demands the most,
+// Eastern (tier 3) the least. A fighter's draft chance ramps up around the threshold
+// rather than a hard cutoff, so upsets/surprises stay possible.
+const TIER_ROUND_THRESHOLDS = {
+  1: [30, 25, 20], // Kolsati: Round 1 / 2 / 3
+  2: [25, 20, 15], // Northern
+  3: [20, 15, 10], // Eastern
+};
+function draftChance(ovr, threshold, scouting){
+  const scoutBonus = ((scouting||3) - 3) * 0.04; // higher scouting exposure = more visible to scouts
+  return clamp((ovr - threshold + 10) / 20 + scoutBonus, 0.02, 0.92);
+}
+
+const ALEXANDRETTA_NORTH_SETTLEMENTS = ['Blackford','Mosshead','Cowborough','Wolverbridge'];
+const NAME_POOLS = {
+  alexandretta_north: {
+    first: ['Liam','Sean','Declan','Cormac','Rory','Finn','Aidan','Cian','Eoin','Niall','Tadhg','Brendan','Colm','Fergus','Ronan','Patrick','Michael','Conor','Kieran','Darragh','Oisin','Padraig','Seamus','Donal','Ruairi','Cathal','Eamon','Diarmuid','Turlough','Brian','Fintan','Oscar','Art','Cathaoir','Diarmait','Eoghan','Fiachra','Gearoid','Lorcan','Malachy','Naoise','Odhran','Piaras','Riordan','Ultan','Aengus','Breandan','Caolan','Eanna','Tiernan'],
+    last: ["O'Brien",'Murphy','Kelly','Ryan','Sullivan','Walsh','Byrne','Doyle','McCarthy','Gallagher','Doherty','Kennedy','Lynch','Fitzgerald','Nolan','Flynn','Duffy','Boyle','Hogan','Reilly','Quinn','Casey','Sheehan','Brennan','Maguire','O\'Connor','O\'Neill','O\'Sullivan','McMahon','Coyle','Donovan','Fahey','Grady','Hennessy','Kavanagh','Lynskey','Moran','Nagle','O\'Dwyer','Purcell','Rafferty','Shanahan','Tierney','Whelan','Costello','Devlin','Egan','Farrell','Guinane','Healy'],
+  },
+  alexandretta_south: {
+    first: ['William','Henry','Edward','Arthur','George','Charles','Thomas','Oliver','James','Frederick','Albert','Walter','Edmund','Percy','Reginald','Geoffrey','Nigel','Cedric','Bertram','Cuthbert','Humphrey','Leonard','Norman','Sidney','Vernon','Wilfred','Ambrose','Clarence','Douglas','Ernest','Herbert','Cecil','Alfred','Roland','Bernard','Hubert','Rupert','Lionel','Neville','Basil','Aubrey','Maurice','Stanley','Sylvester','Theodore','Wallace','Alistair','Barnaby','Crispin','Desmond'],
+    last: ['Whitfield','Ashworth','Pemberton','Sutcliffe','Hargreaves','Fairweather','Winterbourne','Blackwood','Thornbury','Camden','Radcliffe','Ellsworth','Harrington','Fenwick','Carrington','Ashford','Beaumont','Chatham','Dunmore','Kingsley','Marlowe','Pembroke','Stanhope','Wycliffe','Barrington','Aldridge','Blackmore','Cavendish','Dashwood','Elmhurst','Falkner','Grantham','Hollingsworth','Ingram','Kirkland','Lockwood','Middleton','Norwood','Osborne','Prescott','Rutherford','Sherbourne','Thackeray','Underwood','Vane','Wetherby','Yardley','Ashcombe','Bramwell','Farringdon'],
+  },
+  kolsati: {
+    first: ['Marco','Luca','Matteo','Giovanni','Antonio','Salvatore','Franco','Dante','Enzo','Vincenzo','Alessandro','Roberto','Nico','Gianni','Rocco','Paolo','Stefano','Fabrizio','Massimo','Leonardo','Emilio','Guido','Aldo','Renato','Silvio','Tommaso','Carlo','Domenico','Pietro','Angelo','Bruno','Cesare','Dino','Ettore','Fabio','Gino','Ivo','Lorenzo','Mario','Nicola','Orlando','Pasquale','Riccardo','Sandro','Tullio','Umberto','Valerio','Alfio','Bartolomeo','Cosimo'],
+    last: ['Romano','Ferrara','Russo','Marino','Greco','Bruno','Rizzo','Costa','Fontana','Caruso','Moretti','Barbieri','Conti','De Luca','Gallo','Leone','Mancini','Ricci','Rossi','Santoro','Serra','Vitale','Colombo','Esposito','Marchetti','Bianchi','Bergamo','Cattaneo','D\'Amico','Ferraro','Gatti','Lombardi','Longo','Mariani','Martini','Milani','Monti','Orlando','Pellegrini','Ferretti','Ricciardi','Sartori','Testa','Valentini','Vecchi','Amato','Basile','Cardinale','Donati','Falcone'],
+  },
+  sherwood: {
+    first: ['Angus','Callum','Duncan','Ewan','Fraser','Graham','Hamish','Ian','Lachlan','Malcolm','Rory','Stuart','Alistair','Gordon','Kenneth','Robert','Douglas','Neil','Craig','Colin','Andrew','Iain','Cameron','Kyle','Ross','Blair','Keith','Murdo','Aonghas','Tavish','Ruaridh','Alasdair','Broc','Cailean','Dougal','Eachann','Fearghas','Gilleasbuig','Hector','Innes','Jamie','Lennox','Magnus','Niall','Osgar','Quintin','Robb','Seumas','Tearlach','Padraig'],
+    last: ['MacLeod','Campbell','Stewart','Fraser','Robertson','MacDonald','Cameron','Wallace','Grant','Murray','Ross','Mackay','MacKenzie','Sinclair','Ferguson','Buchanan','Munro','Drummond','Elliot','Hamilton','Kerr','Lennox','Napier','Tait','Urquhart','MacGregor','MacIntyre','MacPherson','MacKay','MacLean','MacNeil','MacRae','MacTavish','Anderson','Brodie','Carmichael','Dalziel','Erskine','Forbes','Gillespie','Home','Irvine','Johnstone','Leslie','Melville','Ogilvie','Pringle','Rennie','Scrimgeour','Wemyss'],
+  },
+  gazon: {
+    first: ['Kwame','Kofi','Abiodun','Chidi','Emeka','Sekou','Themba','Jabari','Obi','Tendai','Kojo','Adisa','Femi','Bakari','Kesi','Kwabena','Yaw','Kwesi','Kwaku','Obinna','Uche','Ikenna','Chukwuemeka','Olumide','Tunde','Segun','Ayodele','Chike','Dayo','Ebo','Fela','Gyasi','Hakim','Idi','Jelani','Lutalo','Mandla','Nnamdi','Oba','Panya','Quame','Rashidi','Sipho','Taye','Uzoma','Wale','Xolani','Yao','Chibueze','Damani'],
+    last: ['Achebe','Okafor','Mensah','Diallo','Kamau','Adeyemi','Nwosu','Osei','Toure','Banda','Mwangi','Abara','Chukwu','Danso','Eze','Faraji','Gueye','Jalloh','Konate','Mbeki','Ndiaye','Okoro','Sowande','Traore','Zuberi','Adisa','Boateng','Camara','Diop','Fofana','Gyasi','Haruna','Ibe','Jawara','Keita','Lumumba','Modise','Nkosi','Onyango','Quaye','Sanogo','Tiwa','Umeh','Vusi','Wanjiru','Xaba','Yeboah','Ade','Bello','Cisse'],
+  },
+  ditiero: {
+    first: ['Etienne','Remy','Thibault','Gaston','Armand','Beauregard','Cyprien','Desmond','Fontaine','Laurent','Marcel','Pascal','Reynard','Sebastien','Theo','Auguste','Baptiste','Claude','Emile','Felix','Gerard','Henri','Jacques','Leon','Maurice','Octave','Philippe','Raoul','Valmont','Xavier','Alphonse','Anatole','Cyril','Edmond','Fernand','Gustave','Hilaire','Isidore','Jerome','Lucien','Napoleon','Onesime','Prosper','Romain','Serge','Thadee','Ulysse','Valere','Wilfrid','Zenon'],
+    last: ['Boudreaux','Thibodeaux','Landry','Broussard','Hebert','Guidry','Fontenot','Comeaux','Melancon','Prejean','Robicheaux','Trahan','Arceneaux','Babineaux','Cormier','Dugas','Gautreaux','LeBlanc','Moreau','Ory','Perrault','Richard','Savoy','Terrebonne','Villere','Aucoin','Benoit','Chauvin','Dubois','Fournier','Gaudet','Hamon','Istre','Judice','Lacombe','Mouton','Naquin','Ortego','Pitre','Rousseau','Simoneaux','Tassin','Vidrine','Waguespack','Ancelet','Blanchard','Chretien','Deveraux','Fontenette','Guillory'],
+  },
+  carpathia: {
+    first: ['Vlad','Radu','Mircea','Andrei','Stefan','Bogdan','Cristian','Dorin','Emil','Florin','Gheorghe','Ionut','Marius','Nicolae','Petru','Alexandru','Adrian','Catalin','Costin','Doru','Eugen','Gabriel','Horia','Iulian','Liviu','Mihai','Octavian','Sorin','Tiberiu','Valentin','Aurel','Corneliu','Dumitru','Emanuel','Grigore','Ilie','Iosif','Laurentiu','Miron','Nichifor','Ovidiu','Remus','Sergiu','Teodor','Traian','Vasile','Victor','Vlaicu','Zamfir','Codrin'],
+    last: ['Dracul','Constantinescu','Popescu','Ionescu','Stanescu','Radulescu','Munteanu','Dumitrescu','Georgescu','Marinescu','Vasilescu','Petrescu','Nistor','Barbu','Ciobanu','Lungu','Moldovan','Rusu','Serban','Toma','Voicu','Zaharia','Balan','Coman','Dinu','Draculescu','Enescu','Iliescu','Manescu','Nedelescu','Oprescu','Pavelescu','Sandulescu','Tanasescu','Ungureanu','Albu','Cretu','Dobre','Frunza','Gheorghiu','Hriscu','Iordache','Jinga','Lazar','Marin','Neagu','Oancea','Preda','Stoica','Tudor'],
+  },
+  northeast: {
+    first: ['Hiroshi','Kenji','Takeshi','Ryo','Daiki','Haruto','Sora','Riku','Diego','Mateo','Santiago','Emilio','Rafael','Alejandro','Cruz','Yuki','Rin','Akira','Daisuke','Hayato','Isamu','Jun','Katsu','Masato','Noboru','Osamu','Shin','Tatsuya','Yamato','Yusuke','Carlos','Eduardo','Fernando','Gabriel','Ignacio','Javier','Leonardo','Manuel','Nicolas','Octavio','Pablo','Ricardo','Kazuki','Ryota','Tomas','Julio','Kentaro','Hideo','Esteban','Ramon'],
+    last: ['Watanabe','Tanaka','Yamamoto','Nakamura','Kobayashi','Saito','Sato','Suzuki','Takahashi','Ito','Reyes','Morales','Guerrero','Delgado','Cabrera','Villanueva','Ochoa','Salazar','Vargas','Nishida','Fujimoto','Hernandez','Castillo','Navarro','Espinoza','Kimura','Matsumoto','Inoue','Kato','Yoshida','Yamada','Sasaki','Yamaguchi','Matsuda','Ono','Ramirez','Torres','Flores','Gutierrez','Chavez','Ramos','Contreras','Aguilar','Mendez','Rios','Solis','Zamora','Cortez','Pena','Duarte'],
+  },
+  bay: {
+    first: ['Jack','Ryan','Tyler','Brandon','Justin','Cody','Dustin','Travis','Wyatt','Colton','Hunter','Logan','Mason','Austin','Blake','Kevin','Eric','Jason','Aaron','Derek','Shane','Todd','Scott','Chad','Kurt','Brett','Trevor','Marcus','Jordan','Casey','Brian','Gregory','Timothy','Jeffrey','Sean','Patrick','Matthew','Nathan','Corey','Bryan','Dennis','Wesley','Curtis','Dwayne','Randall','Vincent','Warren','Cole','Grant','Chase'],
+    last: ['Anderson','Miller','Johnson','Davis','Thompson','Wilson','Moore','Taylor','Harris','Clark','Lewis','Walker','Young','Allen','King','Wright','Scott','Green','Baker','Adams','Nelson','Carter','Mitchell','Perez','Roberts','Turner','Phillips','Campbell','Parker','Evans','Edwards','Collins','Stewart','Morris','Rogers','Reed','Cook','Morgan','Bell','Murphy','Bailey','Cooper','Richardson','Cox','Howard','Ward','Peterson','Gray','Ramirez','James'],
+  },
+};
+function pickName(provinceId, settlementName){
+  let poolKey = provinceId;
+  if(provinceId === 'alexandretta'){
+    poolKey = ALEXANDRETTA_NORTH_SETTLEMENTS.includes(settlementName) ? 'alexandretta_north' : 'alexandretta_south';
+  }
+  const pool = NAME_POOLS[poolKey] || NAME_POOLS.bay;
+  return `${pick(pool.first)} ${pick(pool.last)}`;
+}
+// Draft board prospects are flavor-only, not tied to a specific settlement — pick a
+// random province from the drafting league's home provinces for ethnic variety.
+function prospectName(league){
+  const provinceId = league ? pick(league.provinces) : 'bay';
+  return pickName(provinceId, null);
+}
+
+/* ============================ STORAGE ============================ */
+
+function loadRoster(){
+  try{ const raw = localStorage.getItem(ROSTER_KEY); return raw ? JSON.parse(raw) : []; }
+  catch(err){ console.error('IIFL roster load failed:', err); return []; }
+}
+function saveRoster(list){
+  try{ localStorage.setItem(ROSTER_KEY, JSON.stringify(list)); return true; }
+  catch(err){ console.error('IIFL roster save failed:', err); return false; }
+}
+function ensureFighterDefaults(f){
+  if(!f.record) f.record = { wins:0, losses:0 };
+  if(!f.fightLog) f.fightLog = [];
+  if(!f.age) f.age = 12;
+  if(f.juniorTeamId === undefined) f.juniorTeamId = null;
+  if(f.juniorLeagueId === undefined) f.juniorLeagueId = null;
+  if(!f.juniorRightsHolders) f.juniorRightsHolders = []; // [{leagueId, teamIndex}] exclusive re-sign rights after a decline
+  if(!f.juniorDraftHistory) f.juniorDraftHistory = [];
+  return f;
+}
+function getRoster(){ return loadRoster().map(ensureFighterDefaults); }
+function getFighterById(id){ return getRoster().find(f=> f.id === id); }
+function updateFighter(id, mutateFn){
+  const roster = loadRoster().map(ensureFighterDefaults);
+  const f = roster.find(r=> r.id === id);
+  if(f){ mutateFn(f); saveRoster(roster); }
+  return f;
+}
+
+function loadJrState(){
+  try{ const raw = localStorage.getItem(JR_STATE_KEY); return raw ? JSON.parse(raw) : { rosters:{} }; }
+  catch(err){ console.error('IIFL junior league state load failed:', err); return { rosters:{} }; }
+}
+function saveJrState(s){
+  try{ localStorage.setItem(JR_STATE_KEY, JSON.stringify(s)); return true; }
+  catch(err){ console.error('IIFL junior league state save failed:', err); return false; }
+}
+const WC_WEIGHT_RANGES = { Fly:[75,90], Light:[91,105], Middle:[106,120], Heavy:[121,140], Mega:[141,175] };
+const TEAMMATE_SKIN_TONES = ['#3E2A1E','#5C3A24','#8C5A35','#C68642','#E0AC69','#F1C27D'];
+const TEAMMATE_HAIR_COLORS = ['#0E0C0A','#3B2417','#6B4226','#A85C2A','#C9A23C','#D9D2C5'];
+
+function rollJuniorTalentTier(){
+  const r = Math.random();
+  if(r < 0.02) return 'generational';
+  if(r < 0.20) return 'prodigy';
+  return 'normal';
+}
+// NPC teammate — full stat block so they can actually be simulated in team games,
+// not just a name on a roster sheet. Named per the province mix of the drafting league.
+function generateTeammateFighter(weightClass, league, provinceIdHint){
+  const provinceId = provinceIdHint || (league ? pick(league.provinces) : 'bay');
+  const tier = rollJuniorTalentTier();
+  const ceiling = juniorCeiling(tier);
+  const targetOVR = rand(Math.round(ceiling*0.3), Math.round(ceiling*0.85));
+  const stats = {};
+  ['speed','quickness','toughness','power','agility'].forEach(k=>{
+    stats[k] = clamp(targetOVR + rand(-6,6), 5, ceiling);
+  });
+  const wRange = WC_WEIGHT_RANGES[weightClass] || [90,140];
+  return {
+    id: 'teammate_' + Date.now() + '_' + rand(0,99999),
+    name: pickName(provinceId, null),
+    primaryDisc: pick(ALL_DISCIPLINES),
+    stats,
+    weightLb: rand(wRange[0], wRange[1]),
+    heightIn: rand(60,74),
+    talentTier: tier,
+    potential: rand(30,80),
+    appearance: { skin: pick(TEAMMATE_SKIN_TONES), hair: pick(TEAMMATE_HAIR_COLORS), build: pick(['lean','athletic','stocky']) },
+  };
+}
+
+function teamRosterKey(leagueId, teamIndex){ return leagueId+'_'+teamIndex; }
+function ensureTeamRoster(leagueId, teamIndex){
+  const s = loadJrState();
+  const key = teamRosterKey(leagueId, teamIndex);
+  const league = getJrLeague(leagueId);
+  const team = jrTeam(leagueId, teamIndex);
+  const teamProvince = team ? team.provinceId : null;
+  if(s.rosters[key]){
+    // Repair pass: earlier builds only stored a name for NPC slots (no stats). Any
+    // slot missing a usable fighter object gets regenerated in place so old saved
+    // data doesn't silently break the lineup screen.
+    let repaired = false;
+    s.rosters[key].forEach(sl=>{
+      if(!sl.isPlayer && (!sl.fighter || !sl.fighter.stats)){
+        sl.fighter = generateTeammateFighter(sl.weightClass, league, teamProvince);
+        sl.name = sl.fighter.name;
+        repaired = true;
+      }
+    });
+    if(repaired) saveJrState(s);
+    return s.rosters[key];
+  }
+  const slots = [];
+  WEIGHT_CLASSES.forEach(wc=>{
+    for(let i=0;i<2;i++){
+      const fighter = generateTeammateFighter(wc, league, teamProvince);
+      slots.push({ weightClass: wc, name: fighter.name, isPlayer:false, fighterId:null, fighter });
+    }
+  });
+  s.rosters[key] = slots;
+  saveJrState(s);
+  return slots;
+}
+function setPlayerIntoRoster(leagueId, teamIndex, fighter){
+  const s = loadJrState();
+  const key = teamRosterKey(leagueId, teamIndex);
+  if(!s.rosters[key]) ensureTeamRoster(leagueId, teamIndex);
+  const slots = loadJrState().rosters[key];
+  const wClass = weightClassOf(fighter.weightLb);
+  let slot = slots.find(sl=> sl.weightClass===wClass && !sl.isPlayer);
+  if(!slot) slot = slots[0];
+  slot.isPlayer = true;
+  slot.name = fighter.name;
+  slot.fighterId = fighter.id;
+  slot.fighter = null; // player's live stats are always fetched fresh via fighterId
+  const s2 = loadJrState();
+  s2.rosters[key] = slots;
+  saveJrState(s2);
+}
+// Resolves a roster slot to a live fighter object — player slots pull fresh from the
+// shared roster (so growth/aging always reflects current state), NPC slots use their
+// stored generated stats.
+function resolveSlotFighter(slot){
+  if(slot.isPlayer && slot.fighterId){
+    const f = getFighterById(slot.fighterId);
+    if(f) return f;
+  }
+  return slot.fighter;
+}
+function weightClassOf(weightLb){
+  // 5-class Junior/Pro split (rough, matches the amateur Light/Middle/Heavy plus outer bands)
+  if(weightLb <= 90) return 'Fly';
+  if(weightLb <= 105) return 'Light';
+  if(weightLb <= 120) return 'Middle';
+  if(weightLb <= 140) return 'Heavy';
+  return 'Mega';
+}
+
+/*
+  Whole-league round-robin schedule, "circle method" — every team plays once per week,
+  everyone plays everyone exactly once across the season. Matches real sports scheduling:
+  the whole league moves in lockstep, Saturdays for Junior, Sundays reserved for Pro later.
+*/
+function generateRoundRobinSchedule(teamCount){
+  const teams = Array.from({length: teamCount}, (_,i)=>i);
+  const n = teams.length; // both our leagues (16, 12) are even — no byes needed
+  const fixed = teams[0];
+  let rotation = teams.slice(1);
+  const weeks = [];
+  for(let w=0; w<n-1; w++){
+    const roundTeams = [fixed, ...rotation];
+    const pairs = [];
+    for(let i=0;i<n/2;i++){
+      const a = roundTeams[i], b = roundTeams[n-1-i];
+      // Alternate home/away by week parity so nobody's permanently stuck on the road.
+      pairs.push(w % 2 === 0 ? { home:a, away:b } : { home:b, away:a });
+    }
+    weeks.push(pairs);
+    rotation.push(rotation.shift());
+  }
+  return weeks;
+}
+
+function ensureLeagueSchedule(leagueId){
+  const s = loadJrState();
+  if(!s.leagueSchedules) s.leagueSchedules = {};
+  if(s.leagueSchedules[leagueId]) return s.leagueSchedules[leagueId];
+  const league = getJrLeague(leagueId);
+  const weeks = generateRoundRobinSchedule(league.teams.length);
+  s.leagueSchedules[leagueId] = weeks;
+  saveJrState(s);
+  return weeks;
+}
+function getLeagueWeek(leagueId){
+  const s = loadJrState();
+  if(!s.leagueWeek) s.leagueWeek = {};
+  if(s.leagueWeek[leagueId] === undefined){ s.leagueWeek[leagueId] = 0; saveJrState(s); }
+  return s.leagueWeek[leagueId];
+}
+function advanceLeagueWeek(leagueId){
+  const s = loadJrState();
+  if(!s.leagueWeek) s.leagueWeek = {};
+  s.leagueWeek[leagueId] = (s.leagueWeek[leagueId]||0) + 1;
+  saveJrState(s);
+}
+function findWeekPairing(leagueId, teamIndex, weekIdx){
+  const weeks = ensureLeagueSchedule(leagueId);
+  if(weekIdx >= weeks.length) return null;
+  return weeks[weekIdx].find(p=> p.home===teamIndex || p.away===teamIndex) || null;
+}
+
+function ensureStandings(leagueId){
+  const s = loadJrState();
+  if(!s.standings) s.standings = {};
+  if(!s.standings[leagueId]){
+    const league = getJrLeague(leagueId);
+    s.standings[leagueId] = league.teams.map(()=> ({ wins:0, losses:0 }));
+    saveJrState(s);
+  }
+  return s.standings[leagueId];
+}
+// All-time record persists across season resets (there's no season-reset system yet,
+// so right now it just tracks in parallel with current — the infrastructure is ready
+// for whenever seasons actually roll over).
+function ensureAllTimeStandings(leagueId){
+  const s = loadJrState();
+  if(!s.allTimeStandings) s.allTimeStandings = {};
+  if(!s.allTimeStandings[leagueId]){
+    const league = getJrLeague(leagueId);
+    s.allTimeStandings[leagueId] = league.teams.map(()=> ({ wins:0, losses:0 }));
+    saveJrState(s);
+  }
+  return s.allTimeStandings[leagueId];
+}
+function recordStandingsResult(leagueId, homeIdx, awayIdx, homeWon){
+  const standings = ensureStandings(leagueId);
+  const allTime = ensureAllTimeStandings(leagueId);
+  if(homeWon){ standings[homeIdx].wins += 1; standings[awayIdx].losses += 1; allTime[homeIdx].wins += 1; allTime[awayIdx].losses += 1; }
+  else { standings[awayIdx].wins += 1; standings[homeIdx].losses += 1; allTime[awayIdx].wins += 1; allTime[homeIdx].losses += 1; }
+  const s = loadJrState(); s.standings[leagueId] = standings; s.allTimeStandings[leagueId] = allTime; saveJrState(s);
+}
+
+function pickStarter(slots, weightClass){
+  const candidates = slots.filter(sl=> sl.weightClass===weightClass);
+  let best = null, bestOvr = -1;
+  candidates.forEach(sl=>{
+    const f = resolveSlotFighter(sl);
+    if(!f) return;
+    const ovr = calcOVR(f.stats);
+    if(ovr > bestOvr){ bestOvr = ovr; best = sl; }
+  });
+  return best;
+}
+
+// AI lineup selection for non-player teams. Blind = no visibility into the opponent's
+// picks (just fields best OVR per class). Informed = knows the opponent's revealed
+// lineup and counter-picks using the discipline matchup chart — this is what makes
+// "home sets lineup last" a real advantage rather than flavor text.
+function aiPickLineup(slots, opponentLineup){
+  const lineup = {};
+  WEIGHT_CLASSES.forEach(wc=>{
+    const options = slots.filter(sl=>sl.weightClass===wc).map(sl=>resolveSlotFighter(sl)).filter(Boolean);
+    if(!options.length) return;
+    if(!opponentLineup || !opponentLineup[wc]){
+      lineup[wc] = options.reduce((best,f)=> calcOVR(f.stats) > calcOVR(best.stats) ? f : best, options[0]);
+    } else {
+      const opp = opponentLineup[wc];
+      let best = options[0], bestEff = -999;
+      options.forEach(f=>{
+        const eff = calcOVR(f.stats) + matchupBonus(f.primaryDisc, opp.primaryDisc);
+        if(eff > bestEff){ bestEff = eff; best = f; }
+      });
+      lineup[wc] = best;
+    }
+  });
+  return lineup;
+}
+
+// Simulates a full 5-bout team game between two AI-controlled teams (no player
+// involved) — used to resolve every other game happening around the league each week.
+function simulateAiTeamGame(leagueId, homeIdx, awayIdx){
+  const homeSlots = ensureTeamRoster(leagueId, homeIdx);
+  const awaySlots = ensureTeamRoster(leagueId, awayIdx);
+  const awayLineup = aiPickLineup(awaySlots, null); // visitor sets first, blind
+  const homeLineup = aiPickLineup(homeSlots, awayLineup); // home counter-picks
+  let homeScore = 0, awayScore = 0;
+  WEIGHT_CLASSES.forEach(wc=>{
+    const hf = homeLineup[wc], af = awayLineup[wc];
+    if(!hf || !af) return;
+    const bout = simulateBout(hf, af, { arena:{floor:'neutral court'}, hometownPit:true });
+    if(bout.winner.id === hf.id) homeScore++; else awayScore++;
+  });
+  recordStandingsResult(leagueId, homeIdx, awayIdx, homeScore > awayScore);
+}
+
+// Resolves every OTHER game in the given week (not involving teamIndex) — keeps the
+// whole league's standings moving in lockstep with the player's own game each week.
+function resolveOtherGamesThisWeek(leagueId, teamIndex, weekIdx){
+  const weeks = ensureLeagueSchedule(leagueId);
+  if(weekIdx >= weeks.length) return;
+  weeks[weekIdx].forEach(pair=>{
+    if(pair.home===teamIndex || pair.away===teamIndex) return;
+    simulateAiTeamGame(leagueId, pair.home, pair.away);
+  });
+}
+
+function calcOVR(stats){ return Math.round((stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5); }
+function heightLabel(inches){ if(!inches) return ''; const ft=Math.floor(inches/12), inch=inches%12; return `${ft}'${inch}"`; }
+function buildSilhouetteSM(app){
+  app = app || { skin:'#C68642', hair:'#2B1B12' };
+  return `<svg width="40" height="56" viewBox="0 0 40 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="20" cy="10" r="7" fill="${app.skin}"/>
+    <path d="M8 56 L11 30 Q12 22 20 22 Q28 22 29 30 L32 56" stroke="${app.skin}" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M11 28 L4 38 M29 28 L36 38" stroke="${app.skin}" stroke-width="3" stroke-linecap="round"/>
+  </svg>`;
+}
+
+/* ============================ FIGHT SIMULATION ENGINE ============================ */
+/* Ported from the Fight Pit — same math, same feel, so a Junior League team game
+   resolves consistently with everything else in the world. */
+
+const ALL_DISCIPLINES = Object.keys(DISCIPLINE_NAMES);
+const MATCHUP = {
+  boxer:    { boxer:0, brawler:1, wrestler:-1, sambo:-1, mma:-1, karate:1, judo:-1, catch:-1 },
+  brawler:  { boxer:-1, brawler:0, wrestler:-1, sambo:-2, mma:-1, karate:0, judo:-2, catch:-1 },
+  wrestler: { boxer:1, brawler:1, wrestler:0, sambo:-1, mma:0, karate:1, judo:0, catch:1 },
+  sambo:    { boxer:1, brawler:2, wrestler:1, sambo:0, mma:0, karate:1, judo:-1, catch:0 },
+  mma:      { boxer:1, brawler:1, wrestler:0, sambo:0, mma:0, karate:1, judo:0, catch:1 },
+  karate:   { boxer:-1, brawler:0, wrestler:-1, sambo:-1, mma:-1, karate:0, judo:-1, catch:0 },
+  judo:     { boxer:1, brawler:2, wrestler:0, sambo:1, mma:0, karate:1, judo:0, catch:1 },
+  catch:    { boxer:1, brawler:1, wrestler:-1, sambo:0, mma:-1, karate:0, judo:-1, catch:0 },
+};
+const MATCHUP_SCALE = 5;
+function matchupBonus(myDisc, oppDisc){ const row=MATCHUP[myDisc]; return row && row[oppDisc]!==undefined ? row[oppDisc]*MATCHUP_SCALE : 0; }
+function winProbability(effA, effB){ return 1/(1+Math.pow(10, -(effA-effB)/12)); }
+function weightedPick(weights){
+  const r = Math.random(); let acc = 0;
+  for(const [k,w] of Object.entries(weights)){ acc += w; if(r <= acc) return k; }
+  return Object.keys(weights)[Object.keys(weights).length-1];
+}
+
+const ARENA_NAMES = ['The Iron Drum','The Salt Pit','Cinderblock Yard','Foghorn Hall','The Anvil Room','Lantern Court','The Tin Roof','Drydock Arena','The Splinter Yard','Hollow Bell Hall'];
+const FLOOR_TYPES = ['sport court','rubber mat over cement','grass','hard-packed clay','dirt with glass in it'];
+function generateArena(){ return { name: pick(ARENA_NAMES), floor: pick(FLOOR_TYPES), capacity: rand(5,120)*100 }; }
+
+const DISC_FLAVOR = {
+  boxer: ['a sharp jab-cross combo', 'a tight body-head combination', 'a stiff counter right'],
+  brawler: ['a wild looping haymaker', 'a scrappy flurry with no real plan', 'a desperate forward charge'],
+  wrestler: ['a hard level change for a takedown', 'a grinding clinch against the fence', 'a drive through to the mat'],
+  sambo: ['a sweeping hip throw', 'a tight ankle lock attempt', 'a textbook trip takedown'],
+  mma: ['a clean mix of strikes and a takedown attempt', 'a smart check-and-counter sequence', 'a probing combination from the outside'],
+  karate: ['a snapping front kick', 'a sharp reverse punch', 'a quick in-and-out point strike'],
+  judo: ['a hard hip toss', 'a shoulder throw that lands clean', 'a grip fight that ends in a sweep'],
+  catch: ['a scramble into a tight headlock', 'a leg lace fight on the mat', 'a sudden roll into a submission hunt'],
+};
+const ROUND_OPENERS = [
+  '{A} and {B} circle the {floor}, sizing each other up.',
+  'The bell sounds and {A} comes out moving, {B} matching the pace.',
+  '{A} starts working behind a stiff jab as {B} looks for an opening.',
+  'Both fighters trade cautious feints before {A} commits first.',
+];
+const ROUND_EXCHANGES = [
+  '{A} lands {flavorA}, {B} answers right back with {flavorB}.',
+  '{B} eats {flavorA} from {A} but fires back immediately.',
+  '{A} controls the center, mixing in {flavorA} that {B} can\'t quite solve.',
+  '{B} finds a home for {flavorB}, and the crowd reacts.',
+];
+const ROUND_CLOSERS = [
+  'The horn sounds to end the round — close to call.',
+  'Round ends with both corners shouting instructions.',
+  'Round closes with {A} marginally ahead on output.',
+  'Round closes with {B} landing the harder shot at the bell.',
+];
+const FINISH_KO = [
+  '{W} catches {L} clean — {L} goes down and doesn\'t beat the count. KO, {W}!',
+  '{W} lands the perfect shot and {L} hits the {floor}. It\'s over — KO!',
+  'One shot. That\'s all it took. {L} is out. {W} wins by knockout.',
+];
+const FINISH_TKO = [
+  '{L} can\'t answer back anymore. The ref steps in — TKO, {W}!',
+  '{W} swarms {L} and the referee has seen enough. TKO.',
+  '{L}\'s corner is waving it off. TKO, {W} wins.',
+];
+const FINISH_DQ = [
+  '{L} loses all composure — an illegal shot, and the ref has no choice. DQ, {W} wins.',
+  'That\'s a blatant foul from {L}. Referee calls it — DQ, {W} takes it.',
+];
+const DECISION_LINES = [
+  'After three rounds, it goes to the scorecards.',
+  'Both fighters empty the tank — now it\'s in the judges\' hands.',
+  'No finish tonight — the crowd waits on the decision.',
+];
+function fillTpl(text, map){ return text.replace(/{(\w+)}/g, (_,k)=> map[k]!==undefined ? map[k] : ''); }
+
+function simulateBout(fA, fB, ctx){
+  const ovrA = calcOVR(fA.stats), ovrB = calcOVR(fB.stats);
+  const mbA = matchupBonus(fA.primaryDisc, fB.primaryDisc);
+  const mbB = matchupBonus(fB.primaryDisc, fA.primaryDisc);
+  const homeBonusA = ctx && ctx.hometownPit ? 4 : 0;
+  const effA = ovrA + mbA + homeBonusA;
+  const effB = ovrB + mbB;
+  const probA = winProbability(effA, effB);
+  const winnerIsA = Math.random() < probA;
+  const winner = winnerIsA ? fA : fB;
+  const loser = winnerIsA ? fB : fA;
+  const gap = Math.abs(effA - effB);
+
+  let finishWeights;
+  if(gap >= 20) finishWeights = { KO:0.38, TKO:0.34, Decision:0.26, DQ:0.02 };
+  else if(gap >= 10) finishWeights = { KO:0.20, TKO:0.32, Decision:0.46, DQ:0.02 };
+  else finishWeights = { KO:0.09, TKO:0.24, Decision:0.65, DQ:0.02 };
+
+  const method = weightedPick(finishWeights);
+  const finishRound = method === 'Decision' ? 3 : parseInt(weightedPick({1:0.22, 2:0.36, 3:0.42}), 10);
+  const floor = (ctx && ctx.arena && ctx.arena.floor) || 'sport court';
+  const log = [];
+  for(let r=1; r<=3; r++){
+    log.push({ type:'round-header', round:r });
+    const map = { A: fA.name, B: fB.name, floor,
+      flavorA: pick(DISC_FLAVOR[fA.primaryDisc] || DISC_FLAVOR.mma),
+      flavorB: pick(DISC_FLAVOR[fB.primaryDisc] || DISC_FLAVOR.mma) };
+    log.push({ type:'line', text: fillTpl(pick(ROUND_OPENERS), map) });
+    log.push({ type:'line', text: fillTpl(pick(ROUND_EXCHANGES), map) });
+    if(method !== 'Decision' && r === finishRound){
+      const fmap = { W: winner.name, L: loser.name, floor };
+      const lib = method === 'KO' ? FINISH_KO : method === 'TKO' ? FINISH_TKO : FINISH_DQ;
+      log.push({ type:'finish', text: fillTpl(pick(lib), fmap) });
+      break;
+    } else {
+      log.push({ type:'line', text: fillTpl(pick(ROUND_CLOSERS), map) });
+    }
+  }
+  if(method === 'Decision'){
+    log.push({ type:'decision', text: pick(DECISION_LINES) });
+    log.push({ type:'decision', text: `Judges score it for ${winner.name}.` });
+  }
+  return { winner, loser, method, finishRound, ovrA, ovrB, effA, effB, probA, log };
+}
+
+/* ============================ AGE BANDS (for Fighter Card growth outlook) ============================ */
+const AGE_BAND_TYPICAL      = { 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35 };
+const AGE_BAND_PRODIGY      = { 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35 };
+const AGE_BAND_GENERATIONAL = { 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88 };
+function bandCeiling(age, tier){
+  const table = tier==='generational' ? AGE_BAND_GENERATIONAL : tier==='prodigy' ? AGE_BAND_PRODIGY : AGE_BAND_TYPICAL;
+  return table[clamp(age, 12, 18)];
+}
+
+/* ============================ FIGHTER CARD EXTRAS ============================ */
+const COMMENTATOR_NAMES = ['Duke Callahan', 'Jamie Voss', 'Lena Marsh'];
+const DISCIPLINE_TAKES = {
+  boxer: ["Clean hands, doesn't waste motion.", "That jab could carry a whole career.", "Old-school boxing IQ for someone this age."],
+  brawler: ["Pure chaos in there — hard to game-plan for.", "Wild, but wild works when it lands.", "No fear whatsoever. Might be a problem down the road, might be the whole appeal."],
+  wrestler: ["Relentless on the mat. Wears people down.", "Control game is already ahead of schedule.", "Grinds you into dust, round after round."],
+  sambo: ["Throws for days — that's a Carpathian style if I've ever seen one.", "Underrated skill set. People sleep on Sambo until it's too late.", "Sneaky finishes. Blink and it's over."],
+  mma: ["Complete game, no real holes yet.", "Doesn't have one bad matchup on paper.", "The kind of fighter that makes booking a card difficult — nobody wants that smoke."],
+  karate: ["Point-fighter speed with real pop on it.", "In and out before you know what hit you.", "That karate background shows up in the footwork."],
+  judo: ["One bad grip and it's over for the other guy.", "Throws with real bad intentions.", "Judo background is criminally underused on this island — this one could change that."],
+  catch: ["Sneaky mat game, comes out of nowhere.", "Old carny tricks — and I mean that as a compliment.", "Scrambles are where this one lives and dies."],
+};
+function generateCommentatorTakes(f){
+  const names = [...COMMENTATOR_NAMES];
+  for(let i=names.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [names[i],names[j]]=[names[j],names[i]]; }
+  const statEntries = Object.entries(f.stats).sort((a,b)=> b[1]-a[1]);
+  const bottomStat = statEntries[statEntries.length-1][0];
+  const takes = [];
+  takes.push({ name: names[0], quote: pick(DISCIPLINE_TAKES[f.primaryDisc] || DISCIPLINE_TAKES.mma) });
+  let potentialLine;
+  if(f.talentTier === 'generational') potentialLine = "This isn't hype — once-a-generation type talent. Circle this name.";
+  else if(f.talentTier === 'prodigy') potentialLine = "Ahead of schedule for the age. Worth keeping an eye on.";
+  else if(f.potential !== undefined && f.potential >= 70) potentialLine = "Real ceiling here if the work gets put in.";
+  else if(f.potential !== undefined && f.potential <= 30) potentialLine = "What you see now might be close to what you get — but plenty of careers get built on exactly that.";
+  else potentialLine = "Solid, unspectacular — the kind of fighter leagues are actually built on.";
+  takes.push({ name: names[1], quote: potentialLine });
+  takes.push({ name: names[2], quote: `Needs to tighten up the ${bottomStat} before somebody tougher finds it.` });
+  return takes;
+}
+const MATURITY_PCT_BY_AGE = { 12:0.79, 13:0.84, 14:0.89, 15:0.93, 16:0.96, 17:0.98, 18:1.0 };
+function projectAdultSize(heightIn, weightLb, age, build){
+  const pct = MATURITY_PCT_BY_AGE[clamp(age||18, 12, 18)] || 1.0;
+  const buildMult = { lean:0.92, athletic:1.0, stocky:1.12 }[build] || 1.0;
+  return {
+    adultHeightIn: Math.round((heightIn||64) / pct),
+    adultWeightLb: Math.round(((weightLb||120) / pct) * buildMult),
+    isGrown: pct >= 1.0,
+  };
+}
+function growthOutlook(f){
+  let ceiling;
+  if(f.juniorTeamId) ceiling = juniorCeiling(f.talentTier||'normal');
+  else if(f.amateurLeagueId) ceiling = f.talentTier==='generational' ? 90 : 35;
+  else ceiling = bandCeiling(f.age||12, f.talentTier||'normal');
+  const avgStat = (f.stats.speed+f.stats.quickness+f.stats.toughness+f.stats.power+f.stats.agility)/5;
+  const pctOfCeiling = clamp(avgStat/ceiling*100, 0, 100);
+  let outlook;
+  if(pctOfCeiling >= 90) outlook = 'Close to maxed out for where they are right now — future growth mostly comes from moving up a level.';
+  else if(pctOfCeiling >= 60) outlook = 'Solid development so far, real room left to keep climbing.';
+  else if(pctOfCeiling >= 30) outlook = 'Early in the development curve — plenty of runway left.';
+  else outlook = 'Very raw. Most of the growth curve is still ahead.';
+  return { ceiling, avgStat, pctOfCeiling, outlook };
+}
+
+/* ============================ JUNIOR-TIER GROWTH ============================ */
+/* Junior League ceiling sits well above Amateur's flat 35 — this is the "Minor Pro"
+   band from the original tier design (30-60), with Generational Talents allowed to
+   keep climbing toward Pro-level numbers. Growth stays earned, same mechanic as
+   Juvenile/Amateur: win, finish, and beating someone tougher than you all matter. */
+function juniorCeiling(talentTier){
+  if(talentTier === 'generational') return 90;
+  if(talentTier === 'prodigy') return 65;
+  return 60;
+}
+function growJuniorStats(f, playerWon, method, oppOVR){
+  const ceiling = juniorCeiling(f.talentTier);
+  const potentialFactor = clamp((f.potential || 50) / 99, 0, 1);
+  const ownOVR = calcOVR(f.stats);
+  let growthTicks = 0;
+  if(playerWon){
+    growthTicks += 1;
+    if(method !== 'Decision') growthTicks += 1;
+    if(oppOVR > ownOVR) growthTicks += 1;
+  } else if(Math.random() < 0.3){
+    growthTicks += 1;
+  }
+  growthTicks = Math.round(growthTicks * (0.4 + potentialFactor * 0.9));
+  if(growthTicks <= 0) return;
+  const statKeys = ['speed','quickness','toughness','power','agility'];
+  for(let i=0;i<growthTicks;i++){
+    const key = pick(statKeys);
+    const current = f.stats[key];
+    if(current >= ceiling) continue;
+    const room = 1 - (current/ceiling);
+    if(Math.random() < 0.45 + room*0.4){
+      f.stats[key] = clamp(current+1, 1, ceiling);
+    }
+  }
+}
+
+/* ============================ DRAFT ENGINE ============================ */
+
+// Draft eligibility: an Amateur-active fighter aged 14-17. (Per spec: 14-17 is the
+// window Junior League scouts watch.)
+function isDraftEligible(f){
+  return !!f.amateurLeagueId && f.age >= 14 && f.age <= 17 && !f.juniorTeamId;
+}
+
+function getFighterScouting(f){
+  // Reuse the Fight Pit's league scouting rating if available on the fighter's record;
+  // fall back to a neutral 3 if this fighter was created/tracked before that field existed.
+  return f.amateurLeagueScouting || 3;
+}
+
+// Runs the full draft across all 3 leagues for ONE fighter (the player's), plus a
+// flavor-only procedural board so Draft Day feels like a real event. Returns
+// { results: [{leagueId, round, teamIndex}], board: {leagueId: [[pick,pick,...] per round]} }
+function runDraftForFighter(f){
+  const ovr = calcOVR(f.stats);
+  const scouting = getFighterScouting(f);
+  const results = [];
+  const board = {};
+
+  JR_LEAGUES.forEach(league=>{
+    const thresholds = TIER_ROUND_THRESHOLDS[league.tier];
+    board[league.id] = [];
+    let drafted = false;
+    let draftedRound = null, draftedTeam = null;
+
+    for(let r=0; r<3; r++){
+      const roundPicks = [];
+      const chance = draftChance(ovr, thresholds[r], scouting);
+      // Which pick number (team) in this round does the player land at, if drafted this round?
+      const playerPickSlot = !drafted && Math.random() < chance ? rand(0, league.teams.length-1) : -1;
+
+      for(let t=0; t<league.teams.length; t++){
+        if(t === playerPickSlot){
+          roundPicks.push({ team: jrTeamName(league.id, t), name: f.name, isPlayer:true });
+          drafted = true; draftedRound = r+1; draftedTeam = t;
+        } else {
+          roundPicks.push({ team: jrTeamName(league.id, t), name: prospectName(league), isPlayer:false });
+        }
+      }
+      board[league.id].push(roundPicks);
+    }
+    if(drafted){
+      results.push({ leagueId: league.id, round: draftedRound, teamIndex: draftedTeam });
+    }
+  });
+
+  return { results, board };
+}
+
+function rightsStillActive(f){
+  if(!f.juniorRightsHolders || !f.juniorRightsHolders.length) return false;
+  const seasonsNow = (f.amateurSeasonHistory || []).length;
+  return seasonsNow <= (f.juniorRightsExpiresAfterSeasons || 0);
+}
+
+/* ============================ STATE ============================ */
+
+const state = {
+  screen: 'select', // select -> draft-day -> offers -> roster -> season-hub -> game-day-preview -> set-lineup -> fight-card -> game-result -> standings
+  fighterId: null,
+  draftResult: null, // { results, board }
+  pendingOffers: [], // [{leagueId, round, teamIndex, rightsOnly}]
+  currentGameDay: null, // { leagueId, week, homeIdx, awayIdx, isHome, tab, myLineup, homeLineup, awayLineup, cardOrder, cardIndex, cardResults, subPhase }
+  boutResult: null,
+  revealedCount: 0,
+  simMode: false,
+  lastSimResult: null,
+};
+
+/* ============================ RENDER ============================ */
+
+/* ============================ FIGHTER CARD & TEAM CARD MODALS ============================ */
+
+const TIERS = ['All','Juvenile','Amateur','Junior','Pro','Exhibition'];
+let modalType = null; // 'fighter' | 'team'
+let modalFighterId = null;
+let modalActiveTier = 'All';
+let modalTeamKey = null; // { leagueId, teamIndex }
+
+function openFighterCard(id){ modalType='fighter'; modalFighterId = id; modalActiveTier = 'All'; renderModal(); }
+function openTeamCard(leagueId, teamIndex){ modalType='team'; modalTeamKey = { leagueId, teamIndex:parseInt(teamIndex,10) }; renderModal(); }
+function closeModal(){ modalType = null; renderModal(); }
+
+function findFighterAnywhere(id){
+  const roster = getRoster();
+  let f = roster.find(r=>r.id===id);
+  if(f) return { f, isField:false };
+  // Search every team roster's NPC slots too, since teammates aren't in the main roster.
+  const s = loadJrState();
+  for(const key of Object.keys(s.rosters||{})){
+    const found = s.rosters[key].find(sl=> !sl.isPlayer && sl.fighter && sl.fighter.id===id);
+    if(found) return { f: found.fighter, isField:true };
+  }
+  return { f:null, isField:false };
+}
+
+function renderModal(){
+  const root = document.getElementById('modal-root');
+  if(!modalType){ root.innerHTML=''; return; }
+  if(modalType === 'fighter') renderFighterModal(root);
+  else renderTeamModal(root);
+}
+
+function renderFighterModal(root){
+  const { f, isField } = findFighterAnywhere(modalFighterId);
+  if(!f){ root.innerHTML=''; return; }
+  const prov = PROVINCES.find(p=>p.id===f.provinceId);
+
+  const commentaryHtml = generateCommentatorTakes(f).map(t=>`<div class="mf-quote"><span class="mf-quote-name">${t.name}:</span> "${t.quote}"</div>`).join('');
+  const growth = growthOutlook(f);
+  const doc = projectAdultSize(f.heightIn, f.weightLb, f.age, f.appearance ? f.appearance.build : 'athletic');
+  const growthHtml = `
+    <div class="mf-section-title">Growth Outlook</div>
+    <div class="mf-growth-bar"><div class="mf-growth-fill" style="width:${growth.pctOfCeiling}%"></div></div>
+    <p class="mf-growth-text">${Math.round(growth.pctOfCeiling)}% of current ceiling reached. ${growth.outlook}</p>
+    <div class="mf-section-title">Doctor's Review</div>
+    <p class="mf-growth-text">${doc.isGrown ? `Fully grown — current size is expected to hold.` : `Early projection, subject to change: expected adult height ~${heightLabel(doc.adultHeightIn)}, weight ~${doc.adultWeightLb} lb.`}</p>
+  `;
+
+  let bodyExtra;
+  if(isField){
+    bodyExtra = `<div class="mf-empty">Procedural teammate — no persistent multi-tier career record tracked.</div>`;
+  } else {
+    const log = f.fightLog || [];
+    // Per-tier summary (record at a glance) before the filterable bout-by-bout list.
+    const tierSummaryHtml = ['Juvenile','Amateur','Junior','Pro'].map(tier=>{
+      const tierLog = log.filter(e=>e.tier===tier);
+      const w = tierLog.filter(e=>e.result==='W').length;
+      const l = tierLog.filter(e=>e.result==='L').length;
+      return `<div class="mf-tier-summary"><span>${tier}</span><span>${w}-${l} (${tierLog.length} bout${tierLog.length===1?'':'s'})</span></div>`;
+    }).join('');
+
+    const filtered = modalActiveTier === 'All' ? log : log.filter(e=> e.tier === modalActiveTier);
+    const sorted = [...filtered].sort((a,b)=> new Date(b.date) - new Date(a.date));
+    const historyHtml = sorted.length ? sorted.map(e=>{
+      const dateStr = e.date ? new Date(e.date).toLocaleDateString() : '—';
+      return `
+        <div class="mf-history-row">
+          <div class="mfh-date">${dateStr}</div>
+          <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
+          <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
+        </div>`;
+    }).join('') : `<div class="mf-empty">No fights on record${modalActiveTier==='All'?'':' at this level'} yet.</div>`;
+    const tabsHtml = TIERS.map(t=>{
+      const count = t==='All' ? log.length : log.filter(e=>e.tier===t).length;
+      return `<button class="mf-tier-tab ${modalActiveTier===t?'active':''}" data-mf-tab="${t}">${t} (${count})</button>`;
+    }).join('');
+    bodyExtra = `
+      <div class="mf-section-title">Record by Level — click a tab to see bout by bout</div>
+      ${tierSummaryHtml}
+      <div class="mf-tier-tabs" style="margin-top:10px;">${tabsHtml}</div>
+      <div class="mf-history">${historyHtml}</div>
+    `;
+  }
+
+  const rec = f.record || { wins:0, losses:0 };
+  root.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div class="modal-title">Fighter Card</div>
+          <button class="modal-close" data-modal-close>✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="mf-head">
+            <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
+            <div>
+              <div class="mf-name">${f.name}</div>
+              <div class="mf-meta">${f.age?'Age '+f.age+' · ':''}${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement || f.hometown || ''}${prov?', '+prov.name:''}</div>
+              <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''}${!isField?' · Career '+rec.wins+'-'+rec.losses:''}</div>
+            </div>
+          </div>
+          <div class="mf-stats-grid">
+            <div class="mf-stat"><div class="msv">${f.stats.speed}</div><div class="msl">SPD</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.quickness}</div><div class="msl">QCK</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.toughness}</div><div class="msl">TGH</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.power}</div><div class="msl">PWR</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.agility}</div><div class="msl">AGL</div></div>
+          </div>
+          <div class="mf-section-title">On the Broadcast — Analyst Takes</div>
+          <div class="mf-quotes">${commentaryHtml}</div>
+          ${growthHtml}
+          ${bodyExtra}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTeamModal(root){
+  const { leagueId, teamIndex } = modalTeamKey;
+  const league = getJrLeague(leagueId);
+  const team = jrTeam(leagueId, teamIndex);
+  if(!league || !team){ root.innerHTML=''; return; }
+  const prov = PROVINCES.find(p=>p.id===team.provinceId);
+  const standings = ensureStandings(leagueId);
+  const allTime = ensureAllTimeStandings(leagueId);
+  const rec = standings[teamIndex];
+  const allRec = allTime[teamIndex];
+  const slots = ensureTeamRoster(leagueId, teamIndex);
+  const initials = team.city.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+
+  const rosterHtml = slots.map(sl=>{
+    const fighter = resolveSlotFighter(sl);
+    const ovr = fighter ? calcOVR(fighter.stats) : '—';
+    return `
+      <div class="roster-slot ${sl.isPlayer?'you':''}">
+        <div class="roster-slot-wc">${sl.weightClass}</div>
+        <div class="roster-slot-name ${sl.isPlayer?'you':''} clickable-name" data-open-fighter="${fighter?fighter.id:''}">${sl.isPlayer?'YOU — ':''}${sl.name}</div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--brass);">OVR ${ovr}</div>
+      </div>`;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div class="modal-title">Team Card</div>
+          <button class="modal-close" data-modal-close>✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="mt-head">
+            <div class="mt-logo" style="border-color:${prov?prov.color:'var(--brass)'}; color:${prov?prov.color:'var(--brass)'};">${initials}</div>
+            <div>
+              <div class="mt-name">${team.city} ${team.nickname}</div>
+              <div class="mt-meta">${league.name} · Tier ${league.tier}${prov?' · '+prov.name+' region':''}</div>
+            </div>
+          </div>
+          <div class="mt-record-grid">
+            <div class="mt-record-box"><div class="mrv">${rec.wins}-${rec.losses}</div><div class="mrl">Current Season</div></div>
+            <div class="mt-record-box"><div class="mrv">${allRec.wins}-${allRec.losses}</div><div class="mrl">All-Time</div></div>
+          </div>
+          <div class="section-label">Roster (${ROSTER_SPOTS} spots, 2 per weight class)</div>
+          <div class="roster-slot-grid">${rosterHtml}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+document.addEventListener('click', (e)=>{
+  const openFighterEl = e.target.closest('[data-open-fighter]');
+  if(openFighterEl && openFighterEl.dataset.openFighter){ openFighterCard(openFighterEl.dataset.openFighter); return; }
+  const openTeamEl = e.target.closest('[data-open-team]');
+  if(openTeamEl){ const [lid, ti] = openTeamEl.dataset.openTeam.split('|'); openTeamCard(lid, ti); return; }
+  const closeEl = e.target.closest('[data-modal-close]');
+  if(closeEl){ closeModal(); return; }
+  const overlayEl = e.target.closest('.modal-overlay');
+  if(overlayEl && e.target === overlayEl){ closeModal(); return; }
+  const tabEl = e.target.closest('[data-mf-tab]');
+  if(tabEl){ modalActiveTier = tabEl.dataset.mfTab; renderModal(); return; }
+});
+
+const app = document.getElementById('app');
+
+function render(){
+  let title='FIGHTER SELECT', sub='JUNIOR LEAGUE DRAFT', body='';
+  if(state.screen==='select'){ body = renderSelect(); }
+  else if(state.screen==='draft-day'){ body = renderDraftDay(); title='DRAFT DAY'; }
+  else if(state.screen==='offers'){ body = renderOffers(); title='DRAFT RESULTS'; }
+  else if(state.screen==='no-offers'){ body = renderNoOffers(); title='DRAFT RESULTS'; }
+  else if(state.screen==='roster'){ body = renderRoster(); title='TEAM ROSTER'; }
+  else if(state.screen==='season-hub'){ body = renderSeasonHub(); title='TEAM SEASON'; }
+  else if(state.screen==='game-day-preview'){ body = renderGameDayPreview(); title='GAME DAY'; }
+  else if(state.screen==='set-lineup'){ body = renderSetLineup(); title='SET LINEUP'; }
+  else if(state.screen==='fight-card'){ body = renderFightCard(); title='FIGHT NIGHT'; }
+  else if(state.screen==='game-result'){ body = renderGameResult(); title='FINAL SCORE'; }
+  else if(state.screen==='standings'){ body = renderStandings(); title='LEAGUE STANDINGS'; }
+
+  app.innerHTML = `
+    <div class="ticket-header">
+      <div><div class="ticket-eyebrow">Iron Island · Fight League</div><div class="ticket-title">${title}</div></div>
+      <div class="ticket-sub">${sub}</div>
+    </div>
+    <div class="panel">${body}</div>
+  `;
+  wireEvents();
+}
+
+function renderSelect(){
+  const roster = getRoster();
+  if(!roster.length){
+    return `<div class="empty-note">No fighters saved yet. Build one in the Character Creator and develop them through Amateur in the Fight Pit first — Junior League scouts only watch active Amateur fighters aged 14-17.</div>`;
+  }
+  const rows = roster.map(f=>{
+    const prov = PROVINCES.find(p=>p.id===f.provinceId);
+    let status, canAct = false;
+    if(f.juniorTeamId){
+      status = `Signed — ${jrTeamName(f.juniorLeagueId, f.juniorTeamId)}`;
+    } else if(rightsStillActive(f)){
+      status = `Exclusive Rights Held — Ready to Sign`;
+      canAct = true;
+    } else if(isDraftEligible(f)){
+      status = 'Eligible — Enter Draft Day';
+      canAct = true;
+    } else if(!f.amateurLeagueId){
+      status = 'Not Amateur-Active';
+    } else if(f.age < 14 || f.age > 17){
+      status = `Not Draft Age (currently ${f.age})`;
+    } else {
+      status = 'Not Eligible';
+    }
+    return `
+      <div class="fighter-row" style="--fr-color:${prov?prov.color:'#C9A23C'}">
+        <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
+        <div style="flex:1;">
+          <div class="fr-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
+          <div class="fr-meta">Age ${f.age} · ${DISCIPLINE_NAMES[f.primaryDisc]} · OVR ${calcOVR(f.stats)} · ${f.settlement}</div>
+        </div>
+        <div class="fr-status">${status}</div>
+        <button class="fr-btn" data-select-fighter="${f.id}" ${canAct||f.juniorTeamId?'':'disabled'}>${f.juniorTeamId?'View Roster':'Go →'}</button>
+      </div>
+    `;
+  }).join('');
+
+  return `<div class="section-label">Pick a Fighter</div><div class="fighter-grid">${rows}</div>`;
+}
+
+function renderDraftDay(){
+  const f = getFighterById(state.fighterId);
+  const boardHtml = JR_LEAGUES.map(league=>{
+    const rounds = state.draftResult.board[league.id];
+    const roundsHtml = rounds.map((roundPicks, ri)=>{
+      const picksHtml = roundPicks.map(p=>`
+        <div class="pick-row ${p.isPlayer?'you':''}">
+          <span class="pick-team">${p.team}</span>
+          <span class="pick-fighter ${p.isPlayer?'you':''}">${p.isPlayer?'YOU — ':''}${p.name}</span>
+        </div>
+      `).join('');
+      return `<div class="round-block"><div class="round-label">Round ${ri+1}</div>${picksHtml}</div>`;
+    }).join('');
+    return `
+      <div class="league-board">
+        <div class="league-head">
+          <div class="league-name">${league.name}</div>
+          <div class="league-tier">Tier ${league.tier} · Drafts ${league.draftOrder===1?'1st':league.draftOrder===2?'2nd':'3rd'}</div>
+        </div>
+        ${roundsHtml}
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="section-label">${f.name}'s Draft Board</div>
+    <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:18px;">
+      Kolsati drafts first, then Northern, then Eastern — each league runs its own draft over the same eligible pool, so you can be picked by more than one.
+    </p>
+    ${boardHtml}
+    <div class="btn-row"><span></span><button class="btn btn-primary" id="see-results">See My Results →</button></div>
+  `;
+}
+
+function renderOffers(){
+  const f = getFighterById(state.fighterId);
+  const cards = state.pendingOffers.map((o,i)=>{
+    const league = getJrLeague(o.leagueId);
+    const teamName = jrTeamName(league.id, o.teamIndex);
+    const prov = PROVINCES.find(p=> league.provinces.includes(p.id));
+    return `
+      <div class="offer-card" data-accept-offer="${i}" style="--pc-color:${prov?prov.color:'#C9A23C'}">
+        <div class="offer-head">
+          <div class="offer-team">${teamName}</div>
+          <div class="offer-tier-tag">Tier ${league.tier}</div>
+        </div>
+        <div class="offer-meta">${league.name}${o.round?' · Round '+o.round+' pick':' · Exclusive rights offer'}</div>
+        <p class="offer-blurb">${league.tier===1
+          ? 'The biggest stage on the island. Toughest competition, brightest lights.'
+          : league.tier===2
+          ? 'Solid mid-tier league — real development, real competition, less spotlight.'
+          : 'Smaller stage, lighter competition — a real chance to be a featured piece early.'}</p>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="section-label">${f.name} Got Drafted!</div>
+    <p style="font-family:var(--body); font-size:13.5px; color:var(--bone-dim); margin-bottom:18px;">
+      ${state.pendingOffers.length} offer${state.pendingOffers.length===1?'':'s'} on the table. Sign with one now, or decline all and stay Amateur — but declining means you can ONLY sign with these same team(s) for one more Amateur season. Wait past that window with no signing and you're back in the open pool for a fresh draft.
+    </p>
+    <div class="offer-grid">${cards}</div>
+    <div class="btn-row"><button class="btn" id="decline-all-jr-offers">Decline All — Stay Amateur</button><span></span></div>
+  `;
+}
+
+function renderNoOffers(){
+  const f = getFighterById(state.fighterId);
+  return `
+    <div class="stub-screen">
+      <h2>No Offers This Cycle</h2>
+      <p>${f.name} went undrafted across all three Junior Leagues this time around. Keep building the record in Amateur — reputation, wins, and finishes all help make the next draft board.</p>
+      <button class="btn btn-primary" id="back-to-select-from-none">Back to Fighter Select</button>
+    </div>
+  `;
+}
+
+function renderRoster(){
+  const f = getFighterById(state.fighterId);
+  const league = getJrLeague(f.juniorLeagueId);
+  const teamName = jrTeamName(f.juniorLeagueId, f.juniorTeamId);
+  const slots = ensureTeamRoster(f.juniorLeagueId, f.juniorTeamId);
+  const prov = PROVINCES.find(p=> league.provinces.includes(p.id));
+
+  const slotsHtml = slots.map(sl=>{
+    const fighter = resolveSlotFighter(sl);
+    const ovr = fighter ? calcOVR(fighter.stats) : '—';
+    return `
+    <div class="roster-slot ${sl.isPlayer?'you':''}">
+      <div class="roster-slot-wc">${sl.weightClass}</div>
+      <div class="roster-slot-name ${sl.isPlayer?'you':''} clickable-name" data-open-fighter="${fighter?fighter.id:''}">${sl.isPlayer?'YOU — ':''}${sl.name}</div>
+      <div style="font-family:var(--mono); font-size:11px; color:var(--brass);">OVR ${ovr}</div>
+    </div>
+  `;}).join('');
+
+  return `
+    <div class="roster-team-head">
+      <div class="roster-team-name clickable-name" data-open-team="${f.juniorLeagueId}|${f.juniorTeamId}">${teamName}</div>
+      <div class="roster-team-meta">${league.name} · Tier ${league.tier}${prov?' · '+prov.name+' region':''}</div>
+    </div>
+    <div class="section-label">Roster (${ROSTER_SPOTS} spots, 2 per weight class)</div>
+    <div class="roster-slot-grid">${slotsHtml}</div>
+    <div class="btn-row">
+      <button class="btn" id="back-to-select-from-roster">← Fighter Select</button>
+      <button class="btn btn-primary" id="go-to-season-hub">Team Season →</button>
+    </div>
+  `;
+}
+
+function renderSeasonHub(){
+  const f = getFighterById(state.fighterId);
+  const league = getJrLeague(f.juniorLeagueId);
+  const teamName = jrTeamName(f.juniorLeagueId, f.juniorTeamId);
+  const standings = ensureStandings(f.juniorLeagueId);
+  const myRecord = standings[f.juniorTeamId];
+  const weeks = ensureLeagueSchedule(f.juniorLeagueId);
+  const weekIdx = getLeagueWeek(f.juniorLeagueId);
+  const pairing = findWeekPairing(f.juniorLeagueId, f.juniorTeamId, weekIdx);
+  const seasonOver = weekIdx >= weeks.length;
+
+  return `
+    <div class="roster-team-head">
+      <div class="roster-team-name clickable-name" data-open-team="${f.juniorLeagueId}|${f.juniorTeamId}">${teamName}</div>
+      <div class="roster-team-meta">${league.name} · ${myRecord.wins}-${myRecord.losses} · Week ${Math.min(weekIdx+1, weeks.length)} of ${weeks.length}</div>
+    </div>
+
+    <label class="check-row" style="display:flex; align-items:center; gap:9px; padding:10px 0; font-family:var(--body); font-size:14px; color:var(--bone-dim);">
+      <input type="checkbox" id="toggle-sim-mode" ${state.simMode?'checked':''} style="width:16px; height:16px; accent-color:var(--ink-red);"> ⚡ Sim Mode — skip Tale of the Tape and play-by-play, resolve games instantly
+    </label>
+    ${state.simMode && state.lastSimResult ? `<p style="font-family:var(--mono); font-size:11px; color:${state.lastSimResult.won?'var(--good)':'var(--ink-red)'}; margin:8px 0 0;">Last game: ${state.lastSimResult.won?'WIN':'LOSS'} ${state.lastSimResult.score} vs ${state.lastSimResult.opponent}</p>` : ''}
+
+    ${pairing ? `
+      <div class="section-label" style="margin-top:18px;">This Week — Saturday</div>
+      <p style="font-family:var(--body); font-size:13.5px; color:var(--bone-dim); margin-bottom:18px;">
+        <span class="clickable-name" data-open-team="${f.juniorLeagueId}|${pairing.away}">${jrTeamName(f.juniorLeagueId, pairing.away)}</span> @ <span class="clickable-name" data-open-team="${f.juniorLeagueId}|${pairing.home}">${jrTeamName(f.juniorLeagueId, pairing.home)}</span> — every other team in the league plays their own game this same Saturday.
+      </p>
+    ` : `
+      <div class="section-label" style="margin-top:18px;">${seasonOver ? 'Season Complete' : 'Bye Week'}</div>
+      <p style="font-family:var(--body); font-size:13.5px; color:var(--bone-dim); margin-bottom:18px;">
+        ${seasonOver ? `All ${weeks.length} weeks played. Final record: ${myRecord.wins}-${myRecord.losses}.` : 'No game for your team this week.'}
+      </p>
+    `}
+
+    <div class="btn-row">
+      <button class="btn" id="back-to-select-from-hub">← Fighter Select</button>
+      <button class="btn" id="view-jr-roster">View Roster</button>
+      <button class="btn" id="view-standings">Standings →</button>
+      ${pairing ? `<button class="btn btn-primary" id="go-to-game-day">${state.simMode?'Sim Game ⚡':'Game Day →'}</button>` : ''}
+    </div>
+  `;
+}
+
+function renderGameDayPreview(){
+  const gd = state.currentGameDay;
+  const league = getJrLeague(gd.leagueId);
+  const standings = ensureStandings(gd.leagueId);
+  const homeName = jrTeamName(gd.leagueId, gd.homeIdx);
+  const awayName = jrTeamName(gd.leagueId, gd.awayIdx);
+  const homeRec = standings[gd.homeIdx], awayRec = standings[gd.awayIdx];
+  const homeSlots = ensureTeamRoster(gd.leagueId, gd.homeIdx);
+  const awaySlots = ensureTeamRoster(gd.leagueId, gd.awayIdx);
+
+  const tabsHtml = `
+    <div class="offer-grid" style="grid-template-columns:1fr 1fr; display:grid; gap:8px; margin-bottom:16px;">
+      <button class="fr-season-btn" data-gameday-tab="preview" style="${gd.tab==='preview'?'background:var(--ink-red); color:var(--bone); border-color:var(--ink-red);':''}">Preview</button>
+      <button class="fr-season-btn" data-gameday-tab="analyst" style="${gd.tab==='analyst'?'background:var(--ink-red); color:var(--bone); border-color:var(--ink-red);':''}">Analyst Views</button>
+    </div>
+  `;
+
+  function rosterList(slots, title){
+    const rows = slots.map(sl=>{
+      const fighter = resolveSlotFighter(sl);
+      const ovr = fighter ? calcOVR(fighter.stats) : '—';
+      return `<div class="pick-row ${sl.isPlayer?'you':''}"><span class="pick-team">${sl.weightClass}</span><span class="pick-fighter ${sl.isPlayer?'you':''} clickable-name" data-open-fighter="${fighter?fighter.id:''}">${sl.isPlayer?'YOU — ':''}${sl.name} (${ovr})</span></div>`;
+    }).join('');
+    return `<div class="round-label">${title}</div>${rows}`;
+  }
+
+  let tabBody;
+  if(gd.tab === 'preview'){
+    tabBody = `
+      ${rosterList(awaySlots, awayName + ' (Visitor) — ' + awayRec.wins + '-' + awayRec.losses)}
+      <div style="height:14px;"></div>
+      ${rosterList(homeSlots, homeName + ' (Home) — ' + homeRec.wins + '-' + homeRec.losses)}
+    `;
+  } else {
+    const homeAvg = Math.round(homeSlots.reduce((s,sl)=>{ const fx=resolveSlotFighter(sl); return s+(fx?calcOVR(fx.stats):0); },0)/homeSlots.length);
+    const awayAvg = Math.round(awaySlots.reduce((s,sl)=>{ const fx=resolveSlotFighter(sl); return s+(fx?calcOVR(fx.stats):0); },0)/awaySlots.length);
+    const favored = homeAvg >= awayAvg ? homeName : awayName;
+    const gap = Math.abs(homeAvg-awayAvg);
+    const takeStrength = gap >= 8 ? 'a clear favorite' : gap >= 3 ? 'a slight edge' : 'basically a coin flip';
+    tabBody = `
+      <p style="font-family:var(--body); font-size:13.5px; color:var(--bone-dim); line-height:1.6;">
+        "${homeName} averages ${homeAvg} OVR across the lineup, ${awayName} comes in at ${awayAvg}. On paper ${favored} looks like ${takeStrength} tonight. Home advantage matters here too — ${homeName} gets to set their lineup last, after seeing what ${awayName} brings to the floor." — Iron Island Fight Desk
+      </p>
+    `;
+  }
+
+  return `
+    <div class="roster-team-head">
+      <div class="roster-team-name"><span class="clickable-name" data-open-team="${gd.leagueId}|${gd.awayIdx}">${awayName}</span> @ <span class="clickable-name" data-open-team="${gd.leagueId}|${gd.homeIdx}">${homeName}</span></div>
+      <div class="roster-team-meta">${league.name} · Week ${gd.week+1}</div>
+    </div>
+    ${tabsHtml}
+    ${tabBody}
+    <div class="btn-row"><span></span><button class="btn btn-primary" id="to-set-lineup">Set Lineup →</button></div>
+  `;
+}
+
+function renderSetLineup(){
+  const gd = state.currentGameDay;
+  const f = getFighterById(state.fighterId);
+  const mySlots = gd.isHome ? ensureTeamRoster(gd.leagueId, gd.homeIdx) : ensureTeamRoster(gd.leagueId, gd.awayIdx);
+  const myTeamName = jrTeamName(gd.leagueId, gd.isHome ? gd.homeIdx : gd.awayIdx);
+  const oppLineupKnown = gd.isHome ? gd.awayLineup : null; // player only ever sees opponent lineup when they're Home
+
+  const revealHtml = gd.isHome ? `
+    <div class="section-label">Visitor's Announced Lineup</div>
+    ${WEIGHT_CLASSES.map(wc=>{
+      const af = gd.awayLineup[wc];
+      return af && af.stats ? `<div class="pick-row"><span class="pick-team">${wc}</span><span class="pick-fighter clickable-name" data-open-fighter="${af.id}">${af.name} (${calcOVR(af.stats)})</span></div>` : '';
+    }).join('')}
+    <p style="font-family:var(--mono); font-size:10.5px; color:var(--muted); margin:10px 0 18px;">You're Home — you get to counter-pick knowing this.</p>
+  ` : `<p style="font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-bottom:18px;">You're the Visitor — your lineup locks in blind. Home sets theirs after seeing yours.</p>`;
+
+  const pickerHtml = WEIGHT_CLASSES.map(wc=>{
+    const options = mySlots.filter(sl=>sl.weightClass===wc);
+    const chosen = gd.myLineup[wc];
+    const cardsHtml = options.map(sl=>{
+      const fighter = resolveSlotFighter(sl);
+      if(!fighter || !fighter.stats) return ''; // defensive — skip any slot that still can't resolve a real fighter
+      const ovr = calcOVR(fighter.stats);
+      const isChosen = chosen && chosen.id === fighter.id;
+      return `<button class="fr-season-btn" data-lineup-pick="${wc}|${sl.isPlayer?'player':fighter.id}" style="${isChosen?'background:var(--ink-red); color:var(--bone); border-color:var(--ink-red);':''}">${sl.isPlayer?'YOU — ':''}${sl.name} (${ovr})</button>`;
+    }).join('');
+    return `<div class="round-block"><div class="round-label">${wc}</div><div style="display:flex; gap:8px; flex-wrap:wrap;">${cardsHtml}</div></div>`;
+  }).join('');
+
+  const allPicked = WEIGHT_CLASSES.every(wc=> gd.myLineup[wc]);
+
+  return `
+    <div class="section-label">${myTeamName} — Set Your Lineup</div>
+    ${revealHtml}
+    ${pickerHtml}
+    <div class="btn-row"><span></span><button class="btn btn-primary" id="confirm-lineup" ${allPicked?'':'disabled'}>Confirm Lineup →</button></div>
+  `;
+}
+
+function renderFightCard(){
+  const gd = state.currentGameDay;
+  const wc = gd.cardOrder[gd.cardIndex];
+  const homeName = jrTeamName(gd.leagueId, gd.homeIdx);
+  const awayName = jrTeamName(gd.leagueId, gd.awayIdx);
+  const homeScore = gd.cardResults.filter(r=>r.homeWon).length;
+  const awayScore = gd.cardResults.filter(r=>!r.homeWon).length;
+
+  const scoreboardHtml = `
+    <div class="roster-team-head">
+      <div class="roster-team-name">${awayScore} — ${homeScore}</div>
+      <div class="roster-team-meta"><span class="clickable-name" data-open-team="${gd.leagueId}|${gd.awayIdx}">${awayName}</span> @ <span class="clickable-name" data-open-team="${gd.leagueId}|${gd.homeIdx}">${homeName}</span> · ${wc} Class (${gd.cardIndex+1} of 5)</div>
+    </div>
+  `;
+
+  if(gd.subPhase === 'quickresult'){
+    const last = gd.cardResults[gd.cardResults.length-1];
+    return `
+      ${scoreboardHtml}
+      <div class="pick-row" style="border-color:var(--brass-dim);">
+        <span class="pick-team">${last.weightClass}</span>
+        <span class="pick-fighter"><span class="clickable-name" data-open-fighter="${last.winnerId||''}">${last.winnerName}</span> def. <span class="clickable-name" data-open-fighter="${last.loserId||''}">${last.loserName}</span> (${last.method})</span>
+      </div>
+      <div class="btn-row"><span></span><button class="btn btn-primary" id="next-card-fight">${gd.cardIndex+1>=5?'See Final Score →':'Next Fight →'}</button></div>
+    `;
+  }
+
+  if(gd.subPhase === 'preview'){
+    const homeF = gd.homeLineup[wc], awayF = gd.awayLineup[wc];
+    const ovrH = calcOVR(homeF.stats), ovrA = calcOVR(awayF.stats);
+    const scaleMax = Math.max(ovrH, ovrA, 20) * 1.3;
+    function statRow(label, valA, valH){
+      const pctA = clamp(valA/scaleMax*100,0,100), pctH = clamp(valH/scaleMax*100,0,100);
+      return `<div class="tape-stat-row"><div class="tape-stat-label">${label}</div><div class="tape-stat-bars">
+        <div class="tape-side-l"><div class="tape-val">${valA}</div><div class="tape-bar-track"><div class="tape-bar-fill-l" style="width:${pctA}%"></div></div></div>
+        <div class="tape-side-r"><div class="tape-bar-track"><div class="tape-bar-fill-r" style="width:${pctH}%"></div></div><div class="tape-val">${valH}</div></div>
+      </div></div>`;
+    }
+    return `
+      ${scoreboardHtml}
+      <div class="tape-grid">
+        <div class="tape-side"><div class="tape-avatar">${buildSilhouetteSM(awayF.appearance)}</div><div class="tape-name clickable-name" data-open-fighter="${awayF.id}">${awayF.name}</div><div class="tape-disc">${DISCIPLINE_NAMES[awayF.primaryDisc]}</div><div class="tape-ovr">${ovrA}</div></div>
+        <div class="tape-side"><div class="tape-avatar">${buildSilhouetteSM(homeF.appearance)}</div><div class="tape-name clickable-name" data-open-fighter="${homeF.id}">${homeF.name}</div><div class="tape-disc">${DISCIPLINE_NAMES[homeF.primaryDisc]}</div><div class="tape-ovr">${ovrH}</div></div>
+      </div>
+      ${statRow('SPEED', awayF.stats.speed, homeF.stats.speed)}
+      ${statRow('QUICKNESS', awayF.stats.quickness, homeF.stats.quickness)}
+      ${statRow('TOUGHNESS', awayF.stats.toughness, homeF.stats.toughness)}
+      ${statRow('POWER', awayF.stats.power, homeF.stats.power)}
+      ${statRow('AGILITY', awayF.stats.agility, homeF.stats.agility)}
+      <div class="btn-row"><span></span><button class="btn btn-primary" id="enter-arena">Enter the Arena →</button></div>
+    `;
+  }
+
+  // subPhase === 'bout' — the player's own live fight, full play-by-play
+  const r = state.boutResult;
+  const visible = r.log.slice(0, state.revealedCount);
+  const logHtml = visible.map((entry,i)=>{
+    if(entry.type==='round-header') return `<div class="round-label">ROUND ${entry.round}</div>`;
+    if(entry.type==='finish') return `<div class="pick-row" style="border-color:var(--ink-red); animation-delay:${i*0.02}s;"><span style="color:var(--ink-red); font-weight:600;">${entry.text}</span></div>`;
+    if(entry.type==='decision') return `<div class="pick-row" style="border-color:var(--brass-dim); animation-delay:${i*0.02}s;"><span style="color:var(--brass);">${entry.text}</span></div>`;
+    return `<div class="pick-row" style="animation-delay:${i*0.02}s;"><span>${entry.text}</span></div>`;
+  }).join('');
+  const done = state.revealedCount >= r.log.length;
+  return `
+    ${scoreboardHtml}
+    <div>${logHtml}</div>
+    <div class="btn-row"><span></span><button class="btn btn-primary" id="advance-bout">${done?'Confirm Result →':'Next →'}</button></div>
+  `;
+}
+
+function renderGameResult(){
+  const gd = state.currentGameDay;
+  const homeName = jrTeamName(gd.leagueId, gd.homeIdx);
+  const awayName = jrTeamName(gd.leagueId, gd.awayIdx);
+  const homeScore = gd.cardResults.filter(r=>r.homeWon).length;
+  const awayScore = gd.cardResults.length - homeScore;
+  const homeWon = homeScore > awayScore;
+  const playerIsHome = gd.isHome;
+  const playerWon = playerIsHome ? homeWon : !homeWon;
+
+  const rowsHtml = gd.cardResults.map(r=>`
+    <div class="pick-row ${r.isPlayerBout?'you':''}">
+      <span class="pick-team">${r.weightClass}</span>
+      <span class="pick-fighter ${r.isPlayerBout?'you':''}"><span class="clickable-name" data-open-fighter="${r.winnerId||''}">${r.winnerName}</span> def. <span class="clickable-name" data-open-fighter="${r.loserId||''}">${r.loserName}</span> (${r.method})</span>
+    </div>
+  `).join('');
+
+  return `
+    <div class="roster-team-head">
+      <div class="roster-team-name">${playerWon?'TEAM WIN':'TEAM LOSS'}</div>
+      <div class="roster-team-meta"><span class="clickable-name" data-open-team="${gd.leagueId}|${gd.awayIdx}">${awayName}</span> ${awayScore} — ${homeScore} <span class="clickable-name" data-open-team="${gd.leagueId}|${gd.homeIdx}">${homeName}</span></div>
+    </div>
+    <div class="section-label">Bout by Bout</div>
+    ${rowsHtml}
+    <div class="btn-row"><span></span><button class="btn btn-primary" id="back-to-hub-from-result">Continue →</button></div>
+  `;
+}
+
+function renderStandings(){
+  const f = getFighterById(state.fighterId);
+  const league = getJrLeague(f.juniorLeagueId);
+  const standings = ensureStandings(f.juniorLeagueId);
+  const rows = league.teams.map((t,i)=>({ name: jrTeamName(league.id, i), i, rec: standings[i] }))
+    .sort((a,b)=> (b.rec.wins-b.rec.losses) - (a.rec.wins-a.rec.losses));
+  const rowsHtml = rows.map(row=>`
+    <div class="pick-row ${row.i===f.juniorTeamId?'you':''}">
+      <span class="pick-team clickable-name" data-open-team="${league.id}|${row.i}">${row.i===f.juniorTeamId?'YOU — ':''}${row.name}</span>
+      <span class="pick-fighter">${row.rec.wins}-${row.rec.losses}</span>
+    </div>
+  `).join('');
+
+  return `
+    <div class="section-label">${league.name} Standings</div>
+    ${rowsHtml}
+    <div class="btn-row"><button class="btn" id="back-to-hub-from-standings">← Team Season</button><span></span></div>
+  `;
+}
+
+/* ============================ EVENTS ============================ */
+
+function wireEvents(){
+  document.querySelectorAll('[data-select-fighter]').forEach(btn=>{
+    btn.onclick = ()=>{
+      state.fighterId = btn.dataset.selectFighter;
+      const f = getFighterById(state.fighterId);
+      if(f.juniorTeamId){
+        state.screen = 'season-hub';
+      } else if(rightsStillActive(f)){
+        state.pendingOffers = f.juniorRightsHolders.map(r=> ({ leagueId:r.leagueId, teamIndex:r.teamIndex, round:null }));
+        state.screen = 'offers';
+      } else {
+        state.draftResult = runDraftForFighter(f);
+        state.screen = 'draft-day';
+      }
+      render();
+    };
+  });
+
+  const seeResults = document.getElementById('see-results');
+  if(seeResults) seeResults.onclick = ()=>{
+    const offers = state.draftResult.results.map(r=> ({ leagueId:r.leagueId, teamIndex:r.teamIndex, round:r.round }));
+    if(offers.length){
+      state.pendingOffers = offers;
+      state.screen = 'offers';
+    } else {
+      state.screen = 'no-offers';
+    }
+    render();
+  };
+
+  document.querySelectorAll('[data-accept-offer]').forEach(card=>{
+    card.onclick = ()=>{
+      const idx = parseInt(card.dataset.acceptOffer, 10);
+      const offer = state.pendingOffers[idx];
+      const f = getFighterById(state.fighterId);
+      setPlayerIntoRoster(offer.leagueId, offer.teamIndex, f);
+      updateFighter(state.fighterId, (ff)=>{
+        ff.juniorTeamId = offer.teamIndex;
+        ff.juniorLeagueId = offer.leagueId;
+        ff.juniorRightsHolders = [];
+        ff.juniorDraftHistory.push({ leagueId: offer.leagueId, teamIndex: offer.teamIndex, round: offer.round, date: new Date().toISOString() });
+      });
+      state.screen = 'season-hub';
+      render();
+    };
+  });
+
+  const declineAll = document.getElementById('decline-all-jr-offers');
+  if(declineAll) declineAll.onclick = ()=>{
+    updateFighter(state.fighterId, (f)=>{
+      f.juniorRightsHolders = state.pendingOffers.map(o=> ({ leagueId:o.leagueId, teamIndex:o.teamIndex }));
+      f.juniorRightsExpiresAfterSeasons = (f.amateurSeasonHistory || []).length + 1;
+    });
+    state.screen = 'select';
+    render();
+  };
+
+  const backFromNone = document.getElementById('back-to-select-from-none');
+  if(backFromNone) backFromNone.onclick = ()=>{ state.screen='select'; render(); };
+
+  const backFromRoster = document.getElementById('back-to-select-from-roster');
+  if(backFromRoster) backFromRoster.onclick = ()=>{ state.screen='select'; render(); };
+
+  const goToSeasonHub = document.getElementById('go-to-season-hub');
+  if(goToSeasonHub) goToSeasonHub.onclick = ()=>{ state.screen='season-hub'; render(); };
+
+  const backFromHub = document.getElementById('back-to-select-from-hub');
+  if(backFromHub) backFromHub.onclick = ()=>{ state.screen='select'; render(); };
+
+  const viewJrRoster = document.getElementById('view-jr-roster');
+  if(viewJrRoster) viewJrRoster.onclick = ()=>{ state.screen='roster'; render(); };
+
+  const viewStandings = document.getElementById('view-standings');
+  if(viewStandings) viewStandings.onclick = ()=>{ state.screen='standings'; render(); };
+
+  const backFromStandings = document.getElementById('back-to-hub-from-standings');
+  if(backFromStandings) backFromStandings.onclick = ()=>{ state.screen='season-hub'; render(); };
+
+  const toggleSimMode = document.getElementById('toggle-sim-mode');
+  if(toggleSimMode) toggleSimMode.onchange = (e)=>{ state.simMode = e.target.checked; render(); };
+
+  const goToGameDay = document.getElementById('go-to-game-day');
+  if(goToGameDay) goToGameDay.onclick = ()=>{
+    const f = getFighterById(state.fighterId);
+    const weekIdx = getLeagueWeek(f.juniorLeagueId);
+    const pairing = findWeekPairing(f.juniorLeagueId, f.juniorTeamId, weekIdx);
+    if(!pairing) return;
+    // Every other game around the league resolves silently the moment gameday starts,
+    // so standings for the whole league move together, week to week.
+    resolveOtherGamesThisWeek(f.juniorLeagueId, f.juniorTeamId, weekIdx);
+    state.currentGameDay = {
+      leagueId: f.juniorLeagueId, week: weekIdx,
+      homeIdx: pairing.home, awayIdx: pairing.away,
+      isHome: pairing.home === f.juniorTeamId,
+      tab: 'preview',
+      myLineup: {}, homeLineup: null, awayLineup: null,
+      cardOrder: WEIGHT_CLASSES.slice(), // Fly first — lightest class opens the card
+      cardIndex: 0, cardResults: [], subPhase: 'ready',
+    };
+    if(state.simMode){
+      simEntireGameDay();
+    } else {
+      state.screen = 'game-day-preview';
+    }
+    render();
+  };
+
+  document.querySelectorAll('[data-gameday-tab]').forEach(btn=>{
+    btn.onclick = ()=>{ state.currentGameDay.tab = btn.dataset.gamedayTab; render(); };
+  });
+
+  const toSetLineup = document.getElementById('to-set-lineup');
+  if(toSetLineup) toSetLineup.onclick = ()=>{
+    const gd = state.currentGameDay;
+    if(gd.isHome){
+      // Visitor sets first, blind — resolve that immediately so it can be revealed.
+      const awaySlots = ensureTeamRoster(gd.leagueId, gd.awayIdx);
+      gd.awayLineup = aiPickLineup(awaySlots, null);
+    }
+    state.screen = 'set-lineup';
+    render();
+  };
+
+  document.querySelectorAll('[data-lineup-pick]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const gd = state.currentGameDay;
+      const [wc, who] = btn.dataset.lineupPick.split('|');
+      const mySlots = gd.isHome ? ensureTeamRoster(gd.leagueId, gd.homeIdx) : ensureTeamRoster(gd.leagueId, gd.awayIdx);
+      const slot = mySlots.find(sl=> sl.weightClass===wc && (who==='player' ? sl.isPlayer : (resolveSlotFighter(sl)||{}).id===who));
+      if(slot) gd.myLineup[wc] = resolveSlotFighter(slot);
+      render();
+    };
+  });
+
+  const confirmLineup = document.getElementById('confirm-lineup');
+  if(confirmLineup) confirmLineup.onclick = ()=>{
+    const gd = state.currentGameDay;
+    if(gd.isHome){
+      gd.homeLineup = gd.myLineup;
+      // awayLineup already set blind before reveal
+    } else {
+      gd.awayLineup = gd.myLineup;
+      const homeSlots = ensureTeamRoster(gd.leagueId, gd.homeIdx);
+      gd.homeLineup = aiPickLineup(homeSlots, gd.awayLineup); // home counter-picks, informed
+    }
+    gd.cardIndex = 0;
+    gd.subPhase = 'ready';
+    state.screen = 'fight-card';
+    if(state.simMode){
+      runFightCardSim();
+    } else {
+      advanceFightCard();
+    }
+    render();
+  };
+
+  function playerFighterIdForGameDay(){
+    return state.fighterId;
+  }
+
+  // Advances to the next fight in the card. If it's the player's own weight class,
+  // sets up the interactive preview/bout; otherwise resolves it instantly and shows
+  // a quick result card.
+  function advanceFightCard(){
+    const gd = state.currentGameDay;
+    if(gd.cardIndex >= gd.cardOrder.length){ finishTeamGame(); return; }
+    const wc = gd.cardOrder[gd.cardIndex];
+    const homeF = gd.homeLineup[wc], awayF = gd.awayLineup[wc];
+    if(!homeF || !awayF){ gd.cardIndex++; advanceFightCard(); return; }
+    const playerId = playerFighterIdForGameDay();
+    const isPlayerBout = homeF.id === playerId || awayF.id === playerId;
+
+    if(isPlayerBout && !state.simMode){
+      const myFighter = homeF.id===playerId ? homeF : awayF;
+      const oppFighter = homeF.id===playerId ? awayF : homeF;
+      const ctx = { arena: generateArena(), hometownPit: gd.isHome };
+      state.boutResult = simulateBout(myFighter, oppFighter, ctx);
+      state.revealedCount = 0;
+      gd.subPhase = 'preview';
+      gd.pendingLive = { myFighter, oppFighter, homeIsMe: homeF.id===playerId };
+    } else {
+      const bout = simulateBout(homeF, awayF, { arena:{floor:'neutral court'}, hometownPit: gd.isHome && homeF.id===playerId });
+      const homeWon = bout.winner.id === homeF.id;
+      gd.cardResults.push({
+        weightClass: wc, homeWon, method: bout.method, isPlayerBout,
+        winnerName: bout.winner.name, loserName: bout.loser.name,
+        winnerId: bout.winner.id, loserId: bout.loser.id,
+      });
+      gd.subPhase = 'quickresult';
+    }
+  }
+
+  const enterArena = document.getElementById('enter-arena');
+  if(enterArena) enterArena.onclick = ()=>{ state.currentGameDay.subPhase = 'bout'; render(); };
+
+  const advanceBout = document.getElementById('advance-bout');
+  if(advanceBout) advanceBout.onclick = ()=>{
+    const r = state.boutResult;
+    if(state.revealedCount < r.log.length){
+      state.revealedCount = Math.min(r.log.length, state.revealedCount + 3);
+    } else {
+      const gd = state.currentGameDay;
+      const won = r.winner.id === gd.pendingLive.myFighter.id;
+      const homeWon = gd.pendingLive.homeIsMe ? won : !won;
+      gd.cardResults.push({
+        weightClass: gd.cardOrder[gd.cardIndex], homeWon, method: r.method, isPlayerBout: true,
+        winnerName: r.winner.name, loserName: r.loser.name,
+        winnerId: r.winner.id, loserId: r.loser.id,
+      });
+      gd.cardIndex++;
+      advanceFightCard();
+    }
+    render();
+  };
+
+  const nextCardFight = document.getElementById('next-card-fight');
+  if(nextCardFight) nextCardFight.onclick = ()=>{
+    const gd = state.currentGameDay;
+    gd.cardIndex++;
+    advanceFightCard();
+    render();
+  };
+
+  function finishTeamGame(){
+    const gd = state.currentGameDay;
+    const f = getFighterById(state.fighterId);
+    const homeScore = gd.cardResults.filter(r=>r.homeWon).length;
+    const awayScore = gd.cardResults.length - homeScore;
+    const homeWon = homeScore > awayScore;
+
+    const playerResult = gd.cardResults.find(r=>r.isPlayerBout);
+    updateFighter(state.fighterId, (ff)=>{
+      if(playerResult){
+        const playerWonBout = gd.isHome ? playerResult.homeWon : !playerResult.homeWon;
+        const oppName = playerWonBout ? playerResult.loserName : playerResult.winnerName;
+        if(playerWonBout) ff.record.wins += 1; else ff.record.losses += 1;
+        ff.fightLog.push({
+          tier: 'Junior', opponent: oppName, result: playerWonBout ? 'W':'L', method: playerResult.method,
+          location: `${jrTeamName(gd.leagueId, gd.awayIdx)} @ ${jrTeamName(gd.leagueId, gd.homeIdx)} — Week ${gd.week+1}`,
+          date: new Date().toISOString(),
+        });
+        const oppOvr = calcOVR((gd.isHome ? gd.awayLineup : gd.homeLineup)[playerResult.weightClass].stats);
+        growJuniorStats(ff, playerWonBout, playerResult.method, oppOvr);
+      }
+    });
+
+    recordStandingsResult(gd.leagueId, gd.homeIdx, gd.awayIdx, homeWon);
+    advanceLeagueWeek(gd.leagueId);
+
+    if(state.simMode){
+      const playerWonBout = playerResult ? (gd.isHome ? playerResult.homeWon : !playerResult.homeWon) : homeWon===gd.isHome;
+      state.lastSimResult = {
+        won: playerWonBout, score: `${awayScore}-${homeScore}`,
+        opponent: jrTeamName(gd.leagueId, gd.isHome ? gd.awayIdx : gd.homeIdx),
+      };
+      state.screen = 'season-hub';
+    } else {
+      state.screen = 'game-result';
+    }
+  }
+
+  function runFightCardSim(){
+    const gd = state.currentGameDay;
+    while(gd.cardIndex < gd.cardOrder.length){
+      advanceFightCard();
+      gd.cardIndex++;
+    }
+    finishTeamGame();
+  }
+
+  function simEntireGameDay(){
+    const gd = state.currentGameDay;
+    const awaySlots = ensureTeamRoster(gd.leagueId, gd.awayIdx);
+    gd.awayLineup = aiPickLineup(awaySlots, null);
+    const homeSlots = ensureTeamRoster(gd.leagueId, gd.homeIdx);
+    gd.homeLineup = aiPickLineup(homeSlots, gd.awayLineup);
+    runFightCardSim();
+  }
+
+  const backFromResult = document.getElementById('back-to-hub-from-result');
+  if(backFromResult) backFromResult.onclick = ()=>{ state.screen='season-hub'; render(); };
+}
+
+render();
+</script>
+</body>
+</html>
+

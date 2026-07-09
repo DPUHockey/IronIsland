@@ -1,0 +1,1987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iron Island Fight League — Fighter Intake</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-base:#1B1714;
+    --bg-panel:#241D17;
+    --bg-raised:#312820;
+    --bg-raised-2:#3A2F25;
+    --ink-red:#A6342A;
+    --ink-red-dim:#7C2620;
+    --brass:#C9A23C;
+    --brass-dim:#8E7228;
+    --bone:#EDE3CF;
+    --bone-dim:#C9BFA9;
+    --muted:#8B8070;
+    --line:#43392D;
+    --good:#5A8C5C;
+    --display: 'Anton', sans-serif;
+    --label: 'Oswald', sans-serif;
+    --body: 'Work Sans', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(ellipse at top, #241D17 0%, #1B1714 55%, #14110D 100%);
+    color:var(--bone);
+    font-family:var(--body);
+    min-height:100vh;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:32px 16px 80px;
+    line-height:1.4;
+  }
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, transparent 1px, transparent 2px, rgba(255,255,255,0.012) 3px),
+      repeating-linear-gradient(90deg, rgba(0,0,0,0.04) 0px, transparent 1px, transparent 3px);
+    pointer-events:none;
+    z-index:0;
+  }
+  .app{
+    width:100%;
+    max-width:760px;
+    position:relative;
+    z-index:1;
+  }
+
+  /* ---- Ticket header ---- */
+  .ticket-header{
+    background:var(--bg-panel);
+    border:1px solid var(--line);
+    border-bottom:none;
+    padding:18px 24px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    position:relative;
+  }
+  .ticket-header::after{
+    content:"";
+    position:absolute;
+    left:0; right:0; bottom:-1px;
+    height:0;
+    border-bottom:2px dashed var(--line);
+  }
+  .ticket-eyebrow{
+    font-family:var(--label);
+    font-size:11px;
+    letter-spacing:3px;
+    text-transform:uppercase;
+    color:var(--brass);
+  }
+  .ticket-title{
+    font-family:var(--display);
+    font-size:28px;
+    letter-spacing:1px;
+    color:var(--bone);
+    text-transform:uppercase;
+  }
+  .ticket-sub{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--muted);
+    text-align:right;
+  }
+
+  /* ---- progress punch-dots ---- */
+  .progress-row{
+    display:flex;
+    gap:6px;
+    padding:14px 24px;
+    background:var(--bg-panel);
+    border-left:1px solid var(--line);
+    border-right:1px solid var(--line);
+  }
+  .punch{
+    width:9px; height:9px;
+    border-radius:50%;
+    background:var(--bg-base);
+    border:1px solid var(--line);
+    transition:all .25s ease;
+  }
+  .punch.done{ background:var(--brass); border-color:var(--brass); box-shadow:0 0 6px rgba(201,162,60,0.5); }
+  .punch.current{ background:var(--ink-red); border-color:var(--ink-red); box-shadow:0 0 8px rgba(166,52,42,0.6); transform:scale(1.25); }
+
+  /* ---- main panel ---- */
+  .panel{
+    background:var(--bg-panel);
+    border:1px solid var(--line);
+    border-top:none;
+    padding:32px;
+    min-height:420px;
+  }
+
+  /* ---- step: intro ---- */
+  .intro{
+    text-align:center;
+    padding:40px 10px 10px;
+  }
+  .intro h1{
+    font-family:var(--display);
+    font-size:42px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color:var(--bone);
+    line-height:1.05;
+  }
+  .intro h1 span{ color:var(--ink-red); }
+  .intro p{
+    font-family:var(--body);
+    color:var(--bone-dim);
+    max-width:480px;
+    margin:18px auto 30px;
+    font-size:15px;
+  }
+  .island-mark{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--muted);
+    letter-spacing:2px;
+    text-transform:uppercase;
+    margin-bottom:18px;
+  }
+
+  /* ---- buttons ---- */
+  .btn{
+    font-family:var(--label);
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    font-size:13px;
+    font-weight:500;
+    padding:13px 28px;
+    border:1px solid var(--brass);
+    background:transparent;
+    color:var(--brass);
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .btn:hover{ background:var(--brass); color:var(--bg-base); }
+  .btn:disabled{ opacity:0.3; cursor:not-allowed; pointer-events:none; }
+  .btn-primary{
+    background:var(--ink-red);
+    border-color:var(--ink-red);
+    color:var(--bone);
+  }
+  .btn-primary:hover{ background:#C03F32; border-color:#C03F32; color:var(--bone); }
+  .btn-row{
+    display:flex;
+    justify-content:space-between;
+    margin-top:28px;
+    gap:12px;
+  }
+
+  /* ---- section labels ---- */
+  .section-label{
+    font-family:var(--label);
+    font-size:12px;
+    letter-spacing:2.5px;
+    text-transform:uppercase;
+    color:var(--brass);
+    margin-bottom:14px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .section-label::after{
+    content:"";
+    flex:1;
+    height:1px;
+    background:var(--line);
+  }
+
+  /* ---- form fields ---- */
+  .field{ margin-bottom:22px; }
+  .field label{
+    display:block;
+    font-family:var(--label);
+    font-size:12px;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:8px;
+  }
+  .field input[type=text], .field select{
+    width:100%;
+    background:var(--bg-base);
+    border:1px solid var(--line);
+    color:var(--bone);
+    font-family:var(--body);
+    font-size:15px;
+    padding:11px 12px;
+  }
+  .field input[type=text]:focus, .field select:focus{
+    outline:none;
+    border-color:var(--brass);
+  }
+  .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+
+  /* ---- province grid ---- */
+  .province-grid{
+    display:grid;
+    grid-template-columns:repeat(2, 1fr);
+    gap:10px;
+    margin-bottom:6px;
+  }
+  .province-card{
+    position:relative;
+    background:var(--bg-raised);
+    border:1px solid var(--line);
+    border-left:4px solid var(--card-color, var(--brass));
+    padding:13px 14px;
+    cursor:pointer;
+    transition:all .15s ease;
+  }
+  .province-card:hover{ background:var(--bg-raised-2); }
+  .province-card.selected{
+    background:var(--bg-raised-2);
+    border-color:var(--card-color, var(--brass));
+    box-shadow:inset 0 0 0 1px var(--card-color, var(--brass));
+  }
+  .province-card .pname{
+    font-family:var(--label);
+    font-size:13.5px;
+    font-weight:600;
+    letter-spacing:.5px;
+    color:var(--bone);
+  }
+  .province-card .pdesc{
+    font-family:var(--body);
+    font-size:11.5px;
+    color:var(--muted);
+    margin-top:3px;
+  }
+  .province-card .ptags{
+    font-family:var(--mono);
+    font-size:10px;
+    color:var(--card-color, var(--brass));
+    margin-top:6px;
+    letter-spacing:.5px;
+  }
+
+  /* ---- sequencing question ---- */
+  .q-wrap{ min-height:300px; }
+  .q-counter{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--muted);
+    letter-spacing:1px;
+    margin-bottom:6px;
+  }
+  .q-title{
+    font-family:var(--display);
+    font-size:22px;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+    color:var(--brass);
+    margin-bottom:10px;
+  }
+  .q-prompt{
+    font-family:var(--body);
+    font-size:16px;
+    color:var(--bone);
+    margin-bottom:22px;
+  }
+  .option{
+    display:block;
+    width:100%;
+    text-align:left;
+    background:var(--bg-raised);
+    border:1px solid var(--line);
+    color:var(--bone-dim);
+    font-family:var(--body);
+    font-size:14.5px;
+    padding:14px 16px;
+    margin-bottom:9px;
+    cursor:pointer;
+    transition:all .12s ease;
+  }
+  .option:hover{
+    background:var(--bg-raised-2);
+    border-color:var(--brass-dim);
+    color:var(--bone);
+    transform:translateX(3px);
+  }
+  .option .opt-letter{
+    font-family:var(--mono);
+    color:var(--ink-red);
+    margin-right:10px;
+    font-weight:700;
+  }
+
+  /* ---- card reveal ---- */
+  .card-wrap{ display:flex; flex-direction:column; align-items:center; }
+  .stamp-seal{
+    font-family:var(--label);
+    font-size:11px;
+    letter-spacing:3px;
+    text-transform:uppercase;
+    color:var(--good);
+    border:1px solid var(--good);
+    padding:5px 14px;
+    border-radius:2px;
+    transform:rotate(-3deg);
+    margin-bottom:16px;
+    opacity:0;
+    animation:stamp-in .4s ease forwards .1s;
+  }
+  @keyframes stamp-in{
+    0%{ opacity:0; transform:rotate(-3deg) scale(2.4); }
+    60%{ opacity:1; }
+    100%{ opacity:1; transform:rotate(-3deg) scale(1); }
+  }
+  .fighter-card{
+    width:100%;
+    max-width:480px;
+    background:linear-gradient(180deg, var(--bg-raised), var(--bg-panel));
+    border:1px solid var(--brass-dim);
+    box-shadow:0 0 0 1px var(--bg-base), 0 18px 40px rgba(0,0,0,0.45);
+    padding:0;
+  }
+  .fc-head{
+    padding:18px 22px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    gap:16px;
+    align-items:center;
+  }
+  .fc-photo{
+    width:74px; height:74px;
+    background:var(--bg-base);
+    border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+  }
+  .fc-name{
+    font-family:var(--display);
+    font-size:24px;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+    color:var(--bone);
+    line-height:1.05;
+  }
+  .fc-meta{
+    font-family:var(--mono);
+    font-size:11.5px;
+    color:var(--muted);
+    margin-top:5px;
+  }
+  .fc-disc{
+    font-family:var(--label);
+    font-size:12px;
+    letter-spacing:1px;
+    color:var(--brass);
+    margin-top:4px;
+    text-transform:uppercase;
+  }
+  .fc-body{ padding:20px 22px; }
+  .fc-stats{ display:grid; gap:11px; margin-bottom:20px; }
+  .stat-row{ display:grid; grid-template-columns:90px 1fr 32px; align-items:center; gap:10px; }
+  .stat-label{
+    font-family:var(--label);
+    font-size:11.5px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    color:var(--muted);
+  }
+  .stat-track{
+    height:7px;
+    background:var(--bg-base);
+    border:1px solid var(--line);
+    position:relative;
+    overflow:hidden;
+  }
+  .stat-fill{
+    position:absolute; left:0; top:0; bottom:0;
+    width:0%;
+    background:linear-gradient(90deg, var(--ink-red-dim), var(--ink-red));
+    transition:width 1s cubic-bezier(.2,.8,.2,1);
+  }
+  .stat-num{
+    font-family:var(--mono);
+    font-size:12.5px;
+    font-weight:700;
+    color:var(--bone);
+    text-align:right;
+  }
+  .fc-meta-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:12px;
+    margin-bottom:18px;
+    padding-top:16px;
+    border-top:1px solid var(--line);
+  }
+  .meta-box{ text-align:center; }
+  .meta-box .mval{
+    font-family:var(--mono);
+    font-size:20px;
+    font-weight:700;
+    color:var(--brass);
+  }
+  .meta-box .mlabel{
+    font-family:var(--label);
+    font-size:9.5px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-top:2px;
+  }
+  .fc-tags{
+    display:flex; flex-wrap:wrap; gap:7px;
+    padding-top:14px;
+    border-top:1px solid var(--line);
+  }
+  .tag{
+    font-family:var(--mono);
+    font-size:10.5px;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+    color:var(--bg-base);
+    background:var(--brass);
+    padding:4px 9px;
+  }
+  .tag.secondary{ background:transparent; border:1px solid var(--brass-dim); color:var(--brass-dim); }
+  .fc-footer{
+    padding:13px 22px;
+    background:var(--bg-base);
+    font-family:var(--mono);
+    font-size:10px;
+    color:var(--muted);
+    letter-spacing:.5px;
+  }
+
+  /* ---- report ---- */
+  .report{
+    margin-top:24px;
+    width:100%;
+    max-width:480px;
+    background:var(--bg-raised);
+    border:1px solid var(--line);
+    padding:16px 18px;
+  }
+  .report-title{
+    font-family:var(--label);
+    font-size:11px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:8px;
+  }
+  .report p{
+    font-family:var(--body);
+    font-size:13.5px;
+    color:var(--bone-dim);
+  }
+
+  /* ---- roster ---- */
+  .roster-toolbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:20px;
+  }
+  .roster-count{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--muted);
+  }
+  .roster-empty{
+    text-align:center;
+    padding:50px 20px;
+    color:var(--muted);
+    font-family:var(--body);
+    font-size:14px;
+  }
+  .roster-grid{
+    display:grid;
+    gap:10px;
+  }
+  .roster-card{
+    background:var(--bg-raised);
+    border:1px solid var(--line);
+    border-left:4px solid var(--rc-color, var(--brass));
+    padding:13px 16px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .rc-name{
+    font-family:var(--label);
+    font-size:15px;
+    font-weight:600;
+    color:var(--bone);
+    letter-spacing:.3px;
+  }
+  .rc-meta{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--muted);
+    margin-top:3px;
+  }
+  .rc-family{
+    font-family:var(--mono);
+    font-size:10.5px;
+    color:var(--brass-dim);
+    margin-top:5px;
+  }
+  .rc-avatar{
+    width:32px; height:46px;
+    flex-shrink:0;
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+  }
+  .rc-avatar svg{ width:100%; height:100%; }
+  .rc-actions{ display:flex; gap:8px; flex-shrink:0; }
+  .rc-btn{
+    font-family:var(--label);
+    font-size:10.5px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    padding:7px 11px;
+    border:1px solid var(--line);
+    background:transparent;
+    color:var(--muted);
+    cursor:pointer;
+  }
+  .rc-btn:hover{ border-color:var(--brass-dim); color:var(--bone); }
+  .rc-btn.danger:hover{ border-color:var(--ink-red); color:var(--ink-red); }
+  .storage-note{
+    font-family:var(--mono);
+    font-size:10.5px;
+    color:var(--muted);
+    margin-top:18px;
+    line-height:1.6;
+    border-top:1px solid var(--line);
+    padding-top:14px;
+  }
+  .save-status{
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--good);
+    margin-top:10px;
+    min-height:16px;
+  }
+  .save-status.error{ color:var(--ink-red); }
+
+  /* ---- cutscene ---- */
+  .cutscene-wrap{ width:100%; }
+  .cutscene-scene{
+    position:relative;
+    height:200px;
+    overflow:hidden;
+    border:1px solid var(--line);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--scene-color, var(--brass)) 35%, var(--bg-base)) 0%, var(--bg-base) 100%);
+    display:flex;
+    align-items:flex-end;
+    justify-content:center;
+    padding-bottom:16px;
+  }
+  .cutscene-scene .scene-figures{
+    display:flex;
+    align-items:flex-end;
+    gap:36px;
+  }
+  .cutscene-scene .scene-emblem{
+    position:absolute;
+    top:14px; left:50%;
+    transform:translateX(-50%);
+    font-family:var(--label);
+    font-size:10.5px;
+    letter-spacing:3px;
+    text-transform:uppercase;
+    color:color-mix(in srgb, var(--scene-color, var(--brass)) 70%, var(--bone) 30%);
+    opacity:.85;
+  }
+  .cutscene-dialogue{
+    border:1px solid var(--line);
+    border-top:none;
+    background:var(--bg-raised);
+    padding:18px 22px 20px;
+  }
+  .speaker-name{
+    font-family:var(--label);
+    font-size:12px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color:var(--brass);
+    margin-bottom:8px;
+  }
+  .speaker-name.narrator{ color:var(--muted); font-style:italic; }
+  .dialogue-text{
+    font-family:var(--body);
+    font-size:15.5px;
+    color:var(--bone);
+    line-height:1.55;
+    min-height:60px;
+    opacity:0;
+    animation:dlg-fade .4s ease forwards;
+  }
+  @keyframes dlg-fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
+  .cutscene-controls{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-top:18px;
+  }
+  .beat-dots{ display:flex; gap:5px; }
+  .beat-dot{ width:6px; height:6px; border-radius:50%; background:var(--line); }
+  .beat-dot.active{ background:var(--brass); }
+  .stub-screen{ text-align:center; padding:30px 10px 10px; }
+  .stub-screen h2{
+    font-family:var(--display);
+    font-size:26px;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    color:var(--ink-red);
+    margin-bottom:14px;
+  }
+  .stub-screen p{
+    font-family:var(--body);
+    color:var(--bone-dim);
+    font-size:14.5px;
+    max-width:420px;
+    margin:0 auto 26px;
+  }
+
+  /* ---- tuning ---- */
+  .tuning-pool{
+    text-align:center;
+    font-family:var(--mono);
+    font-size:15px;
+    font-weight:700;
+    letter-spacing:1.5px;
+    color:var(--brass);
+    margin-bottom:22px;
+    padding:10px;
+    border:1px dashed var(--line);
+  }
+  .tuning-row{
+    display:grid;
+    grid-template-columns:96px 1fr auto;
+    align-items:center;
+    gap:12px;
+    margin-bottom:14px;
+  }
+  .tuning-val{
+    font-family:var(--mono);
+    font-size:15px;
+    font-weight:700;
+    color:var(--bone);
+    width:28px;
+    text-align:center;
+  }
+  .tuning-btn{
+    width:30px; height:30px;
+    border:1px solid var(--line);
+    background:var(--bg-raised);
+    color:var(--bone-dim);
+    font-family:var(--mono);
+    font-size:16px;
+    line-height:1;
+    cursor:pointer;
+    transition:all .12s ease;
+  }
+  .tuning-btn:hover:not(:disabled){ border-color:var(--brass); color:var(--brass); }
+  .tuning-btn:disabled{ opacity:.3; cursor:not-allowed; }
+
+  /* ---- customize panel ---- */
+  .customize-panel{
+    width:100%;
+    max-width:480px;
+    background:var(--bg-raised);
+    border:1px solid var(--line);
+    padding:18px 20px 4px;
+    margin-bottom:20px;
+  }
+  .swatch-row{ display:flex; gap:9px; flex-wrap:wrap; margin-bottom:18px; }
+  .swatch{
+    width:28px; height:28px;
+    border-radius:50%;
+    border:2px solid var(--line);
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--muted);
+    font-size:11px;
+    padding:0;
+  }
+  .swatch.selected{ border-color:var(--brass); box-shadow:0 0 0 2px var(--bg-base), 0 0 0 3px var(--brass); }
+
+  @media (max-width:600px){
+    .province-grid{ grid-template-columns:1fr; }
+    .field-row{ grid-template-columns:1fr; }
+    .ticket-header{ flex-direction:column; align-items:flex-start; gap:6px; }
+    .fc-meta-grid{ grid-template-columns:1fr 1fr; }
+    .roster-card{ flex-direction:column; align-items:flex-start; }
+  }
+
+  /* ---- fighter card modal ---- */
+  .clickable-name{ cursor:pointer; text-decoration:underline; text-decoration-color:transparent; transition:text-decoration-color .12s ease; }
+  .clickable-name:hover{ text-decoration-color:var(--brass); color:var(--brass); }
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(10,8,6,0.78); display:flex; align-items:flex-start; justify-content:center;
+    padding:40px 16px; z-index:1000; overflow-y:auto;
+  }
+  .modal-card{
+    background:var(--bg-panel); border:1px solid var(--brass-dim); max-width:520px; width:100%;
+    box-shadow:0 20px 50px rgba(0,0,0,0.55);
+  }
+  .modal-head{
+    display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line);
+  }
+  .modal-title{ font-family:var(--display); font-size:20px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .modal-close{
+    background:transparent; border:1px solid var(--line); color:var(--muted); width:30px; height:30px; cursor:pointer;
+    font-family:var(--mono); font-size:14px;
+  }
+  .modal-close:hover{ border-color:var(--ink-red); color:var(--ink-red); }
+  .modal-body{ padding:20px; }
+  .mf-head{ display:flex; gap:14px; align-items:center; margin-bottom:18px; }
+  .mf-avatar{ width:50px; height:70px; flex-shrink:0; display:flex; align-items:flex-end; }
+  .mf-avatar svg{ width:100%; height:100%; }
+  .mf-name{ font-family:var(--display); font-size:20px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .mf-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:3px; }
+  .mf-disc{ font-family:var(--label); font-size:11.5px; color:var(--brass); text-transform:uppercase; margin-top:3px; }
+  .mf-stats-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:18px; }
+  .mf-stat{ background:var(--bg-raised); border:1px solid var(--line); text-align:center; padding:8px 4px; }
+  .mf-stat .msv{ font-family:var(--mono); font-size:15px; font-weight:700; color:var(--brass); }
+  .mf-stat .msl{ font-family:var(--label); font-size:8.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-top:2px; }
+  .mf-tier-tabs{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+  .mf-tier-tab{
+    font-family:var(--label); font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; padding:7px 11px;
+    border:1px solid var(--line); background:var(--bg-raised); color:var(--muted); cursor:pointer;
+  }
+  .mf-tier-tab.active{ background:var(--ink-red); border-color:var(--ink-red); color:var(--bone); }
+  .mf-history-row{
+    display:grid; grid-template-columns:70px 1fr auto; gap:10px; align-items:center;
+    padding:9px 0; border-bottom:1px solid var(--line); font-family:var(--body); font-size:12.5px;
+  }
+  .mf-history-row:last-child{ border-bottom:none; }
+  .mfh-date{ font-family:var(--mono); font-size:10px; color:var(--muted); }
+  .mfh-opp{ color:var(--bone-dim); }
+  .mfh-opp b{ color:var(--bone); }
+  .mfh-loc{ font-family:var(--mono); font-size:10px; color:var(--muted); display:block; margin-top:1px; }
+  .mfh-result{ font-family:var(--mono); font-size:11.5px; font-weight:700; }
+  .mfh-result.win{ color:var(--good); }
+  .mfh-result.loss{ color:var(--ink-red); }
+  .mf-empty{ text-align:center; padding:24px 10px; color:var(--muted); font-family:var(--body); font-size:13px; }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<div id="modal-root"></div>
+
+<script>
+/* ============================ DATA ============================ */
+
+const PROVINCES = [
+  { id:'alexandretta', name:'Alexandretta Province', desc:'Old England — Robin Hood forests, castle towns', color:'#5C7C5E',
+    primary:['boxer','karate'], secondary:['wrestler'],
+    settlements:['Williamsburg','St. Anne','Nattingham','Wolverbridge','Blackford','Mosshead','Whitechapel','Cowborough'] },
+  { id:'kolsati', name:'Kolsati District', desc:'New York attitude — big arenas, rowdy crowds', color:'#5E7A93',
+    primary:['brawler','mma'], secondary:['boxer'],
+    settlements:['Kolsati','St. Johnson','Bakii','Briggston','Castellan Heights','Marrow Hill',"Pell's Crossing",'Dunmore','Iron Wharf','Slate Row',"Cutter's End"] },
+  { id:'sherwood', name:'Sherwood Province', desc:'Chicago-style suburbs and small towns', color:'#A0623B',
+    primary:['mma','brawler'], secondary:['boxer'],
+    settlements:['Frontenac City','Lawrenceville','Millbrook Heights','North Lawrenceville','Caldwell Junction','Petsworth',"Harrow's Bend",'Oak Siding','Greeley Flats','Thistledown'] },
+  { id:'gazon', name:'Gazon Province', desc:'Underdeveloped — boxing country', color:'#C8943F',
+    primary:['boxer'], secondary:[],
+    settlements:['Gazon Main','Gazon Northern','Gazon South'] },
+  { id:'ditiero', name:'Di Tiero Province', desc:'New Orleans — Mardi Gras, party capital, the islands', color:'#7C5491',
+    primary:['karate'], secondary:['brawler'],
+    settlements:['Di Tiero','South Bender','Bellechasse','Port Maray','Cane Hollow','Marsh Landing','Bayou Verte','Saint Roque','Driftwood Key','Crayfish Bend','Lantern Cay'] },
+  { id:'carpathia', name:'Carpathia Province', desc:'Isolated, spooky, lonely mountains', color:'#5B4070',
+    primary:['sambo'], secondary:['judo'],
+    settlements:['Vyrholm','Castle Reach','Bukovene','Greywatch','Hollowmere',"Sorrow's Pass",'Ravenshade','Drovna','Kessel Vorn','Bargo Pass','Thornfall','Wraithwood'] },
+  { id:'northeast', name:'Northeast Territory', desc:'Japan — strict rules, fierce home advantage', color:'#9C4242',
+    primary:['sambo','judo'], secondary:['catch'],
+    settlements:['Mizukoshi','Tsubaki Bay','Santorino','Ineawood','Hoshimura','Kanesato','Renkawa','Sodegaura','Takamine','Usuzumi','Yorimasa','Fubuki','Iwagakure'] },
+  { id:'bay', name:'Bay Province', desc:'"Mayberry" — 1950s small-town California charm', color:'#6E8C9C',
+    primary:['wrestler','catch'], secondary:[],
+    settlements:['Charleston','Bayport','Pinecrest Hollow','Maple Junction',"Dell's Corner",'Briarwood','Sunfish Cove','Acorn Flats','Quail Hollow','Hickory Bend'] },
+];
+
+const DISCIPLINE_NAMES = {
+  boxer:'Boxer', brawler:'Street Brawler', wrestler:'Wrestler', sambo:'Russian Sambo',
+  mma:'MMA', karate:'Karate', judo:'Judo', catch:'Catch Wrestling'
+};
+
+const QUESTIONS = [
+  { title:'THE WALK HOME', prompt:'A bigger kid blocks the sidewalk outside the gym. You:', options:[
+    { text:'Square up and throw first.', mods:{power:10, toughness:4}, disc:{brawler:10}, trait:'Aggressive' },
+    { text:'Slip past before he sets his feet.', mods:{agility:10, quickness:4}, disc:{karate:8}, trait:'Slick' },
+    { text:'Talk him down, sizing him up the whole time.', mods:{superstar:8}, disc:{mma:10}, trait:'Calculating' },
+    { text:'Take the long way around.', mods:{injury:2}, disc:{catch:8}, trait:'Patient' },
+  ]},
+  { title:'THE ROCK TEST', prompt:'Your buddy whips a rock at you with no warning. You:', options:[
+    { text:'Snatch it out of the air.', mods:{quickness:12}, disc:{boxer:6}, trait:'Sharp' },
+    { text:'Duck and weave clean.', mods:{agility:12}, disc:{karate:6}, trait:'Slick' },
+    { text:"Take it off the shoulder, don't even flinch.", mods:{toughness:12, injury:3}, disc:{wrestler:6}, trait:'Stoic' },
+    { text:'Get hit, get mad, chase him down.', mods:{power:8, potential:4}, disc:{brawler:10}, trait:'Aggressive' },
+  ]},
+  { title:'RAIN DAY', prompt:"It's pouring and training is optional today. You:", options:[
+    { text:'Go anyway — every rep counts.', mods:{potential:12, toughness:6}, disc:{}, trait:'Driven' },
+    { text:'Half-effort, then bail early.', mods:{speed:4}, disc:{}, trait:'Casual' },
+    { text:'Skip it. Sleep in.', mods:{potential:-4, superstar:4}, disc:{}, trait:'Carefree' },
+    { text:'Train indoors twice as hard instead.', mods:{potential:10, quickness:6}, disc:{}, trait:'Resourceful' },
+  ]},
+  { title:'FIRST CROWD', prompt:"Word spreads you're scrapping at the pit Saturday. A crowd shows up. You:", options:[
+    { text:'Feed off it — perform bigger.', mods:{superstar:14}, disc:{mma:6}, trait:'Showman' },
+    { text:'Block it out completely.', mods:{injury:3, toughness:6}, disc:{}, trait:'Stoic' },
+    { text:'It rattles you a little, but you push through.', mods:{potential:6}, disc:{sambo:6}, trait:'Resilient' },
+    { text:"You'd rather it was empty.", mods:{agility:6}, disc:{judo:6}, trait:'Humble' },
+  ]},
+  { title:'THE GRIND', prompt:'Coach has you running hills until you puke. You:', options:[
+    { text:'Push past it, ask for one more.', mods:{toughness:14, potential:8}, disc:{}, trait:'Driven' },
+    { text:'Hit the wall, but finish.', mods:{power:8, injury:4}, disc:{}, trait:'Gritty' },
+    { text:"Pace yourself smart — don't blow up.", mods:{quickness:6, agility:6}, disc:{wrestler:8}, trait:'Calculating' },
+    { text:'Push too hard, tweak something.', mods:{power:10, injury:-3}, disc:{brawler:8}, trait:'Reckless' },
+  ]},
+  { title:'SPARRING PARTNER', prompt:'Coach pairs you against a kid who outweighs you by 30 pounds. You:', options:[
+    { text:'Get in close, grind him out.', mods:{power:6}, disc:{wrestler:12}, trait:'Gritty' },
+    { text:'Stay on the outside, pick him apart.', mods:{speed:8}, disc:{boxer:10}, trait:'Sharp' },
+    { text:'Use the size gap, throw him off balance.', mods:{agility:6}, disc:{judo:12}, trait:'Clever' },
+    { text:'Look for the lock, end it early.', mods:{}, disc:{sambo:12, catch:6}, trait:'Calculating' },
+  ]},
+  { title:'FAMILY PRESSURE', prompt:'Your family asks why you want this life. You:', options:[
+    { text:"Tell them you're going to be a champion, no doubt.", mods:{superstar:12, potential:6}, disc:{}, trait:'Confident' },
+    { text:"Say it's just something you're good at.", mods:{injury:4, toughness:4}, disc:{}, trait:'Humble' },
+    { text:"Don't really have an answer — you just need it.", mods:{power:6, agility:6}, disc:{}, trait:'Restless' },
+    { text:"Promise them you'll make it worth it.", mods:{potential:10, toughness:6}, disc:{}, trait:'Driven' },
+  ]},
+  { title:'THE GUT CHECK', prompt:'You catch a clean shot in sparring that drops you. You:', options:[
+    { text:'Pop back up before the count.', mods:{toughness:10, injury:4}, disc:{}, trait:'Gritty' },
+    { text:'Stay down a beat, then reset smart.', mods:{quickness:6}, disc:{mma:8}, trait:'Calculating' },
+    { text:'Get back up angrier than before.', mods:{power:10}, disc:{brawler:8}, trait:'Aggressive' },
+    { text:'It shakes your confidence a little.', mods:{agility:6, potential:-2}, disc:{karate:6}, trait:'Cautious' },
+  ]},
+  { title:'WHAT YOU WANT', prompt:"Deep down, what's pulling you toward this?", options:[
+    { text:'The lights, the crowd, the name.', mods:{superstar:16}, disc:{}, trait:'Showman' },
+    { text:'Proving people wrong.', mods:{power:8, potential:8}, disc:{}, trait:'Driven' },
+    { text:'It\'s the only place that makes sense.', mods:{toughness:8, injury:3}, disc:{}, trait:'Stoic' },
+    { text:'The craft itself — getting better every day.', mods:{potential:14, quickness:4}, disc:{}, trait:'Calculating' },
+  ]},
+  { title:'FOOT RACE', prompt:'The neighborhood kids line up for a sprint to the corner store. You:', options:[
+    { text:'Blow everyone away off the line.', mods:{speed:14}, disc:{}, trait:'Fast' },
+    { text:'Save it for the final stretch.', mods:{speed:8, potential:4}, disc:{}, trait:'Calculating' },
+    { text:'Trip, get up, finish anyway.', mods:{toughness:6, injury:2}, disc:{}, trait:'Gritty' },
+    { text:"Skip the race — you'd rather wrestle someone for the lead.", mods:{power:6}, disc:{wrestler:8}, trait:'Physical' },
+  ]},
+  { title:'THE NARROW LEDGE', prompt:'A shortcut home runs along a narrow fence top, six feet up. You:', options:[
+    { text:'Walk it without a wobble.', mods:{agility:14}, disc:{}, trait:'Slick' },
+    { text:'Go slow and careful — no risks.', mods:{injury:4}, disc:{}, trait:'Cautious' },
+    { text:'Jump down halfway — no patience for it.', mods:{power:6, agility:4}, disc:{}, trait:'Restless' },
+    { text:'Use it to drill your footwork on purpose.', mods:{agility:10, potential:6}, disc:{}, trait:'Driven' },
+  ]},
+  { title:'MAKING WEIGHT', prompt:"Coach says you need to drop a few pounds before Saturday's weigh-in. You:", options:[
+    { text:'Handle it disciplined — no shortcuts.', mods:{potential:10, injury:3}, disc:{}, trait:'Driven' },
+    { text:'Cut it fast and rough at the last minute.', mods:{power:6, injury:-4}, disc:{}, trait:'Reckless' },
+    { text:"Barely think about it — you'll make weight fine.", mods:{superstar:6}, disc:{}, trait:'Confident' },
+    { text:'Worry about it all week.', mods:{quickness:4, potential:-2}, disc:{}, trait:'Cautious' },
+  ]},
+];
+
+const CUTSCENES = {
+  alexandretta: { guideName:'Old Tomkins', beats:[
+    { speaker:'narrator', text:"The door creaks shut behind {name} as he steps out into {settlement}'s morning fog, his breath fogging in the cold English air." },
+    { speaker:'narrator', text:"Stone cottages lean over narrow lanes. Somewhere past the market square, a cart wheel groans against cobblestone." },
+    { speaker:'narrator', text:"A weathered old man leans against a lamppost, watching {name} with the patient eyes of someone who's seen a hundred boys just like him walk this same street." },
+    { speaker:'guide', text:"Ah, another one. {settlement}'s full of you lot lately — all fists and no sense. Name's Tomkins. I keep the Forge Pit, just past the chapel." },
+    { speaker:'guide', text:"You've got the look of a boxer about you. Or maybe karate — hard to say yet. Come round when you're ready to find out." },
+    { speaker:'narrator', text:"Tomkins ambles off toward the square, leaving {name} alone with the quiet hum of {settlement} waking up." },
+  ]},
+  kolsati: { guideName:'Lucky', beats:[
+    { speaker:'narrator', text:"{name} bangs the apartment door shut, taking the stairwell two steps at a time into the roar of {settlement}." },
+    { speaker:'narrator', text:"Horns, steam vents, a dozen languages shouted over each other. The city doesn't slow down for anybody, least of all a twelve-year-old kid." },
+    { speaker:'narrator', text:"A wiry man in a tracksuit peels off a corner, falling into step beside {name} like he's been waiting all morning." },
+    { speaker:'guide', text:"Kid! Hey — kid. You walk like you got somewhere to be. Name's Lucky. Everybody knows Lucky." },
+    { speaker:'guide', text:"You want to make something of yourself around here, the Concrete Ring's the place. Brawlers, MMA guys, the works. Rough crowd, good crowd." },
+    { speaker:'narrator', text:"Lucky claps {name} on the shoulder and disappears back into the foot traffic, just as fast as he showed up." },
+  ]},
+  sherwood: { guideName:'Big Walt', beats:[
+    { speaker:'narrator', text:"{name} steps off the porch into a quiet Sherwood morning, {settlement} still half-asleep around him." },
+    { speaker:'narrator', text:"Rows of modest houses, a corner store, a dog barking two yards down. It's the kind of place where everybody already knows your business." },
+    { speaker:'narrator', text:"A heavyset man in a faded varsity jacket leans on a fence post, nodding {name} over with a tilt of his head." },
+    { speaker:'guide', text:"Heard you been scrapping. Name's Walt — I run the door at the Frontenac Fight House." },
+    { speaker:'guide', text:"Sherwood's turned out some good ones. MMA, brawlers — you got the look. Come by when you're ready, we'll see what you got." },
+    { speaker:'narrator', text:"Walt heads off down the block, whistling something old. {name} watches him go, already thinking about Saturday." },
+  ]},
+  gazon: { guideName:'Mama Oyelaran', beats:[
+    { speaker:'narrator', text:"{name} steps out into the dry heat of {settlement}, dust already settling on his shoes before he's past the gate." },
+    { speaker:'narrator', text:"There isn't much here — a well, a few stalls, the long road out. What there is, people fight hard to keep." },
+    { speaker:'narrator', text:"A tall woman with arms like rope stops sweeping her porch to watch {name} pass." },
+    { speaker:'guide', text:"You walk like a boxer already, boy. Good. Out here, that's the only trade worth learning." },
+    { speaker:'guide', text:"The Dust Circle's past the well. Ask for me if anybody gives you trouble finding it. Go on now, don't keep your feet waiting." },
+    { speaker:'narrator', text:"Mama Oyelaran goes back to her sweeping. {name} heads toward the well, the sun already climbing." },
+  ]},
+  ditiero: { guideName:'Frenchy LeBlanc', beats:[
+    { speaker:'narrator', text:"{name} pushes through the beaded curtain and out into {settlement}, where the air already smells like spice and spilled beer." },
+    { speaker:'narrator', text:"Brass music drifts from somewhere down the block. A parade went through last night, or maybe it never really stopped." },
+    { speaker:'narrator', text:"A lean man in a paint-spattered coat tips his hat at {name} from a doorway, grinning like he knows a secret." },
+    { speaker:'guide', text:"Well now, look at you. Got that hungry look, cher. Frenchy LeBlanc — I know every pit worth knowing in this town." },
+    { speaker:'guide', text:"Big Jim's is the one for you, I think. Karate boys do good there. Snake Pit's rougher, Power's Pit'll eat you alive. Start with Jim's." },
+    { speaker:'narrator', text:"Frenchy tips his hat once more and slips back into the crowd. {name} stands there a moment, letting the city pull him in." },
+  ]},
+  carpathia: { guideName:'Old Man Voss', beats:[
+    { speaker:'narrator', text:"{name} eases the door shut so it doesn't wake the house, stepping out into the gray hush of {settlement}." },
+    { speaker:'narrator', text:"Mist clings to the lower streets. Somewhere up the mountain road, a bell rings once and goes quiet." },
+    { speaker:'narrator', text:"An old man stands too still at the edge of the lane, like he's been there since before {name} woke up." },
+    { speaker:'guide', text:"You're up early. Or maybe you never really slept. This place does that to people." },
+    { speaker:'guide', text:"The Hollow Ring's up past the old chapel. Strange fighters come out of these mountains, boy. Mind you're not one of the bad ones." },
+    { speaker:'narrator', text:"Voss turns without another word and walks back into the mist, like he was never really there at all." },
+  ]},
+  northeast: { guideName:'Sensei Itou', beats:[
+    { speaker:'narrator', text:"{name} bows once at the threshold out of habit before stepping into the crisp morning air of {settlement}." },
+    { speaker:'narrator', text:"Paper lanterns sway over a quiet street. A bell from somewhere measures the morning into careful pieces." },
+    { speaker:'narrator', text:"A straight-backed man in plain clothes stops {name} with a single raised hand, eyes sharp and unreadable." },
+    { speaker:'guide', text:"You walk without discipline. That can be taught. I am Itou. I do not waste words, and I do not waste time." },
+    { speaker:'guide', text:"Dojo Reach is three streets east. Sambo and Judo are respected here. Earn your place before you ask for one." },
+    { speaker:'narrator', text:"Itou turns sharply on his heel and is gone before {name} can answer. The lesson, it seems, has already begun." },
+  ]},
+  bay: { guideName:'Coach Pruitt', beats:[
+    { speaker:'narrator', text:"{name} lets the screen door bang shut behind him, stepping out into a slow, sun-warmed morning in {settlement}." },
+    { speaker:'narrator', text:"A milk truck rumbles past. Somebody's radio plays through an open window. Nothing here seems to be in much of a hurry." },
+    { speaker:'narrator', text:"A stocky man in a ball cap waves {name} over from where he's leaning on an old pickup." },
+    { speaker:'guide', text:"Mornin'. You're the new kid, huh? Word travels fast around here. Name's Pruitt — I coach over at the fairground." },
+    { speaker:'guide', text:"We turn out wrestlers mostly, some good catch men too. The Fairground Ring ain't much to look at, but it's honest. Come on by." },
+    { speaker:'narrator', text:"Pruitt climbs back into his truck and rumbles off down the lane, leaving {name} alone with the quiet and the long day ahead." },
+  ]},
+};
+
+
+
+/* ============================ STATE ============================ */
+
+const state = {
+  screen: 'creator', // 'creator' | 'roster'
+  step: 0, // 0 intro, 1 basics, 2..2+N sequencing, last reveal
+  name: '',
+  age: 12, // GDD: every career starts at 12
+  provinceId: null,
+  settlement: '',
+  heightIn: 60, // inches, ~5'0"
+  weightLb: 100,
+  qIndex: 0,
+  answers: [], // chosen option per question
+  saved: false,
+  cutsceneFighter: null,
+  cutsceneBeat: 0,
+  tuningAlloc: { speed:0, quickness:0, toughness:0, power:0, agility:0 },
+  appearance: { skin:'#C68642', hair:'#2B1B12', build:'athletic' },
+};
+
+const TUNING_POOL_TOTAL = 5; // was 15 — rescaled now that stat ceilings are age-banded (~15-35), not flat 1-99
+function sumAlloc(o){ return Object.values(o).reduce((a,b)=>a+b,0); }
+
+function totalSteps(){ return 3 + QUESTIONS.length; } // intro(0) basics(1) Q's(2..2+n-1) tuning(2+n) reveal(3+n)
+
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+function rand(lo, hi){ return Math.floor(Math.random()*(hi-lo+1))+lo; }
+
+/* ============================ COMPUTE FIGHTER ============================ */
+
+/* ============================ AGE BANDS & TALENT TIERS ============================ */
+/*
+  Core combat stats (Speed/Quickness/Toughness/Power/Agility) are NOT flat 1-99 the
+  way Potential is. A 12-year-old's ceiling is age-gated. Three tiers:
+  - normal (~84% of fighters): capped by AGE_BAND_TYPICAL for their age
+  - prodigy (~15%): naturally gifted, capped higher — AGE_BAND_PRODIGY
+  - generational (~1%, gated behind a high raw-talent roll): a true once-in-a-lifetime
+    talent who can blow past the normal Amateur ceiling entirely, Tyson-at-18 style —
+    AGE_BAND_GENERATIONAL. Extremely rare on purpose.
+  All tiers still cap out around the same ~35 "top amateur" mark UNLESS generational,
+  which is allowed to reach toward pro-level numbers even while still an amateur.
+*/
+const AGE_BAND_TYPICAL      = { 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35 };
+const AGE_BAND_PRODIGY      = { 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35 };
+const AGE_BAND_GENERATIONAL = { 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88 };
+
+function bandCeiling(age, tier){
+  const table = tier==='generational' ? AGE_BAND_GENERATIONAL : tier==='prodigy' ? AGE_BAND_PRODIGY : AGE_BAND_TYPICAL;
+  const a = clamp(age, 12, 18);
+  return table[a];
+}
+
+function rollTalentTier(rawAvg01){
+  // No hard gate — every fighter has *some* shot at being an outlier, but stronger raw
+  // rolls meaningfully improve the odds. Roughly: ~1-2% generational, ~15-25% prodigy
+  // depending on how the Sequencing Event went.
+  const generationalChance = 0.005 + rawAvg01 * 0.02;
+  const prodigyChance = 0.08 + rawAvg01 * 0.28;
+  const r = Math.random();
+  if(r < generationalChance) return 'generational';
+  if(r < generationalChance + prodigyChance) return 'prodigy';
+  return 'normal';
+}
+
+function compressStat(rawValue, age, tier){
+  // Maps a raw 1-99 talent roll proportionally into the age/tier-appropriate band.
+  const ceiling = bandCeiling(age, tier);
+  const pct = clamp(rawValue, 1, 99) / 99;
+  return clamp(Math.round(1 + pct * (ceiling - 1)), 1, ceiling);
+}
+
+function computeFighter(){
+  const province = PROVINCES.find(p=>p.id===state.provinceId);
+
+  let stats = {
+    speed: rand(22,38), quickness: rand(22,38), toughness: rand(22,38),
+    power: rand(22,38), agility: rand(22,38)
+  };
+  let potential = rand(45,65);
+  let injury = rand(8,14);
+  let superstar = rand(15,35);
+  const traitTally = {};
+  const discScore = {};
+  Object.keys(DISCIPLINE_NAMES).forEach(d=> discScore[d] = 5);
+
+  // province weighting
+  province.primary.forEach(d=> discScore[d] += 25);
+  province.secondary.forEach(d=> discScore[d] += 12);
+
+  state.answers.forEach(opt=>{
+    if(!opt) return;
+    const m = opt.mods || {};
+    if(m.speed) stats.speed += m.speed;
+    if(m.quickness) stats.quickness += m.quickness;
+    if(m.toughness) stats.toughness += m.toughness;
+    if(m.power) stats.power += m.power;
+    if(m.agility) stats.agility += m.agility;
+    if(m.potential) potential += m.potential;
+    if(m.injury) injury += m.injury;
+    if(m.superstar) superstar += m.superstar;
+    Object.entries(opt.disc||{}).forEach(([d,v])=> discScore[d] += v);
+    if(opt.trait) traitTally[opt.trait] = (traitTally[opt.trait]||0)+1;
+  });
+
+  if(inheritance){
+    potential += inheritance.potentialBonus;
+    discScore[inheritance.disciplineLean] += 20;
+  }
+
+  // Raw stats (uncompressed) still range ~1-99 from base rolls + Sequencing Event
+  // modifiers + tuning — that raw spread is what determines HOW gifted the fighter
+  // is relative to peers, before being compressed into an age-appropriate band.
+  Object.keys(stats).forEach(k=> stats[k] = clamp(Math.round(stats[k]), 1, 99));
+  potential = clamp(Math.round(potential), 1, 99);
+  injury = clamp(Math.round(injury), 1, 20);
+  superstar = clamp(Math.round(superstar), 1, 99);
+
+  const rawAvg = (stats.speed + stats.quickness + stats.toughness + stats.power + stats.agility) / 5;
+  const rawAvg01 = clamp(rawAvg / 99, 0, 1);
+  const talentTier = rollTalentTier(rawAvg01);
+  const age = state.age || 12;
+
+  const compressedStats = {};
+  Object.keys(stats).forEach(k=> compressedStats[k] = compressStat(stats[k], age, talentTier));
+
+  const ranked = Object.entries(discScore).sort((a,b)=> b[1]-a[1]);
+  const primaryDisc = ranked[0][0];
+  const secondaryDisc = ranked[1][0];
+
+  let topTrait = 'Balanced', topCount = 0;
+  Object.entries(traitTally).forEach(([t,c])=>{ if(c>topCount){ topCount=c; topTrait=t; } });
+
+  return { province, stats: compressedStats, rawStats: stats, age, talentTier,
+    potential, injury, superstar, primaryDisc, secondaryDisc, trait: topTrait, ranked,
+    legacy: inheritance ? { parentId: inheritance.parentId, parentName: inheritance.parentName } : null };
+}
+
+/* ============================ STORAGE ============================ */
+/*
+  Roster persistence for the IIFL Character Creator.
+  Uses localStorage under the key "iifl_roster_v1" — this is a static,
+  single-file prototype meant to be hosted on GitHub Pages / Netlify like
+  your other IDHF tools, with no backend yet. localStorage works fine once
+  this file is actually deployed/hosted in a real browser; it will NOT
+  persist inside Claude.ai's in-chat preview sandbox, so test it after
+  pushing it live. Swap this layer for Firebase later if you want the
+  roster synced across devices/coaches, same as Minooka/RefPicker.
+*/
+const ROSTER_KEY = 'iifl_roster_v1';
+
+function loadRoster(){
+  try{
+    const raw = localStorage.getItem(ROSTER_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }catch(err){
+    console.error('IIFL roster load failed:', err);
+    return [];
+  }
+}
+
+function saveRoster(list){
+  try{
+    localStorage.setItem(ROSTER_KEY, JSON.stringify(list));
+    return true;
+  }catch(err){
+    console.error('IIFL roster save failed:', err);
+    return false;
+  }
+}
+
+function addFighterToRoster(fighterRecord){
+  const roster = loadRoster();
+  roster.unshift(fighterRecord);
+  return saveRoster(roster);
+}
+
+function deleteFighterFromRoster(id){
+  const roster = loadRoster().filter(f=> f.id !== id);
+  return saveRoster(roster);
+}
+
+/* ============================ RENDER ============================ */
+
+const app = document.getElementById('app');
+
+function heightLabel(inches){
+  const ft = Math.floor(inches/12), inch = inches%12;
+  return `${ft}'${inch}"`;
+}
+
+/* ============================ FIGHTER CARD MODAL ============================ */
+
+const TIERS = ['All','Juvenile','Amateur','Semi-Pro','Pro','Exhibition'];
+let modalFighterId = null;
+let modalActiveTier = 'All';
+
+function openFighterCard(id){ modalFighterId = id; modalActiveTier = 'All'; renderModal(); }
+function closeFighterCard(){ modalFighterId = null; renderModal(); }
+
+function renderModal(){
+  const root = document.getElementById('modal-root');
+  if(!modalFighterId){ root.innerHTML = ''; return; }
+  const roster = loadRoster();
+  const f = roster.find(r=> r.id === modalFighterId);
+  if(!f){ root.innerHTML = ''; return; }
+
+  const prov = PROVINCES.find(p=>p.id===f.provinceId);
+  const rec = f.record || { wins:0, losses:0 };
+  const log = f.fightLog || [];
+  const filtered = modalActiveTier === 'All' ? log : log.filter(e=> e.tier === modalActiveTier);
+  const sorted = [...filtered].sort((a,b)=> new Date(b.date) - new Date(a.date));
+
+  const historyHtml = sorted.length ? sorted.map(e=>{
+    const dateStr = e.date ? new Date(e.date).toLocaleDateString() : '—';
+    return `
+      <div class="mf-history-row">
+        <div class="mfh-date">${dateStr}</div>
+        <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
+        <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
+      </div>
+    `;
+  }).join('') : `<div class="mf-empty">No fights on record${modalActiveTier==='All'?'':' at this level'} yet.</div>`;
+
+  const tabsHtml = TIERS.map(t=>{
+    const count = t==='All' ? log.length : log.filter(e=>e.tier===t).length;
+    return `<button class="mf-tier-tab ${modalActiveTier===t?'active':''}" data-mf-tab="${t}">${t} (${count})</button>`;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div class="modal-title">Fighter Card</div>
+          <button class="modal-close" data-modal-close>✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="mf-head">
+            <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
+            <div>
+              <div class="mf-name">${f.name}</div>
+              <div class="mf-meta">${f.heightIn?heightLabel(f.heightIn):''}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement||''}${prov?', '+prov.name:''}</div>
+              <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Career ${rec.wins}-${rec.losses}</div>
+            </div>
+          </div>
+          ${f.stats ? `
+          <div class="mf-stats-grid">
+            <div class="mf-stat"><div class="msv">${f.stats.speed}</div><div class="msl">SPD</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.quickness}</div><div class="msl">QCK</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.toughness}</div><div class="msl">TGH</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.power}</div><div class="msl">PWR</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.agility}</div><div class="msl">AGL</div></div>
+          </div>` : ''}
+          <div class="mf-tier-tabs">${tabsHtml}</div>
+          <div class="mf-history">${historyHtml}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+document.addEventListener('click', (e)=>{
+  const openEl = e.target.closest('[data-open-fighter]');
+  if(openEl){ openFighterCard(openEl.dataset.openFighter); return; }
+  const closeEl = e.target.closest('[data-modal-close]');
+  if(closeEl){ closeFighterCard(); return; }
+  const overlayEl = e.target.closest('.modal-overlay');
+  if(overlayEl && e.target === overlayEl){ closeFighterCard(); return; }
+  const tabEl = e.target.closest('[data-mf-tab]');
+  if(tabEl){ modalActiveTier = tabEl.dataset.mfTab; renderModal(); return; }
+});
+
+function render(){
+  if(state.screen === 'roster'){ renderRosterScreen(); return; }
+  if(state.screen === 'cutscene'){ renderCutsceneScreen(); return; }
+
+  const idx = state.step;
+  let body = '';
+  let title = 'FIGHTER INTAKE';
+  let sub = `FILE ${String(idx).padStart(2,'0')} / ${String(totalSteps()).padStart(2,'0')}`;
+
+  if(idx === 0){ body = renderIntro(); title='IRON ISLAND FIGHT LEAGUE'; sub='SCOUTING OFFICE'; }
+  else if(idx === 1){ body = renderBasics(); title='FIGHTER INTAKE'; }
+  else if(idx >= 2 && idx < 2+QUESTIONS.length){ body = renderQuestion(idx-2); title='SEQUENCING EVENT'; }
+  else if(idx === 2+QUESTIONS.length){ body = renderTuning(); title='FINAL TRAINING CAMP'; }
+  else { body = renderReveal(); title='FIGHTER APPROVED'; }
+
+  const progress = renderProgress();
+
+  app.innerHTML = `
+    <div class="ticket-header">
+      <div>
+        <div class="ticket-eyebrow">Iron Island · Fight League</div>
+        <div class="ticket-title">${title}</div>
+      </div>
+      <div class="ticket-sub">${sub}</div>
+    </div>
+    ${idx>0 ? `<div class="progress-row">${progress}</div>` : ''}
+    <div class="panel">${body}</div>
+  `;
+  wireEvents();
+}
+
+function renderRosterScreen(){
+  const roster = loadRoster();
+  const countLabel = roster.length === 1 ? '1 fighter' : `${roster.length} fighters`;
+
+  const cards = roster.map(f=>{
+    const prov = PROVINCES.find(p=>p.id===f.provinceId);
+    const childCount = f.childrenIds ? f.childrenIds.length : 0;
+    const familyLine = f.mate
+      ? `<div class="rc-family">💍 Married to ${f.mate.name} — ${f.mate.background}${childCount ? ` · ${childCount} ${childCount===1?'child':'children'}` : ''}</div>`
+      : '';
+    const legacyLine = f.parentName ? `<div class="rc-family">Heir of ${f.parentName}</div>` : '';
+    return `
+      <div class="roster-card" style="--rc-color:${prov ? prov.color : '#C9A23C'}">
+        <div style="display:flex; gap:12px; align-items:flex-start;">
+          <div class="rc-avatar">${buildSilhouetteSM(f.appearance)}</div>
+          <div>
+            <div class="rc-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
+            <div class="rc-meta">${DISCIPLINE_NAMES[f.primaryDisc]} · ${f.settlement}, ${prov ? prov.name : 'Unknown'} · POT ${f.potential} · ${f.trait}</div>
+            ${legacyLine}${familyLine}
+          </div>
+        </div>
+        <div class="rc-actions">
+          <button class="rc-btn" data-replay="${f.id}">▶ Replay Intro</button>
+          ${f.mate ? `<button class="rc-btn" data-child="${f.id}">👶 Have a Child</button>` : `<button class="rc-btn" data-mate="${f.id}">💍 Find a Mate</button>`}
+          <button class="rc-btn danger" data-delete="${f.id}">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const body = `
+    <div class="roster-toolbar">
+      <div class="roster-count">${countLabel} on file</div>
+      <button class="btn" id="back-to-creator">+ New Fighter</button>
+    </div>
+    ${roster.length ? `<div class="roster-grid">${cards}</div>` : `<div class="roster-empty">No fighters saved yet. Run the intake process and confirm a fighter to add one here.</div>`}
+    <div class="storage-note">Stored locally in this browser (localStorage key "iifl_roster_v1"). Works once hosted on GitHub Pages/Netlify — won't persist in Claude.ai's preview pane. Swap to Firebase later for cross-device sync.</div>
+  `;
+
+  app.innerHTML = `
+    <div class="ticket-header">
+      <div>
+        <div class="ticket-eyebrow">Iron Island · Fight League</div>
+        <div class="ticket-title">FIGHTER ROSTER</div>
+      </div>
+      <div class="ticket-sub">SAVED FILES</div>
+    </div>
+    <div class="panel">${body}</div>
+  `;
+
+  const backBtn = document.getElementById('back-to-creator');
+  if(backBtn) backBtn.onclick = ()=>{
+    state.screen = 'creator';
+    Object.assign(state, { step:0, name:'', provinceId:null, settlement:'', heightIn:60, weightLb:100, qIndex:0, answers:[], saved:false,
+      tuningAlloc:{ speed:0, quickness:0, toughness:0, power:0, agility:0 },
+      appearance:{ skin:'#C68642', hair:'#2B1B12', build:'athletic' } });
+    fighterCache = null;
+    inheritance = null;
+    render();
+  };
+
+  document.querySelectorAll('[data-delete]').forEach(btn=>{
+    btn.onclick = ()=>{
+      deleteFighterFromRoster(btn.dataset.delete);
+      renderRosterScreen();
+    };
+  });
+
+  document.querySelectorAll('[data-replay]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const roster = loadRoster();
+      const f = roster.find(r=> r.id === btn.dataset.replay);
+      if(f) startCutscene(f);
+    };
+  });
+
+  document.querySelectorAll('[data-mate]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const roster = loadRoster();
+      const f = roster.find(r=> r.id === btn.dataset.mate);
+      if(!f) return;
+      f.mate = generateMate(f.provinceId, f.settlement);
+      saveRoster(roster);
+      renderRosterScreen();
+    };
+  });
+
+  document.querySelectorAll('[data-child]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const roster = loadRoster();
+      const f = roster.find(r=> r.id === btn.dataset.child);
+      if(!f) return;
+      startLegacyIntake(f);
+    };
+  });
+}
+
+function startLegacyIntake(parentRecord){
+  inheritance = {
+    parentId: parentRecord.id,
+    parentName: parentRecord.name,
+    disciplineLean: parentRecord.primaryDisc,
+    potentialBonus: rand(5,12),
+  };
+  state.screen = 'creator';
+  Object.assign(state, {
+    step: 1, name:'', provinceId: parentRecord.provinceId, settlement: parentRecord.settlement,
+    heightIn:60, weightLb:100, qIndex:0, answers:[], saved:false,
+    tuningAlloc:{ speed:0, quickness:0, toughness:0, power:0, agility:0 },
+    appearance:{ skin:'#C68642', hair:'#2B1B12', build:'athletic' }
+  });
+  fighterCache = null;
+  render();
+}
+
+function startCutscene(record){
+  state.screen = 'cutscene';
+  state.cutsceneFighter = record;
+  state.cutsceneBeat = 0;
+  render();
+}
+
+function fillTemplate(text, record){
+  return text.replace(/{name}/g, record.name).replace(/{settlement}/g, record.settlement);
+}
+
+function renderCutsceneScreen(){
+  const record = state.cutsceneFighter;
+  const province = PROVINCES.find(p=>p.id===record.provinceId);
+  const data = CUTSCENES[record.provinceId];
+  const beatIdx = state.cutsceneBeat;
+  const atEnd = beatIdx >= data.beats.length;
+
+  let body;
+  if(atEnd){
+    body = `
+      <div class="stub-screen">
+        <h2>To Be Continued…</h2>
+        <p>${record.name} is on the ground in ${record.settlement}, ${province.name}. Free roam — walking the city, training, fight pits, mini-games — is the next layer to build. For now, your fighter is locked in and ready.</p>
+        <button class="btn btn-primary" id="end-to-roster">Return to Roster</button>
+      </div>
+    `;
+  } else {
+    const beat = data.beats[beatIdx];
+    const isGuide = beat.speaker === 'guide';
+    const speakerLabel = isGuide ? data.guideName : 'Narrator';
+    const dots = data.beats.map((_,i)=> `<div class="beat-dot ${i===beatIdx?'active':''}"></div>`).join('');
+
+    body = `
+      <div class="cutscene-wrap">
+        <div class="cutscene-scene" style="--scene-color:${province.color}">
+          <div class="scene-emblem">${province.name}</div>
+          <div class="scene-figures">
+            ${buildSilhouetteLG(record.appearance)}
+            ${isGuide ? buildSilhouetteLG(GUIDE_APPEARANCE) : ''}
+          </div>
+        </div>
+        <div class="cutscene-dialogue">
+          <div class="speaker-name ${isGuide?'':'narrator'}">${speakerLabel}</div>
+          <div class="dialogue-text" key="${beatIdx}">${fillTemplate(beat.text, record)}</div>
+          <div class="cutscene-controls">
+            <div class="beat-dots">${dots}</div>
+            <div style="display:flex; gap:10px;">
+              <button class="btn" id="skip-cutscene">Skip</button>
+              <button class="btn btn-primary" id="next-beat">${beatIdx===data.beats.length-1?'Continue':'Next →'}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  app.innerHTML = `
+    <div class="ticket-header">
+      <div>
+        <div class="ticket-eyebrow">Iron Island · Fight League</div>
+        <div class="ticket-title">${record.name}'S FIRST WALK</div>
+      </div>
+      <div class="ticket-sub">${province.name.toUpperCase()}</div>
+    </div>
+    <div class="panel">${body}</div>
+  `;
+
+  const nextBtn = document.getElementById('next-beat');
+  if(nextBtn) nextBtn.onclick = ()=>{ state.cutsceneBeat += 1; render(); };
+
+  const skipBtn = document.getElementById('skip-cutscene');
+  if(skipBtn) skipBtn.onclick = ()=>{ state.cutsceneBeat = data.beats.length; render(); };
+
+  const endBtn = document.getElementById('end-to-roster');
+  if(endBtn) endBtn.onclick = ()=>{
+    state.screen = 'roster';
+    state.cutsceneFighter = null;
+    state.cutsceneBeat = 0;
+    render();
+  };
+}
+
+function renderProgress(){
+  const n = totalSteps();
+  let html = '';
+  for(let i=1;i<=n;i++){
+    let cls = 'punch';
+    if(i < state.step) cls += ' done';
+    else if(i === state.step) cls += ' current';
+    html += `<div class="${cls}"></div>`;
+  }
+  return html;
+}
+
+function renderIntro(){
+  const count = loadRoster().length;
+  return `
+    <div class="intro">
+      <div class="island-mark">★ Eight Provinces · One Island · No Easy Roads ★</div>
+      <h1>BEGIN YOUR<br><span>FIGHTER'S PATH</span></h1>
+      <p>Every champion on Iron Island started the same way — twelve years old, a name, a hometown, and whatever the Sequencing Event decides you're made of. Answer honest. It writes your card.</p>
+      <div class="btn-row" style="justify-content:center; gap:14px; margin-top:0;">
+        <button class="btn btn-primary" id="start-btn">Start Intake →</button>
+        <button class="btn" id="view-roster-btn">View Roster (${count})</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderBasics(){
+  const opts = PROVINCES.map(p=>{
+    const sel = state.provinceId===p.id ? 'selected':'';
+    return `<div class="province-card ${sel}" data-prov="${p.id}" style="--card-color:${p.color}">
+      <div class="pname">${p.name}</div>
+      <div class="pdesc">${p.desc}</div>
+      <div class="ptags">${p.primary.map(d=>DISCIPLINE_NAMES[d]).join(' · ')}</div>
+    </div>`;
+  }).join('');
+
+  const province = PROVINCES.find(p=>p.id===state.provinceId);
+  const settlementOpts = province ? province.settlements.map(s=>`<option value="${s}" ${state.settlement===s?'selected':''}>${s}</option>`).join('') : '';
+
+  return `
+    ${inheritance ? `<div class="stamp-seal" style="animation:none; opacity:1; margin-bottom:18px;">★ Continuing the legacy of ${inheritance.parentName}</div>` : ''}
+    <div class="section-label">Identity</div>
+    <div class="field">
+      <label>Fighter Name</label>
+      <input type="text" id="name-input" placeholder="e.g. Danny Ferro" value="${state.name}">
+    </div>
+
+    <div class="section-label">Home Province</div>
+    <div class="province-grid">${opts}</div>
+
+    ${province ? `
+    <div class="field" style="margin-top:16px;">
+      <label>Hometown Settlement</label>
+      <select id="settlement-input">
+        <option value="">— choose a settlement —</option>
+        ${settlementOpts}
+      </select>
+    </div>` : ''}
+
+    <div class="section-label" style="margin-top:8px;">Build (Age 12)</div>
+    <div class="field-row">
+      <div class="field">
+        <label>Height — ${heightLabel(state.heightIn)}</label>
+        <input type="range" min="56" max="66" id="height-input" value="${state.heightIn}">
+      </div>
+      <div class="field">
+        <label>Weight — ${state.weightLb} lb</label>
+        <input type="range" min="80" max="135" id="weight-input" value="${state.weightLb}">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <span></span>
+      <button class="btn btn-primary" id="next-basics" ${(!state.name||!state.provinceId||!state.settlement)?'disabled':''}>Begin Sequencing Event →</button>
+    </div>
+  `;
+}
+
+function renderTuning(){
+  if(!fighterCache) fighterCache = computeFighter();
+  const f = fighterCache;
+  const used = sumAlloc(state.tuningAlloc);
+  const pool = TUNING_POOL_TOTAL - used;
+  const ceiling = bandCeiling(f.age, f.talentTier);
+  const statList = [['Speed','speed'],['Quickness','quickness'],['Toughness','toughness'],['Power','power'],['Agility','agility']];
+
+  const rows = statList.map(([label,key])=>{
+    const base = f.stats[key];
+    const alloc = state.tuningAlloc[key] || 0;
+    const final = clamp(base + alloc, 1, ceiling);
+    const barPct = clamp(final / ceiling * 100, 0, 100);
+    const canPlus = pool > 0 && final < ceiling;
+    const canMinus = alloc > 0;
+    return `
+      <div class="tuning-row">
+        <div class="stat-label">${label.toUpperCase()}</div>
+        <div class="stat-track"><div class="stat-fill" style="width:${barPct}%"></div></div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button class="tuning-btn" data-tune="${key}" data-dir="-1" ${canMinus?'':'disabled'}>−</button>
+          <div class="tuning-val">${final}</div>
+          <button class="tuning-btn" data-tune="${key}" data-dir="1" ${canPlus?'':'disabled'}>+</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="section-label">Final Training Camp</div>
+    <p style="font-family:var(--body); font-size:14px; color:var(--bone-dim); margin-bottom:18px;">
+      Before the card locks in, ${state.name} gets one last stretch of focused training. Spend the points where they'll matter most — leftover points are wasted, so use what you've got.
+    </p>
+    <div class="tuning-pool">${pool} TRAINING POINT${pool===1?'':'S'} REMAINING</div>
+    ${rows}
+    <div class="btn-row">
+      <span></span>
+      <button class="btn btn-primary" id="apply-tuning">Lock In Stats →</button>
+    </div>
+  `;
+}
+
+function renderQuestion(qi){
+  const q = QUESTIONS[qi];
+  const opts = q.options.map((o,i)=>{
+    const letter = String.fromCharCode(65+i);
+    return `<button class="option" data-qopt="${i}"><span class="opt-letter">${letter}.</span>${o.text}</button>`;
+  }).join('');
+  return `
+    <div class="q-wrap">
+      <div class="q-counter">QUESTION ${qi+1} OF ${QUESTIONS.length}</div>
+      <div class="q-title">${q.title}</div>
+      <div class="q-prompt">${q.prompt}</div>
+      ${opts}
+    </div>
+  `;
+}
+
+let fighterCache = null;
+let lastConfirmedRecord = null;
+let inheritance = null; // { parentId, parentName, disciplineLean, potentialBonus } when creating an heir
+
+const ALEXANDRETTA_NORTH_SETTLEMENTS = ['Blackford','Mosshead','Cowborough','Wolverbridge'];
+const NAME_POOLS = {
+  alexandretta_north: {
+    first: ['Liam','Sean','Declan','Cormac','Rory','Finn','Aidan','Cian','Eoin','Niall','Tadhg','Brendan','Colm','Fergus','Ronan','Patrick','Michael','Conor','Kieran','Darragh','Oisin','Padraig','Seamus','Donal','Ruairi','Cathal','Eamon','Diarmuid','Turlough','Brian','Fintan','Oscar','Art','Cathaoir','Diarmait','Eoghan','Fiachra','Gearoid','Lorcan','Malachy','Naoise','Odhran','Piaras','Riordan','Ultan','Aengus','Breandan','Caolan','Eanna','Tiernan'],
+    last: ["O'Brien",'Murphy','Kelly','Ryan','Sullivan','Walsh','Byrne','Doyle','McCarthy','Gallagher','Doherty','Kennedy','Lynch','Fitzgerald','Nolan','Flynn','Duffy','Boyle','Hogan','Reilly','Quinn','Casey','Sheehan','Brennan','Maguire','O\'Connor','O\'Neill','O\'Sullivan','McMahon','Coyle','Donovan','Fahey','Grady','Hennessy','Kavanagh','Lynskey','Moran','Nagle','O\'Dwyer','Purcell','Rafferty','Shanahan','Tierney','Whelan','Costello','Devlin','Egan','Farrell','Guinane','Healy'],
+  },
+  alexandretta_south: {
+    first: ['William','Henry','Edward','Arthur','George','Charles','Thomas','Oliver','James','Frederick','Albert','Walter','Edmund','Percy','Reginald','Geoffrey','Nigel','Cedric','Bertram','Cuthbert','Humphrey','Leonard','Norman','Sidney','Vernon','Wilfred','Ambrose','Clarence','Douglas','Ernest','Herbert','Cecil','Alfred','Roland','Bernard','Hubert','Rupert','Lionel','Neville','Basil','Aubrey','Maurice','Stanley','Sylvester','Theodore','Wallace','Alistair','Barnaby','Crispin','Desmond'],
+    last: ['Whitfield','Ashworth','Pemberton','Sutcliffe','Hargreaves','Fairweather','Winterbourne','Blackwood','Thornbury','Camden','Radcliffe','Ellsworth','Harrington','Fenwick','Carrington','Ashford','Beaumont','Chatham','Dunmore','Kingsley','Marlowe','Pembroke','Stanhope','Wycliffe','Barrington','Aldridge','Blackmore','Cavendish','Dashwood','Elmhurst','Falkner','Grantham','Hollingsworth','Ingram','Kirkland','Lockwood','Middleton','Norwood','Osborne','Prescott','Rutherford','Sherbourne','Thackeray','Underwood','Vane','Wetherby','Yardley','Ashcombe','Bramwell','Farringdon'],
+  },
+  kolsati: {
+    first: ['Marco','Luca','Matteo','Giovanni','Antonio','Salvatore','Franco','Dante','Enzo','Vincenzo','Alessandro','Roberto','Nico','Gianni','Rocco','Paolo','Stefano','Fabrizio','Massimo','Leonardo','Emilio','Guido','Aldo','Renato','Silvio','Tommaso','Carlo','Domenico','Pietro','Angelo','Bruno','Cesare','Dino','Ettore','Fabio','Gino','Ivo','Lorenzo','Mario','Nicola','Orlando','Pasquale','Riccardo','Sandro','Tullio','Umberto','Valerio','Alfio','Bartolomeo','Cosimo'],
+    last: ['Romano','Ferrara','Russo','Marino','Greco','Bruno','Rizzo','Costa','Fontana','Caruso','Moretti','Barbieri','Conti','De Luca','Gallo','Leone','Mancini','Ricci','Rossi','Santoro','Serra','Vitale','Colombo','Esposito','Marchetti','Bianchi','Bergamo','Cattaneo','D\'Amico','Ferraro','Gatti','Lombardi','Longo','Mariani','Martini','Milani','Monti','Orlando','Pellegrini','Ferretti','Ricciardi','Sartori','Testa','Valentini','Vecchi','Amato','Basile','Cardinale','Donati','Falcone'],
+  },
+  sherwood: {
+    first: ['Angus','Callum','Duncan','Ewan','Fraser','Graham','Hamish','Ian','Lachlan','Malcolm','Rory','Stuart','Alistair','Gordon','Kenneth','Robert','Douglas','Neil','Craig','Colin','Andrew','Iain','Cameron','Kyle','Ross','Blair','Keith','Murdo','Aonghas','Tavish','Ruaridh','Alasdair','Broc','Cailean','Dougal','Eachann','Fearghas','Gilleasbuig','Hector','Innes','Jamie','Lennox','Magnus','Niall','Osgar','Quintin','Robb','Seumas','Tearlach','Padraig'],
+    last: ['MacLeod','Campbell','Stewart','Fraser','Robertson','MacDonald','Cameron','Wallace','Grant','Murray','Ross','Mackay','MacKenzie','Sinclair','Ferguson','Buchanan','Munro','Drummond','Elliot','Hamilton','Kerr','Lennox','Napier','Tait','Urquhart','MacGregor','MacIntyre','MacPherson','MacKay','MacLean','MacNeil','MacRae','MacTavish','Anderson','Brodie','Carmichael','Dalziel','Erskine','Forbes','Gillespie','Home','Irvine','Johnstone','Leslie','Melville','Ogilvie','Pringle','Rennie','Scrimgeour','Wemyss'],
+  },
+  gazon: {
+    first: ['Kwame','Kofi','Abiodun','Chidi','Emeka','Sekou','Themba','Jabari','Obi','Tendai','Kojo','Adisa','Femi','Bakari','Kesi','Kwabena','Yaw','Kwesi','Kwaku','Obinna','Uche','Ikenna','Chukwuemeka','Olumide','Tunde','Segun','Ayodele','Chike','Dayo','Ebo','Fela','Gyasi','Hakim','Idi','Jelani','Lutalo','Mandla','Nnamdi','Oba','Panya','Quame','Rashidi','Sipho','Taye','Uzoma','Wale','Xolani','Yao','Chibueze','Damani'],
+    last: ['Achebe','Okafor','Mensah','Diallo','Kamau','Adeyemi','Nwosu','Osei','Toure','Banda','Mwangi','Abara','Chukwu','Danso','Eze','Faraji','Gueye','Jalloh','Konate','Mbeki','Ndiaye','Okoro','Sowande','Traore','Zuberi','Adisa','Boateng','Camara','Diop','Fofana','Gyasi','Haruna','Ibe','Jawara','Keita','Lumumba','Modise','Nkosi','Onyango','Quaye','Sanogo','Tiwa','Umeh','Vusi','Wanjiru','Xaba','Yeboah','Ade','Bello','Cisse'],
+  },
+  ditiero: {
+    first: ['Etienne','Remy','Thibault','Gaston','Armand','Beauregard','Cyprien','Desmond','Fontaine','Laurent','Marcel','Pascal','Reynard','Sebastien','Theo','Auguste','Baptiste','Claude','Emile','Felix','Gerard','Henri','Jacques','Leon','Maurice','Octave','Philippe','Raoul','Valmont','Xavier','Alphonse','Anatole','Cyril','Edmond','Fernand','Gustave','Hilaire','Isidore','Jerome','Lucien','Napoleon','Onesime','Prosper','Romain','Serge','Thadee','Ulysse','Valere','Wilfrid','Zenon'],
+    last: ['Boudreaux','Thibodeaux','Landry','Broussard','Hebert','Guidry','Fontenot','Comeaux','Melancon','Prejean','Robicheaux','Trahan','Arceneaux','Babineaux','Cormier','Dugas','Gautreaux','LeBlanc','Moreau','Ory','Perrault','Richard','Savoy','Terrebonne','Villere','Aucoin','Benoit','Chauvin','Dubois','Fournier','Gaudet','Hamon','Istre','Judice','Lacombe','Mouton','Naquin','Ortego','Pitre','Rousseau','Simoneaux','Tassin','Vidrine','Waguespack','Ancelet','Blanchard','Chretien','Deveraux','Fontenette','Guillory'],
+  },
+  carpathia: {
+    first: ['Vlad','Radu','Mircea','Andrei','Stefan','Bogdan','Cristian','Dorin','Emil','Florin','Gheorghe','Ionut','Marius','Nicolae','Petru','Alexandru','Adrian','Catalin','Costin','Doru','Eugen','Gabriel','Horia','Iulian','Liviu','Mihai','Octavian','Sorin','Tiberiu','Valentin','Aurel','Corneliu','Dumitru','Emanuel','Grigore','Ilie','Iosif','Laurentiu','Miron','Nichifor','Ovidiu','Remus','Sergiu','Teodor','Traian','Vasile','Victor','Vlaicu','Zamfir','Codrin'],
+    last: ['Dracul','Constantinescu','Popescu','Ionescu','Stanescu','Radulescu','Munteanu','Dumitrescu','Georgescu','Marinescu','Vasilescu','Petrescu','Nistor','Barbu','Ciobanu','Lungu','Moldovan','Rusu','Serban','Toma','Voicu','Zaharia','Balan','Coman','Dinu','Draculescu','Enescu','Iliescu','Manescu','Nedelescu','Oprescu','Pavelescu','Sandulescu','Tanasescu','Ungureanu','Albu','Cretu','Dobre','Frunza','Gheorghiu','Hriscu','Iordache','Jinga','Lazar','Marin','Neagu','Oancea','Preda','Stoica','Tudor'],
+  },
+  northeast: {
+    first: ['Hiroshi','Kenji','Takeshi','Ryo','Daiki','Haruto','Sora','Riku','Diego','Mateo','Santiago','Emilio','Rafael','Alejandro','Cruz','Yuki','Rin','Akira','Daisuke','Hayato','Isamu','Jun','Katsu','Masato','Noboru','Osamu','Shin','Tatsuya','Yamato','Yusuke','Carlos','Eduardo','Fernando','Gabriel','Ignacio','Javier','Leonardo','Manuel','Nicolas','Octavio','Pablo','Ricardo','Kazuki','Ryota','Tomas','Julio','Kentaro','Hideo','Esteban','Ramon'],
+    last: ['Watanabe','Tanaka','Yamamoto','Nakamura','Kobayashi','Saito','Sato','Suzuki','Takahashi','Ito','Reyes','Morales','Guerrero','Delgado','Cabrera','Villanueva','Ochoa','Salazar','Vargas','Nishida','Fujimoto','Hernandez','Castillo','Navarro','Espinoza','Kimura','Matsumoto','Inoue','Kato','Yoshida','Yamada','Sasaki','Yamaguchi','Matsuda','Ono','Ramirez','Torres','Flores','Gutierrez','Chavez','Ramos','Contreras','Aguilar','Mendez','Rios','Solis','Zamora','Cortez','Pena','Duarte'],
+  },
+  bay: {
+    first: ['Jack','Ryan','Tyler','Brandon','Justin','Cody','Dustin','Travis','Wyatt','Colton','Hunter','Logan','Mason','Austin','Blake','Kevin','Eric','Jason','Aaron','Derek','Shane','Todd','Scott','Chad','Kurt','Brett','Trevor','Marcus','Jordan','Casey','Brian','Gregory','Timothy','Jeffrey','Sean','Patrick','Matthew','Nathan','Corey','Bryan','Dennis','Wesley','Curtis','Dwayne','Randall','Vincent','Warren','Cole','Grant','Chase'],
+    last: ['Anderson','Miller','Johnson','Davis','Thompson','Wilson','Moore','Taylor','Harris','Clark','Lewis','Walker','Young','Allen','King','Wright','Scott','Green','Baker','Adams','Nelson','Carter','Mitchell','Perez','Roberts','Turner','Phillips','Campbell','Parker','Evans','Edwards','Collins','Stewart','Morris','Rogers','Reed','Cook','Morgan','Bell','Murphy','Bailey','Cooper','Richardson','Cox','Howard','Ward','Peterson','Gray','Ramirez','James'],
+  },
+};
+function pickName(provinceId, settlementName){
+  let poolKey = provinceId;
+  if(provinceId === 'alexandretta'){
+    poolKey = ALEXANDRETTA_NORTH_SETTLEMENTS.includes(settlementName) ? 'alexandretta_north' : 'alexandretta_south';
+  }
+  const pool = NAME_POOLS[poolKey] || NAME_POOLS.bay;
+  return `${pick(pool.first)} ${pick(pool.last)}`;
+}
+const MATE_BACKGROUNDS = [
+  'a gym towel kid who grew up to run the place',
+  'works the docks, never misses a fight night',
+  'runs a noodle stand two blocks from the arena',
+  'a ref everyone in town respects',
+  'a schoolteacher who hates the violence but loves the fighter',
+  'a former amateur fighter herself, retired undefeated',
+  'the promoter\'s kid, knows everyone worth knowing',
+  'tends bar at the fighter\'s usual spot after wins',
+  'a sportswriter who covers the local circuit',
+  'grew up two doors down, been around since juveniles',
+];
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+// Mate's name draws from the SAME province/settlement as the fighter — matches how the
+// world's ethnic makeup is laid out, since a mate is usually someone from around home.
+function generateMate(provinceId, settlementName){ return { name: pickName(provinceId, settlementName), background: pick(MATE_BACKGROUNDS) }; }
+
+
+function renderReveal(){
+  if(!fighterCache) fighterCache = computeFighter();
+  const f = fighterCache;
+  const ceiling = bandCeiling(f.age, f.talentTier);
+  const statList = [
+    ['SPD', f.stats.speed], ['QCK', f.stats.quickness], ['TGH', f.stats.toughness],
+    ['PWR', f.stats.power], ['AGL', f.stats.agility]
+  ];
+
+  const statRows = statList.map(([label,val])=>{
+    const barPct = clamp(val / ceiling * 100, 0, 100);
+    return `
+    <div class="stat-row">
+      <div class="stat-label">${label}</div>
+      <div class="stat-track"><div class="stat-fill" data-target="${barPct}"></div></div>
+      <div class="stat-num">${val}</div>
+    </div>
+  `;}).join('');
+
+  return `
+    <div class="card-wrap">
+      <div class="stamp-seal">✓ Intake Approved</div>
+
+      ${!state.saved ? `
+      <div class="customize-panel">
+        <div class="section-label">Customize Before Saving</div>
+        <div class="field-row">
+          <div class="field"><label>Name</label><input type="text" id="reveal-name-input" value="${state.name}"></div>
+          <div class="field"><label>Build</label>
+            <select id="build-input">
+              <option value="lean" ${state.appearance.build==='lean'?'selected':''}>Lean</option>
+              <option value="athletic" ${state.appearance.build==='athletic'?'selected':''}>Athletic</option>
+              <option value="stocky" ${state.appearance.build==='stocky'?'selected':''}>Stocky</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Height — ${heightLabel(state.heightIn)}</label><input type="range" min="56" max="66" id="reveal-height-input" value="${state.heightIn}"></div>
+          <div class="field"><label>Weight — ${state.weightLb} lb</label><input type="range" min="80" max="135" id="reveal-weight-input" value="${state.weightLb}"></div>
+        </div>
+        <div class="field">
+          <label>Skin Tone</label>
+          <div class="swatch-row">${SKIN_TONES.map(c=>`<button class="swatch ${state.appearance.skin===c?'selected':''}" data-skin="${c}" style="background:${c}"></button>`).join('')}</div>
+        </div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Hair</label>
+          <div class="swatch-row">${HAIR_COLORS.map(c=>`<button class="swatch ${state.appearance.hair===c?'selected':''}" data-hair="${c}" style="background:${c==='none'?'transparent':c}; ${c==='none'?'border-style:dashed;':''}">${c==='none'?'✕':''}</button>`).join('')}</div>
+        </div>
+      </div>
+      ` : ''}
+
+      <div class="fighter-card">
+        <div class="fc-head">
+          <div class="fc-photo">${buildSilhouetteSM(state.appearance)}</div>
+          <div>
+            <div class="fc-name">${state.name || 'UNNAMED FIGHTER'}</div>
+            <div class="fc-meta">AGE ${f.age} · ${heightLabel(state.heightIn)} · ${state.weightLb} LB · ${state.settlement}, ${f.province.name.toUpperCase()}</div>
+            <div class="fc-disc">${DISCIPLINE_NAMES[f.primaryDisc]} <span style="color:var(--bone-dim); font-weight:400;">/ ${DISCIPLINE_NAMES[f.secondaryDisc]}</span></div>
+          </div>
+        </div>
+        <div class="fc-body">
+          <div class="fc-stats">${statRows}</div>
+          <div class="fc-meta-grid">
+            <div class="meta-box"><div class="mval">${f.potential}</div><div class="mlabel">Potential</div></div>
+            <div class="meta-box"><div class="mval">${f.injury}</div><div class="mlabel">Durability /20</div></div>
+            <div class="meta-box"><div class="mval">${f.superstar}</div><div class="mlabel">Drawing Power</div></div>
+          </div>
+          <div class="fc-tags">
+            <div class="tag">${f.trait}</div>
+            <div class="tag secondary">${DISCIPLINE_NAMES[f.primaryDisc]}</div>
+            <div class="tag secondary">Juvenile · 0-0-0</div>
+            ${f.talentTier==='generational' ? `<div class="tag" style="background:var(--ink-red);">⚡ Generational Talent</div>` : ''}
+            ${f.talentTier==='prodigy' ? `<div class="tag secondary" style="color:var(--brass); border-color:var(--brass);">Prodigy</div>` : ''}
+            ${f.legacy ? `<div class="tag secondary">Heir of ${f.legacy.parentName}</div>` : ''}
+          </div>
+        </div>
+        <div class="fc-footer">IIFL FIGHTER CARD · ${f.province.name.toUpperCase()} · SEQUENCING EVENT COMPLETE</div>
+      </div>
+
+      <div class="report">
+        <div class="report-title">Scout's Note</div>
+        <p>${buildScoutNote(f)}</p>
+      </div>
+
+      <div class="btn-row" style="max-width:480px; width:100%;">
+        <button class="btn" id="restart-btn">Start Over</button>
+        <button class="btn btn-primary" id="confirm-btn" ${state.saved?'disabled':''}>${state.saved?'Saved ✓':'Confirm Fighter'}</button>
+      </div>
+      <div class="save-status" id="save-status"></div>
+      ${state.saved ? `<div class="btn-row" style="max-width:480px; width:100%;"><button class="btn btn-primary" id="begin-story-btn">Begin Your Story →</button><button class="btn" id="goto-roster-btn">View Roster →</button></div>` : ''}
+    </div>
+  `;
+}
+
+const SKIN_TONES = ['#3E2A1E','#5C3A24','#8C5A35','#C68642','#E0AC69','#F1C27D'];
+const HAIR_COLORS = ['#0E0C0A','#3B2417','#6B4226','#A85C2A','#C9A23C','#D9D2C5','none'];
+const DEFAULT_APPEARANCE = { skin:'#C68642', hair:'#2B1B12', build:'athletic' };
+const GUIDE_APPEARANCE = { skin:'#0E0C0A', hair:'none', build:'athletic' };
+
+function buildMult(b){ return { lean:0.8, athletic:1, stocky:1.25 }[b] || 1; }
+
+function buildSilhouetteSM(app){
+  app = app || DEFAULT_APPEARANCE;
+  const stroke = (3 * buildMult(app.build)).toFixed(1);
+  const hair = app.hair === 'none' ? '' : `<path d="M13 7 Q20 -2 27 7" stroke="${app.hair}" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+  return `<svg width="40" height="56" viewBox="0 0 40 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="20" cy="10" r="7" fill="${app.skin}"/>
+    ${hair}
+    <path d="M8 56 L11 30 Q12 22 20 22 Q28 22 29 30 L32 56" stroke="${app.skin}" stroke-width="${stroke}" fill="none" stroke-linecap="round"/>
+    <path d="M11 28 L4 38 M29 28 L36 38" stroke="${app.skin}" stroke-width="${stroke}" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function buildSilhouetteLG(app){
+  app = app || DEFAULT_APPEARANCE;
+  const stroke = (4 * buildMult(app.build)).toFixed(1);
+  const hair = app.hair === 'none' ? '' : `<path d="M12 8 Q20 -3 28 8" stroke="${app.hair}" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.82"/>`;
+  return `<svg width="64" height="118" viewBox="0 0 40 74" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="20" cy="11" r="8" fill="${app.skin}" opacity="0.82"/>
+    ${hair}
+    <path d="M7 74 L10 38 Q11 28 20 28 Q29 28 30 38 L33 74" stroke="${app.skin}" stroke-width="${stroke}" fill="none" stroke-linecap="round" opacity="0.82"/>
+    <path d="M10 35 L2 48 M30 35 L38 48" stroke="${app.skin}" stroke-width="${stroke}" stroke-linecap="round" opacity="0.82"/>
+    <path d="M14 74 L13 56 M26 74 L27 56" stroke="${app.skin}" stroke-width="${stroke}" stroke-linecap="round" opacity="0.82"/>
+  </svg>`;
+}
+
+function buildScoutNote(f){
+  const notes = [];
+  if(f.potential >= 75) notes.push(`elite long-term upside`);
+  else if(f.potential >= 60) notes.push(`solid growth projection`);
+  else notes.push(`modest ceiling, will need to outwork it`);
+
+  if(f.injury <= 9) notes.push(`worryingly fragile early`);
+  else if(f.injury >= 16) notes.push(`built like he doesn't break`);
+
+  if(f.superstar >= 65) notes.push(`already has the "it" factor a promoter dreams about`);
+  else if(f.superstar <= 25) notes.push(`will have to win crowds the hard way, on results alone`);
+
+  return `${state.name} projects as a ${DISCIPLINE_NAMES[f.primaryDisc]} out of ${state.settlement}, ${f.province.name} — ${notes.join('; ')}. Personality reads ${f.trait.toLowerCase()}. Recommend assignment to the nearest Fight Pit for Juvenile development.`;
+}
+
+/* ============================ EVENTS ============================ */
+
+function wireEvents(){
+  const startBtn = document.getElementById('start-btn');
+  if(startBtn) startBtn.onclick = ()=>{ inheritance = null; state.step = 1; render(); };
+
+  const viewRosterBtn = document.getElementById('view-roster-btn');
+  if(viewRosterBtn) viewRosterBtn.onclick = ()=>{ state.screen = 'roster'; render(); };
+
+  const nameInput = document.getElementById('name-input');
+  if(nameInput) nameInput.oninput = (e)=>{ state.name = e.target.value; updateNextBasicsDisabled(); };
+
+  document.querySelectorAll('.province-card').forEach(card=>{
+    card.onclick = ()=>{
+      state.provinceId = card.dataset.prov;
+      state.settlement = '';
+      render();
+    };
+  });
+
+  const settlementInput = document.getElementById('settlement-input');
+  if(settlementInput) settlementInput.onchange = (e)=>{ state.settlement = e.target.value; updateNextBasicsDisabled(); };
+
+  const heightInput = document.getElementById('height-input');
+  if(heightInput) heightInput.oninput = (e)=>{ state.heightIn = parseInt(e.target.value); render(); };
+
+  const weightInput = document.getElementById('weight-input');
+  if(weightInput) weightInput.oninput = (e)=>{ state.weightLb = parseInt(e.target.value); render(); };
+
+  const nextBasics = document.getElementById('next-basics');
+  if(nextBasics) nextBasics.onclick = ()=>{ if(state.name && state.provinceId && state.settlement){ state.step = 2; render(); } };
+
+  document.querySelectorAll('[data-qopt]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const qi = state.step - 2;
+      const oi = parseInt(btn.dataset.qopt);
+      state.answers[qi] = QUESTIONS[qi].options[oi];
+      state.step += 1;
+      render();
+    };
+  });
+
+  document.querySelectorAll('[data-tune]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const key = btn.dataset.tune;
+      const dir = parseInt(btn.dataset.dir);
+      const used = sumAlloc(state.tuningAlloc);
+      const base = fighterCache.stats[key];
+      const alloc = state.tuningAlloc[key] || 0;
+      const ceiling = bandCeiling(fighterCache.age, fighterCache.talentTier);
+      if(dir > 0){
+        if(used < TUNING_POOL_TOTAL && base + alloc < ceiling){ state.tuningAlloc[key] = alloc + 1; }
+      } else {
+        if(alloc > 0){ state.tuningAlloc[key] = alloc - 1; }
+      }
+      render();
+    };
+  });
+
+  const applyTuningBtn = document.getElementById('apply-tuning');
+  if(applyTuningBtn) applyTuningBtn.onclick = ()=>{
+    const ceiling = bandCeiling(fighterCache.age, fighterCache.talentTier);
+    Object.keys(state.tuningAlloc).forEach(key=>{
+      fighterCache.stats[key] = clamp(fighterCache.stats[key] + (state.tuningAlloc[key] || 0), 1, ceiling);
+    });
+    state.step += 1;
+    render();
+  };
+
+  const restartBtn = document.getElementById('restart-btn');
+  if(restartBtn) restartBtn.onclick = ()=>{
+    Object.assign(state, { step:0, name:'', provinceId:null, settlement:'', heightIn:60, weightLb:100, qIndex:0, answers:[], saved:false,
+      tuningAlloc:{ speed:0, quickness:0, toughness:0, power:0, agility:0 },
+      appearance:{ skin:'#C68642', hair:'#2B1B12', build:'athletic' } });
+    fighterCache = null;
+    inheritance = null;
+    render();
+  };
+
+  const confirmBtn = document.getElementById('confirm-btn');
+  if(confirmBtn) confirmBtn.onclick = ()=>{
+    const statusEl = document.getElementById('save-status');
+    const f = fighterCache;
+    if(!f){ return; }
+    const record = {
+      id: 'fighter_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+      name: state.name,
+      age: f.age,
+      talentTier: f.talentTier,
+      provinceId: f.province.id,
+      settlement: state.settlement,
+      heightIn: state.heightIn,
+      weightLb: state.weightLb,
+      stats: f.stats,
+      potential: f.potential,
+      injury: f.injury,
+      superstar: f.superstar,
+      primaryDisc: f.primaryDisc,
+      secondaryDisc: f.secondaryDisc,
+      trait: f.trait,
+      createdAt: new Date().toISOString(),
+      mate: null,
+      appearance: { ...state.appearance },
+      childrenIds: [],
+      parentId: f.legacy ? f.legacy.parentId : null,
+      parentName: f.legacy ? f.legacy.parentName : null,
+    };
+    const ok = addFighterToRoster(record);
+    if(ok && f.legacy){
+      const roster = loadRoster();
+      const parent = roster.find(r=> r.id === f.legacy.parentId);
+      if(parent){
+        parent.childrenIds = parent.childrenIds || [];
+        parent.childrenIds.push(record.id);
+        saveRoster(roster);
+      }
+      inheritance = null;
+    }
+    if(ok){
+      state.saved = true;
+      lastConfirmedRecord = record;
+      if(statusEl){ statusEl.textContent = '✓ Saved to roster locally.'; statusEl.classList.remove('error'); }
+      render();
+    } else {
+      if(statusEl){ statusEl.textContent = '✗ Save failed — storage may be full or unavailable in this browser.'; statusEl.classList.add('error'); }
+    }
+  };
+
+  const gotoRosterBtn = document.getElementById('goto-roster-btn');
+  if(gotoRosterBtn) gotoRosterBtn.onclick = ()=>{ state.screen = 'roster'; render(); };
+
+  const beginStoryBtn = document.getElementById('begin-story-btn');
+  if(beginStoryBtn) beginStoryBtn.onclick = ()=>{ if(lastConfirmedRecord) startCutscene(lastConfirmedRecord); };
+
+  const revealNameInput = document.getElementById('reveal-name-input');
+  if(revealNameInput) revealNameInput.oninput = (e)=>{
+    state.name = e.target.value;
+    const fcName = document.querySelector('.fc-name');
+    if(fcName) fcName.textContent = state.name || 'UNNAMED FIGHTER';
+  };
+
+  const buildInput = document.getElementById('build-input');
+  if(buildInput) buildInput.onchange = (e)=>{ state.appearance.build = e.target.value; render(); };
+
+  const revealHeightInput = document.getElementById('reveal-height-input');
+  if(revealHeightInput) revealHeightInput.oninput = (e)=>{ state.heightIn = parseInt(e.target.value); render(); };
+
+  const revealWeightInput = document.getElementById('reveal-weight-input');
+  if(revealWeightInput) revealWeightInput.oninput = (e)=>{ state.weightLb = parseInt(e.target.value); render(); };
+
+  document.querySelectorAll('[data-skin]').forEach(btn=>{
+    btn.onclick = ()=>{ state.appearance.skin = btn.dataset.skin; render(); };
+  });
+
+  document.querySelectorAll('[data-hair]').forEach(btn=>{
+    btn.onclick = ()=>{ state.appearance.hair = btn.dataset.hair; render(); };
+  });
+
+  // animate stat bars on reveal
+  document.querySelectorAll('.stat-fill').forEach((el,i)=>{
+    const target = el.dataset.target;
+    setTimeout(()=>{ el.style.width = target + '%'; }, 150 + i*90);
+  });
+}
+
+function updateNextBasicsDisabled(){
+  const btn = document.getElementById('next-basics');
+  if(btn) btn.disabled = !(state.name && state.provinceId && state.settlement);
+}
+
+render();
+</script>
+</body>
+</html>
