@@ -178,10 +178,48 @@
     .toggle-row{ flex-direction:column; }
     .record-grid{ grid-template-columns:1fr; }
   }
+
+  /* ---- fighter card modal ---- */
+  .clickable-name{ cursor:pointer; text-decoration:underline; text-decoration-color:transparent; transition:text-decoration-color .12s ease; }
+  .clickable-name:hover{ text-decoration-color:var(--brass); color:var(--brass); }
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(10,8,6,0.78); display:flex; align-items:flex-start; justify-content:center;
+    padding:40px 16px; z-index:1000; overflow-y:auto;
+  }
+  .modal-card{ background:var(--bg-panel); border:1px solid var(--brass-dim); max-width:520px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.55); }
+  .modal-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .modal-title{ font-family:var(--display); font-size:20px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .modal-close{ background:transparent; border:1px solid var(--line); color:var(--muted); width:30px; height:30px; cursor:pointer; font-family:var(--mono); font-size:14px; }
+  .modal-close:hover{ border-color:var(--ink-red); color:var(--ink-red); }
+  .modal-body{ padding:20px; }
+  .mf-head{ display:flex; gap:14px; align-items:center; margin-bottom:18px; }
+  .mf-avatar{ width:50px; height:70px; flex-shrink:0; display:flex; align-items:flex-end; }
+  .mf-avatar svg{ width:100%; height:100%; }
+  .mf-name{ font-family:var(--display); font-size:20px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .mf-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:3px; }
+  .mf-disc{ font-family:var(--label); font-size:11.5px; color:var(--brass); text-transform:uppercase; margin-top:3px; }
+  .mf-stats-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:18px; }
+  .mf-stat{ background:var(--bg-raised); border:1px solid var(--line); text-align:center; padding:8px 4px; }
+  .mf-stat .msv{ font-family:var(--mono); font-size:15px; font-weight:700; color:var(--brass); }
+  .mf-stat .msl{ font-family:var(--label); font-size:8.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-top:2px; }
+  .mf-tier-tabs{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+  .mf-tier-tab{ font-family:var(--label); font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; padding:7px 11px; border:1px solid var(--line); background:var(--bg-raised); color:var(--muted); cursor:pointer; }
+  .mf-tier-tab.active{ background:var(--ink-red); border-color:var(--ink-red); color:var(--bone); }
+  .mf-history-row{ display:grid; grid-template-columns:70px 1fr auto; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-family:var(--body); font-size:12.5px; }
+  .mf-history-row:last-child{ border-bottom:none; }
+  .mfh-date{ font-family:var(--mono); font-size:10px; color:var(--muted); }
+  .mfh-opp{ color:var(--bone-dim); }
+  .mfh-opp b{ color:var(--bone); }
+  .mfh-loc{ font-family:var(--mono); font-size:10px; color:var(--muted); display:block; margin-top:1px; }
+  .mfh-result{ font-family:var(--mono); font-size:11.5px; font-weight:700; }
+  .mfh-result.win{ color:var(--good); }
+  .mfh-result.loss{ color:var(--ink-red); }
+  .mf-empty{ text-align:center; padding:24px 10px; color:var(--muted); font-family:var(--body); font-size:13px; }
 </style>
 </head>
 <body>
 <div class="app" id="app"></div>
+<div id="modal-root"></div>
 
 <script>
 /* ============================ SHARED DATA (mirrors character creator) ============================ */
@@ -445,6 +483,88 @@ function getFighter(id){ return getRoster().find(f=> f.id === id); }
 
 /* ============================ RENDER ============================ */
 
+function heightLabel(inches){ if(!inches) return ''; const ft=Math.floor(inches/12), inch=inches%12; return `${ft}'${inch}"`; }
+
+/* ============================ FIGHTER CARD MODAL ============================ */
+
+const TIERS = ['All','Juvenile','Amateur','Semi-Pro','Pro','Exhibition'];
+let modalFighterId = null;
+let modalActiveTier = 'All';
+
+function openFighterCard(id){ modalFighterId = id; modalActiveTier = 'All'; renderModal(); }
+function closeFighterCard(){ modalFighterId = null; renderModal(); }
+
+function renderModal(){
+  const root = document.getElementById('modal-root');
+  if(!modalFighterId){ root.innerHTML = ''; return; }
+  const roster = loadRoster().map(ensureRecord);
+  const f = roster.find(r=> r.id === modalFighterId);
+  if(!f){ root.innerHTML = ''; return; }
+
+  const prov = PROVINCES.find(p=>p.id===f.provinceId);
+  const rec = f.record || { wins:0, losses:0 };
+  const log = f.fightLog || [];
+  const filtered = modalActiveTier === 'All' ? log : log.filter(e=> e.tier === modalActiveTier);
+  const sorted = [...filtered].sort((a,b)=> new Date(b.date) - new Date(a.date));
+
+  const historyHtml = sorted.length ? sorted.map(e=>{
+    const dateStr = e.date ? new Date(e.date).toLocaleDateString() : '—';
+    return `
+      <div class="mf-history-row">
+        <div class="mfh-date">${dateStr}</div>
+        <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
+        <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
+      </div>
+    `;
+  }).join('') : `<div class="mf-empty">No fights on record${modalActiveTier==='All'?'':' at this level'} yet.</div>`;
+
+  const tabsHtml = TIERS.map(t=>{
+    const count = t==='All' ? log.length : log.filter(e=>e.tier===t).length;
+    return `<button class="mf-tier-tab ${modalActiveTier===t?'active':''}" data-mf-tab="${t}">${t} (${count})</button>`;
+  }).join('');
+
+  root.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div class="modal-title">Fighter Card</div>
+          <button class="modal-close" data-modal-close>✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="mf-head">
+            <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
+            <div>
+              <div class="mf-name">${f.name}</div>
+              <div class="mf-meta">${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement||''}${prov?', '+prov.name:''}</div>
+              <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Career ${rec.wins}-${rec.losses}</div>
+            </div>
+          </div>
+          <div class="mf-stats-grid">
+            <div class="mf-stat"><div class="msv">${f.stats.speed}</div><div class="msl">SPD</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.quickness}</div><div class="msl">QCK</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.toughness}</div><div class="msl">TGH</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.power}</div><div class="msl">PWR</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.agility}</div><div class="msl">AGL</div></div>
+          </div>
+          <div class="mf-tier-tabs">${tabsHtml}</div>
+          <div class="mf-history">${historyHtml}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+document.addEventListener('click', (e)=>{
+  const openEl = e.target.closest('[data-open-fighter]');
+  if(openEl){ openFighterCard(openEl.dataset.openFighter); return; }
+  const closeEl = e.target.closest('[data-modal-close]');
+  if(closeEl){ closeFighterCard(); return; }
+  const overlayEl = e.target.closest('.modal-overlay');
+  if(overlayEl && e.target === overlayEl){ closeFighterCard(); return; }
+  const tabEl = e.target.closest('[data-mf-tab]');
+  if(tabEl){ modalActiveTier = tabEl.dataset.mfTab; renderModal(); return; }
+});
+
 const app = document.getElementById('app');
 
 function render(){
@@ -477,7 +597,7 @@ function fighterPickCard(f, slot){
     <div class="pick-card ${selected?'selected':''} ${disabled?'disabled':''}" data-pick="${slot}" data-id="${f.id}" style="--pc-color:${prov?prov.color:'#C9A23C'}">
       <div class="pick-avatar">${buildSilhouetteSM(f.appearance)}</div>
       <div>
-        <div class="pick-name">${f.name}</div>
+        <div class="pick-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
         <div class="pick-meta">${DISCIPLINE_NAMES[f.primaryDisc]} · ${f.settlement} · ${f.record.wins}-${f.record.losses}</div>
       </div>
       <div class="pick-ovr">${calcOVR(f.stats)}</div>
@@ -511,9 +631,9 @@ function renderSetup(){
 
   return `
     <div class="vs-wrap">
-      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(fA.appearance)}</div><div class="vname">${fA.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fA.primaryDisc]}</div><div class="vovr">${calcOVR(fA.stats)}</div></div>
+      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(fA.appearance)}</div><div class="vname clickable-name" data-open-fighter="${fA.id}">${fA.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fA.primaryDisc]}</div><div class="vovr">${calcOVR(fA.stats)}</div></div>
       <div class="vs-mid">VS</div>
-      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(fB.appearance)}</div><div class="vname">${fB.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fB.primaryDisc]}</div><div class="vovr">${calcOVR(fB.stats)}</div></div>
+      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(fB.appearance)}</div><div class="vname clickable-name" data-open-fighter="${fB.id}">${fB.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fB.primaryDisc]}</div><div class="vovr">${calcOVR(fB.stats)}</div></div>
     </div>
 
     <div class="section-label">Home Arena</div>
@@ -568,9 +688,9 @@ function renderFight(){
     </div>
 
     <div class="vs-wrap" style="margin-top:0;">
-      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(fA.appearance)}</div><div class="vname">${fA.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fA.primaryDisc]}</div></div>
+      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(fA.appearance)}</div><div class="vname clickable-name" data-open-fighter="${fA.id}">${fA.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fA.primaryDisc]}</div></div>
       <div class="vs-mid">VS</div>
-      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(fB.appearance)}</div><div class="vname">${fB.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fB.primaryDisc]}</div></div>
+      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(fB.appearance)}</div><div class="vname clickable-name" data-open-fighter="${fB.id}">${fB.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fB.primaryDisc]}</div></div>
     </div>
 
     <div class="fight-log">${logHtml}</div>
@@ -596,8 +716,8 @@ function renderResult(){
     </div>
 
     <div class="record-grid">
-      <div class="record-box"><div class="rname">${fA.name}</div><div class="rrec">${fA.record.wins}-${fA.record.losses}</div></div>
-      <div class="record-box"><div class="rname">${fB.name}</div><div class="rrec">${fB.record.wins}-${fB.record.losses}</div></div>
+      <div class="record-box"><div class="rname clickable-name" data-open-fighter="${fA.id}">${fA.name}</div><div class="rrec">${fA.record.wins}-${fA.record.losses}</div></div>
+      <div class="record-box"><div class="rname clickable-name" data-open-fighter="${fB.id}">${fB.name}</div><div class="rrec">${fB.record.wins}-${fB.record.losses}</div></div>
     </div>
 
     <div class="btn-row">
@@ -687,13 +807,14 @@ function applyResultToRoster(){
   const roster = loadRoster().map(ensureRecord);
   const winner = roster.find(f=> f.id === state.result.winner.id);
   const loser = roster.find(f=> f.id === state.result.loser.id);
+  const location = `${state.arena.name} (Exhibition)`;
   if(winner){
     winner.record.wins += 1;
-    winner.fightLog.push({ opponent: loser ? loser.name : '—', result:'W', method: state.result.method, date: new Date().toISOString() });
+    winner.fightLog.push({ tier:'Exhibition', opponent: loser ? loser.name : '—', result:'W', method: state.result.method, location, date: new Date().toISOString() });
   }
   if(loser){
     loser.record.losses += 1;
-    loser.fightLog.push({ opponent: winner ? winner.name : '—', result:'L', method: state.result.method, date: new Date().toISOString() });
+    loser.fightLog.push({ tier:'Exhibition', opponent: winner ? winner.name : '—', result:'L', method: state.result.method, location, date: new Date().toISOString() });
   }
   saveRoster(roster);
 }
