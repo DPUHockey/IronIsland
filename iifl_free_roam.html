@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iron Island Fight League — Free Roam</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-base:#1B1714; --bg-panel:#241D17; --bg-raised:#312820; --bg-raised-2:#3A2F25;
+    --ink-red:#A6342A; --ink-red-dim:#7C2620; --brass:#C9A23C; --brass-dim:#8E7228;
+    --bone:#EDE3CF; --bone-dim:#C9BFA9; --muted:#8B8070; --line:#43392D; --good:#5A8C5C;
+    --display:'Anton',sans-serif; --label:'Oswald',sans-serif; --body:'Work Sans',sans-serif; --mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:radial-gradient(ellipse at top, #241D17 0%, #1B1714 55%, #14110D 100%);
+    color:var(--bone); font-family:var(--body); min-height:100vh; display:flex; align-items:flex-start; justify-content:center;
+    padding:32px 16px 80px; line-height:1.4;
+  }
+  .app{ width:100%; max-width:820px; }
+  .ticket-header{
+    background:var(--bg-panel); border:1px solid var(--line); border-bottom:none; padding:18px 24px;
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;
+  }
+  .ticket-eyebrow{ font-family:var(--label); font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--brass); }
+  .ticket-title{ font-family:var(--display); font-size:24px; letter-spacing:1px; color:var(--bone); text-transform:uppercase; }
+  .ticket-sub{ font-family:var(--mono); font-size:11px; color:var(--muted); text-align:right; }
+  .panel{ background:var(--bg-panel); border:1px solid var(--line); border-top:none; padding:32px; min-height:420px; }
+  .section-label{
+    font-family:var(--label); font-size:12px; letter-spacing:2.5px; text-transform:uppercase; color:var(--brass);
+    margin-bottom:14px; display:flex; align-items:center; gap:10px;
+  }
+  .section-label::after{ content:""; flex:1; height:1px; background:var(--line); }
+  .btn{
+    font-family:var(--label); letter-spacing:1.5px; text-transform:uppercase; font-size:13px; font-weight:500;
+    padding:13px 28px; border:1px solid var(--brass); background:transparent; color:var(--brass); cursor:pointer; transition:all .15s ease;
+  }
+  .btn:hover{ background:var(--brass); color:var(--bg-base); }
+  .btn:disabled{ opacity:0.3; cursor:not-allowed; pointer-events:none; }
+  .btn-primary{ background:var(--ink-red); border-color:var(--ink-red); color:var(--bone); }
+  .btn-primary:hover{ background:#C03F32; border-color:#C03F32; color:var(--bone); }
+  .btn-row{ display:flex; justify-content:space-between; margin-top:24px; gap:12px; flex-wrap:wrap; }
+  .empty-note{ text-align:center; padding:50px 20px; color:var(--muted); font-family:var(--body); font-size:14px; }
+  .stub-screen{ text-align:center; padding:24px 10px 10px; }
+  .stub-screen h2{ font-family:var(--display); font-size:24px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink-red); margin-bottom:14px; }
+  .stub-screen p{ font-family:var(--body); color:var(--bone-dim); font-size:14px; max-width:460px; margin:0 auto 18px; }
+
+  /* fighter select */
+  .fighter-grid{ display:grid; gap:10px; }
+  .fighter-row{
+    background:var(--bg-raised); border:1px solid var(--line); border-left:4px solid var(--fr-color, var(--brass));
+    padding:13px 16px; display:flex; align-items:center; gap:14px;
+  }
+  .fr-avatar{ width:30px; height:42px; flex-shrink:0; display:flex; align-items:flex-end; }
+  .fr-avatar svg{ width:100%; height:100%; }
+  .fr-name{ font-family:var(--label); font-size:15px; font-weight:600; color:var(--bone); }
+  .fr-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:2px; }
+  .fr-status{ margin-left:auto; font-family:var(--label); font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--brass); text-align:right; }
+  .fr-btn{
+    font-family:var(--label); font-size:11px; letter-spacing:.5px; text-transform:uppercase; padding:9px 14px;
+    border:1px solid var(--line); background:var(--bg-raised-2); color:var(--brass); cursor:pointer; flex-shrink:0;
+  }
+  .fr-btn:disabled{ opacity:.35; cursor:not-allowed; color:var(--muted); }
+
+  /* city walk */
+  .city-head{ text-align:center; padding:16px 10px; background:var(--bg-raised); border:1px solid var(--brass-dim); margin-bottom:20px; }
+  .city-head-name{ font-family:var(--display); font-size:26px; letter-spacing:1px; text-transform:uppercase; color:var(--brass); }
+  .city-head-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:6px; }
+  .block-grid{ display:grid; grid-template-columns:repeat(var(--gcols,4), 1fr); gap:8px; margin-bottom:20px; }
+  .block-cell{
+    aspect-ratio:1; border:1px solid var(--line); background:var(--bg-raised); display:flex; align-items:center; justify-content:center;
+    font-family:var(--label); font-size:10px; letter-spacing:.5px; text-transform:uppercase; color:var(--muted); text-align:center;
+    cursor:pointer; transition:all .15s ease; position:relative; padding:4px;
+  }
+  .block-cell:hover{ background:var(--bg-raised-2); border-color:var(--brass-dim); }
+  .block-cell.you{ border-color:var(--ink-red); background:var(--bg-raised-2); color:var(--bone); }
+  .block-cell.empty{ cursor:default; opacity:.35; }
+  .block-cell.empty:hover{ background:var(--bg-raised); border-color:var(--line); }
+  .block-cell .bc-icon{ font-size:18px; display:block; margin-bottom:3px; }
+  .block-cell.locked{ opacity:.4; }
+  .walk-hint{ font-family:var(--mono); font-size:10.5px; color:var(--muted); text-align:center; margin-bottom:18px; }
+
+  /* location detail */
+  .loc-head{ text-align:center; padding:18px 10px; background:var(--bg-raised); border:1px solid var(--brass-dim); margin-bottom:20px; }
+  .loc-name{ font-family:var(--display); font-size:24px; letter-spacing:1px; text-transform:uppercase; color:var(--brass); }
+  .loc-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:6px; }
+  .npc-quote{
+    font-family:var(--body); font-style:italic; font-size:14px; color:var(--bone-dim); line-height:1.6;
+    padding:16px 18px; background:var(--bg-raised); border-left:3px solid var(--brass-dim); margin-bottom:18px;
+  }
+  .npc-name{ font-family:var(--label); font-style:normal; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--brass); display:block; margin-top:8px; }
+
+  /* pit roster */
+  .pit-boss-card{ display:flex; gap:14px; align-items:center; padding:14px 16px; background:var(--bg-raised); border:1px solid var(--line); margin-bottom:18px; }
+  .pit-boss-avatar{ width:34px; height:48px; flex-shrink:0; display:flex; align-items:flex-end; }
+  .pit-boss-avatar svg{ width:100%; height:100%; }
+  .pit-boss-name{ font-family:var(--label); font-size:15px; font-weight:600; color:var(--bone); }
+  .pit-boss-title{ font-family:var(--mono); font-size:10.5px; color:var(--brass); margin-top:2px; }
+  .weight-class-block{ margin-bottom:14px; }
+  .wc-label{
+    font-family:var(--label); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted);
+    margin-bottom:6px; padding-bottom:4px; border-bottom:1px solid var(--line);
+  }
+  .roster-fighter-row{
+    display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; padding:6px 4px;
+    font-family:var(--body); font-size:12.5px;
+  }
+  .rfr-name{ color:var(--bone-dim); }
+  .rfr-age{ font-family:var(--mono); font-size:10.5px; color:var(--muted); }
+  .rfr-record{ font-family:var(--mono); font-size:11px; color:var(--brass); text-align:right; }
+
+  /* fame bar */
+  .fame-bar-wrap{ margin-bottom:18px; }
+  .fame-bar-label{ display:flex; justify-content:space-between; font-family:var(--label); font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-bottom:5px; }
+  .fame-bar-track{ height:8px; background:var(--bg-base); border:1px solid var(--line); position:relative; overflow:hidden; }
+  .fame-bar-fill{ position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, var(--brass-dim), var(--brass)); }
+
+  /* tale of tape / bout (shared pattern) */
+  .tape-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+  .tape-side{ background:var(--bg-raised); border:1px solid var(--line); padding:14px 16px; text-align:center; cursor:pointer; transition:all .15s ease; }
+  .tape-side:hover{ border-color:var(--brass-dim); }
+  .tape-side.picked{ border-color:var(--ink-red); background:var(--bg-raised-2); }
+  .tape-avatar{ width:50px; height:70px; margin:0 auto 8px; display:flex; align-items:flex-end; justify-content:center; }
+  .tape-avatar svg{ width:100%; height:100%; }
+  .tape-name{ font-family:var(--display); font-size:16px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .tape-disc{ font-family:var(--label); font-size:11px; color:var(--brass); text-transform:uppercase; margin-top:2px; }
+  .tape-ovr{ font-family:var(--mono); font-size:22px; font-weight:700; color:var(--brass); margin-top:6px; }
+  .tape-record{ font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:3px; }
+  .pick-row{
+    display:flex; justify-content:space-between; align-items:center; padding:6px 10px;
+    background:var(--bg-raised); border:1px solid var(--line); margin-bottom:3px; font-family:var(--body); font-size:12px;
+  }
+  .round-label{ font-family:var(--label); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin:6px 0 4px; }
+
+  /* wallet */
+  .wallet-badge{
+    font-family:var(--mono); font-size:13px; color:var(--brass); background:var(--bg-raised); border:1px solid var(--brass-dim);
+    padding:6px 12px; display:inline-block;
+  }
+
+  @media (max-width:600px){
+    .ticket-header{ flex-direction:column; align-items:flex-start; gap:6px; }
+    .fighter-row{ flex-wrap:wrap; }
+    .tape-grid{ grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+
+<script>
+/* ============================ SHARED DATA ============================ */
+
+const ROSTER_KEY = 'iifl_roster_v1';
+const ROAM_STATE_KEY = 'iifl_free_roam_v1';
+
+const PROVINCES = [
+  { id:'alexandretta', name:'Alexandretta Province', color:'#5C7C5E', primary:['boxer','karate'], secondary:['wrestler'] },
+  { id:'kolsati', name:'Kolsati District', color:'#5E7A93', primary:['brawler','mma'], secondary:['boxer'] },
+  { id:'sherwood', name:'Sherwood Province', color:'#A0623B', primary:['wrestler','catch'], secondary:['brawler'] },
+  { id:'gazon', name:'Gazon Province', color:'#C8943F', primary:['boxer'], secondary:[] },
+  { id:'ditiero', name:'Di Tiero Province', color:'#7C5491', primary:['karate'], secondary:['brawler'] },
+  { id:'carpathia', name:'Targu Banshea Province', color:'#5B4070', primary:['sambo','judo'], secondary:['catch'] },
+  { id:'northeast', name:'Northeast Territory', color:'#9C4242', primary:['karate','judo'], secondary:['mma'] },
+  { id:'bay', name:'White Bay Province', color:'#6E8C9C', primary:['wrestler','catch'], secondary:[] },
+];
+const DISCIPLINE_NAMES = {
+  boxer:'Boxer', brawler:'Street Brawler', wrestler:'Wrestler', sambo:'Russian Sambo',
+  mma:'MMA', karate:'Karate', judo:'Judo', catch:'Catch Wrestling'
+};
+const ALL_DISCIPLINES = Object.keys(DISCIPLINE_NAMES);
+const WEIGHT_CLASSES_3 = ['Light','Middle','Heavy']; // Juvenile-tier weight bands
+
+function rand(lo,hi){ return Math.floor(Math.random()*(hi-lo+1))+lo; }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
+function weightedPick(weights){
+  const r = Math.random(); let acc = 0;
+  for(const [k,w] of Object.entries(weights)){ acc += w; if(r <= acc) return k; }
+  return Object.keys(weights)[Object.keys(weights).length-1];
+}
+
+/* Settlement population data — same figures used in Character Creator, drives how many
+   fight pits exist in a city and how deep each pit's roster runs. */
+const SETTLEMENT_DATA = {
+  alexandretta: [
+    { name:'Williamsburg', population:72296, tier:'Capital' }, { name:'St. Anne', population:48210, tier:'City' },
+    { name:'Wolverbridge', population:14512, tier:'Town' }, { name:'Port Oxford', population:9820, tier:'Town' },
+    { name:'Nattingham', population:7204, tier:'Town' }, { name:'Blackchapel', population:6113, tier:'Town' },
+    { name:'Munchen', population:5402, tier:'Village' }, { name:'Cowborough', population:1804, tier:'Village' },
+    { name:'Blackford', population:1206, tier:'Village' }, { name:'Mosshead', population:902, tier:'Village' },
+  ],
+  kolsati: [
+    { name:'Kolsati', population:92651, tier:'Capital' }, { name:'St. Johnson', population:47320, tier:'City' },
+    { name:'North Bender', population:16210, tier:'Town' }, { name:'Lincoln', population:12812, tier:'Town' },
+    { name:'Richmond', population:9601, tier:'Town' }, { name:'Wickson', population:8104, tier:'Town' },
+    { name:'Briggston', population:6702, tier:'Town' }, { name:'Castellan Heights', population:5904, tier:'Town' },
+    { name:'Marrow Hill', population:2801, tier:'Village' }, { name:"Pell's Crossing", population:2401, tier:'Village' },
+    { name:'Dorado', population:2201, tier:'Village' }, { name:'Coco Ridge', population:1601, tier:'Village' },
+    { name:'Dunmore', population:1401, tier:'Village' }, { name:'Iron Wharf', population:1201, tier:'Village' },
+    { name:'Slate Row', population:901, tier:'Village' }, { name:"Cutter's End", population:701, tier:'Village' },
+    { name:'Venice', population:1101, tier:'Village' },
+  ],
+  sherwood: [
+    { name:'Frontenac City', population:83231, tier:'Capital' }, { name:'Kahuna', population:41022, tier:'City' },
+    { name:'Shorneville', population:15304, tier:'Town' }, { name:'Dennapolis', population:13108, tier:'Town' },
+    { name:'Sheffield', population:8904, tier:'Town' }, { name:'Cambridge', population:7402, tier:'Town' },
+    { name:'Lawrenceville', population:6301, tier:'Town' }, { name:'Millbrook Heights', population:2904, tier:'Village' },
+    { name:"Devil's Point", population:2104, tier:'Village' }, { name:'Starsanne', population:1502, tier:'Village' },
+    { name:'North Lawrenceville', population:1301, tier:'Village' }, { name:'Caldwell Junction', population:1001, tier:'Village' },
+    { name:'Petsworth', population:901, tier:'Village' }, { name:"Harrow's Bend", population:801, tier:'Village' },
+    { name:'Oak Siding', population:701, tier:'Village' }, { name:'Greeley Flats', population:601, tier:'Village' },
+    { name:'Thistledown', population:501, tier:'Village' }, { name:'Brakken', population:801, tier:'Village' },
+  ],
+  gazon: [
+    { name:'Gazon Main', population:82335, tier:'Capital' }, { name:'Northern Gazon', population:11204, tier:'Town' },
+    { name:'Cangate', population:6801, tier:'Town' }, { name:'Gazon South', population:2204, tier:'Village' },
+  ],
+  ditiero: [
+    { name:'Di Tiero', population:73180, tier:'Capital' }, { name:'Alibar', population:33012, tier:'City' },
+    { name:'Bakii', population:14702, tier:'Town' }, { name:"Suli' Ba", population:8203, tier:'Town' },
+    { name:'South Bender', population:2801, tier:'Village' }, { name:'Bellechasse', population:1701, tier:'Village' },
+    { name:'Port Maray', population:1401, tier:'Village' }, { name:'Buradam', population:3101, tier:'Village' },
+    { name:'Cane Hollow', population:1201, tier:'Village' }, { name:'Marsh Landing', population:1101, tier:'Village' },
+    { name:'Bayou Verte', population:901, tier:'Village' }, { name:'Saint Roque', population:801, tier:'Village' },
+    { name:'Driftwood Key', population:701, tier:'Village' }, { name:'Crayfish Bend', population:601, tier:'Village' },
+    { name:'Lantern Cay', population:501, tier:'Village' }, { name:'Bantha', population:601, tier:'Village' },
+  ],
+  carpathia: [
+    { name:'Bukovene', population:71619, tier:'Capital' }, { name:'Corsuva', population:29103, tier:'City' },
+    { name:'South Port', population:9101, tier:'Town' }, { name:'Vyrholm', population:7602, tier:'Town' },
+    { name:'Castle Reach', population:6203, tier:'Town' }, { name:'Mikini', population:2801, tier:'Village' },
+    { name:'Purovest', population:2101, tier:'Village' }, { name:'Greywatch', population:1901, tier:'Village' },
+    { name:'White Sands', population:1301, tier:'Village' }, { name:'Slanik', population:1101, tier:'Village' },
+    { name:'Hollowmere', population:1001, tier:'Village' }, { name:"Sorrow's Pass", population:901, tier:'Village' },
+    { name:'Ravenshade', population:801, tier:'Village' }, { name:'Drovna', population:701, tier:'Village' },
+    { name:'Kessel Vorn', population:601, tier:'Village' }, { name:'Bargo Pass', population:501, tier:'Village' },
+    { name:'Thornfall', population:601, tier:'Village' }, { name:'Wraithwood', population:401, tier:'Village' },
+    { name:'Ludus', population:951, tier:'Village' }, { name:'Varna', population:801, tier:'Village' },
+    { name:'Balchik', population:701, tier:'Village' }, { name:'Pice', population:501, tier:'Village' },
+  ],
+  northeast: [
+    { name:'Santorino', population:75708, tier:'Capital' }, { name:'Ineawood', population:29304, tier:'City' },
+    { name:'Mizukoshi', population:8702, tier:'Town' }, { name:'Tsubaki Bay', population:6103, tier:'Town' },
+    { name:'Hoshimura', population:2801, tier:'Village' }, { name:'Kanesato', population:2101, tier:'Village' },
+    { name:'Renkawa', population:1901, tier:'Village' }, { name:'Sodegaura', population:1301, tier:'Village' },
+    { name:'Takamine', population:1101, tier:'Village' }, { name:'Usuzumi', population:901, tier:'Village' },
+    { name:'Yorimasa', population:801, tier:'Village' }, { name:'Fubuki', population:701, tier:'Village' },
+    { name:'Iwagakure', population:601, tier:'Village' }, { name:'Barsastro', population:2401, tier:'Village' },
+  ],
+  bay: [
+    { name:'Charleston', population:67103, tier:'Capital' }, { name:'Iron City', population:37021, tier:'City' },
+    { name:'Treasure Beach', population:9302, tier:'Town' }, { name:'Bayport', population:7104, tier:'Town' },
+    { name:'Pinecrest Hollow', population:2601, tier:'Village' }, { name:"Dell's Corner", population:1401, tier:'Village' },
+    { name:'Maple Junction', population:1201, tier:'Village' }, { name:'Briarwood', population:1001, tier:'Village' },
+    { name:'Sunfish Cove', population:901, tier:'Village' }, { name:'Acorn Flats', population:801, tier:'Village' },
+    { name:'Quail Hollow', population:701, tier:'Village' }, { name:'Hickory Bend', population:601, tier:'Village' },
+  ],
+};
+
+const SKIN_TONES = ['#3E2A1E','#5C3A24','#8C5A35','#C68642','#E0AC69','#F1C27D'];
+const HAIR_COLORS = ['#0E0C0A','#3B2417','#6B4226','#A85C2A','#C9A23C','#D9D2C5','none'];
+
+function calcOVR(stats){ return Math.round((stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5); }
+function weightClassOf(weightLb){ if(weightLb<=98) return 'Light'; if(weightLb<=117) return 'Middle'; return 'Heavy'; }
+function heightLabel(inches){ if(!inches) return ''; const ft=Math.floor(inches/12), inch=inches%12; return `${ft}'${inch}"`; }
+function buildSilhouetteSM(app){
+  app = app || { skin:'#C68642', hair:'#2B1B12' };
+  return `<svg width="40" height="56" viewBox="0 0 40 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="20" cy="10" r="7" fill="${app.skin}"/>
+    <path d="M8 56 L11 30 Q12 22 20 22 Q28 22 29 30 L32 56" stroke="${app.skin}" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M11 28 L4 38 M29 28 L36 38" stroke="${app.skin}" stroke-width="3" stroke-linecap="round"/>
+  </svg>`;
+}
+
+const ALEXANDRETTA_NORTH_SETTLEMENTS = ['Blackford','Mosshead','Cowborough','Wolverbridge'];
+const NAME_POOLS = {
+  alexandretta_north: { // Irish
+    first: ['Liam','Sean','Declan','Cormac','Rory','Finn','Aidan','Cian','Eoin','Niall','Tadhg','Brendan','Colm','Fergus','Ronan','Patrick','Michael','Conor','Kieran','Darragh','Oisin','Padraig','Seamus','Donal','Ruairi','Cathal','Eamon','Diarmuid','Turlough','Brian','Fintan','Oscar','Art','Cathaoir','Diarmait','Eoghan','Fiachra','Gearoid','Lorcan','Malachy','Naoise','Odhran','Piaras','Riordan','Ultan','Aengus','Breandan','Caolan','Eanna','Tiernan'],
+    last: ["O'Brien",'Murphy','Kelly','Ryan','Sullivan','Walsh','Byrne','Doyle','McCarthy','Gallagher','Doherty','Kennedy','Lynch','Fitzgerald','Nolan','Flynn','Duffy','Boyle','Hogan','Reilly','Quinn','Casey','Sheehan','Brennan','Maguire','O\'Connor','O\'Neill','O\'Sullivan','McMahon','Coyle','Donovan','Fahey','Grady','Hennessy','Kavanagh','Lynskey','Moran','Nagle','O\'Dwyer','Purcell','Rafferty','Shanahan','Tierney','Whelan','Costello','Devlin','Egan','Farrell','Guinane','Healy'],
+  },
+  alexandretta_south: { // English
+    first: ['William','Henry','Edward','Arthur','George','Charles','Thomas','Oliver','James','Frederick','Albert','Walter','Edmund','Percy','Reginald','Geoffrey','Nigel','Cedric','Bertram','Cuthbert','Humphrey','Leonard','Norman','Sidney','Vernon','Wilfred','Ambrose','Clarence','Douglas','Ernest','Herbert','Cecil','Alfred','Roland','Bernard','Hubert','Rupert','Lionel','Neville','Basil','Aubrey','Maurice','Stanley','Sylvester','Theodore','Wallace','Alistair','Barnaby','Crispin','Desmond'],
+    last: ['Whitfield','Ashworth','Pemberton','Sutcliffe','Hargreaves','Fairweather','Winterbourne','Blackwood','Thornbury','Camden','Radcliffe','Ellsworth','Harrington','Fenwick','Carrington','Ashford','Beaumont','Chatham','Dunmore','Kingsley','Marlowe','Pembroke','Stanhope','Wycliffe','Barrington','Aldridge','Blackmore','Cavendish','Dashwood','Elmhurst','Falkner','Grantham','Hollingsworth','Ingram','Kirkland','Lockwood','Middleton','Norwood','Osborne','Prescott','Rutherford','Sherbourne','Thackeray','Underwood','Vane','Wetherby','Yardley','Ashcombe','Bramwell','Farringdon'],
+  },
+  kolsati: { // Italian
+    first: ['Marco','Luca','Matteo','Giovanni','Antonio','Salvatore','Franco','Dante','Enzo','Vincenzo','Alessandro','Roberto','Nico','Gianni','Rocco','Paolo','Stefano','Fabrizio','Massimo','Leonardo','Emilio','Guido','Aldo','Renato','Silvio','Tommaso','Carlo','Domenico','Pietro','Angelo','Bruno','Cesare','Dino','Ettore','Fabio','Gino','Ivo','Lorenzo','Mario','Nicola','Orlando','Pasquale','Riccardo','Sandro','Tullio','Umberto','Valerio','Alfio','Bartolomeo','Cosimo'],
+    last: ['Romano','Ferrara','Russo','Marino','Greco','Bruno','Rizzo','Costa','Fontana','Caruso','Moretti','Barbieri','Conti','De Luca','Gallo','Leone','Mancini','Ricci','Rossi','Santoro','Serra','Vitale','Colombo','Esposito','Marchetti','Bianchi','Bergamo','Cattaneo','D\'Amico','Ferraro','Gatti','Lombardi','Longo','Mariani','Martini','Milani','Monti','Orlando','Pellegrini','Ferretti','Ricciardi','Sartori','Testa','Valentini','Vecchi','Amato','Basile','Cardinale','Donati','Falcone'],
+  },
+  sherwood: { // Scottish
+    first: ['Angus','Callum','Duncan','Ewan','Fraser','Graham','Hamish','Ian','Lachlan','Malcolm','Rory','Stuart','Alistair','Gordon','Kenneth','Robert','Douglas','Neil','Craig','Colin','Andrew','Iain','Cameron','Kyle','Ross','Blair','Keith','Murdo','Aonghas','Tavish','Ruaridh','Alasdair','Broc','Cailean','Dougal','Eachann','Fearghas','Gilleasbuig','Hector','Innes','Jamie','Lennox','Magnus','Niall','Osgar','Quintin','Robb','Seumas','Tearlach','Padraig'],
+    last: ['MacLeod','Campbell','Stewart','Fraser','Robertson','MacDonald','Cameron','Wallace','Grant','Murray','Ross','Mackay','MacKenzie','Sinclair','Ferguson','Buchanan','Munro','Drummond','Elliot','Hamilton','Kerr','Lennox','Napier','Tait','Urquhart','MacGregor','MacIntyre','MacPherson','MacKay','MacLean','MacNeil','MacRae','MacTavish','Anderson','Brodie','Carmichael','Dalziel','Erskine','Forbes','Gillespie','Home','Irvine','Johnstone','Leslie','Melville','Ogilvie','Pringle','Rennie','Scrimgeour','Wemyss'],
+  },
+  gazon: { // African tribal (mixed West/East)
+    first: ['Kwame','Kofi','Abiodun','Chidi','Emeka','Sekou','Themba','Jabari','Obi','Tendai','Kojo','Adisa','Femi','Bakari','Kesi','Kwabena','Yaw','Kwesi','Kwaku','Obinna','Uche','Ikenna','Chukwuemeka','Olumide','Tunde','Segun','Ayodele','Chike','Dayo','Ebo','Fela','Gyasi','Hakim','Idi','Jelani','Lutalo','Mandla','Nnamdi','Oba','Panya','Quame','Rashidi','Sipho','Taye','Uzoma','Wale','Xolani','Yao','Chibueze','Damani'],
+    last: ['Achebe','Okafor','Mensah','Diallo','Kamau','Adeyemi','Nwosu','Osei','Toure','Banda','Mwangi','Abara','Chukwu','Danso','Eze','Faraji','Gueye','Jalloh','Konate','Mbeki','Ndiaye','Okoro','Sowande','Traore','Zuberi','Adisa','Boateng','Camara','Diop','Fofana','Gyasi','Haruna','Ibe','Jawara','Keita','Lumumba','Modise','Nkosi','Onyango','Quaye','Sanogo','Tiwa','Umeh','Vusi','Wanjiru','Xaba','Yeboah','Ade','Bello','Cisse'],
+  },
+  ditiero: { // Louisiana French / Cajun-Creole
+    first: ['Etienne','Remy','Thibault','Gaston','Armand','Beauregard','Cyprien','Desmond','Fontaine','Laurent','Marcel','Pascal','Reynard','Sebastien','Theo','Auguste','Baptiste','Claude','Emile','Felix','Gerard','Henri','Jacques','Leon','Maurice','Octave','Philippe','Raoul','Valmont','Xavier','Alphonse','Anatole','Cyril','Edmond','Fernand','Gustave','Hilaire','Isidore','Jerome','Lucien','Napoleon','Onesime','Prosper','Romain','Serge','Thadee','Ulysse','Valere','Wilfrid','Zenon'],
+    last: ['Boudreaux','Thibodeaux','Landry','Broussard','Hebert','Guidry','Fontenot','Comeaux','Melancon','Prejean','Robicheaux','Trahan','Arceneaux','Babineaux','Cormier','Dugas','Gautreaux','LeBlanc','Moreau','Ory','Perrault','Richard','Savoy','Terrebonne','Villere','Aucoin','Benoit','Chauvin','Dubois','Fournier','Gaudet','Hamon','Istre','Judice','Lacombe','Mouton','Naquin','Ortego','Pitre','Rousseau','Simoneaux','Tassin','Vidrine','Waguespack','Ancelet','Blanchard','Chretien','Deveraux','Fontenette','Guillory'],
+  },
+  carpathia: { // Eastern European / Romanian, with the Dracul bloodline
+    first: ['Vlad','Radu','Mircea','Andrei','Stefan','Bogdan','Cristian','Dorin','Emil','Florin','Gheorghe','Ionut','Marius','Nicolae','Petru','Alexandru','Adrian','Catalin','Costin','Doru','Eugen','Gabriel','Horia','Iulian','Liviu','Mihai','Octavian','Sorin','Tiberiu','Valentin','Aurel','Corneliu','Dumitru','Emanuel','Grigore','Ilie','Iosif','Laurentiu','Miron','Nichifor','Ovidiu','Remus','Sergiu','Teodor','Traian','Vasile','Victor','Vlaicu','Zamfir','Codrin'],
+    last: ['Dracul','Constantinescu','Popescu','Ionescu','Stanescu','Radulescu','Munteanu','Dumitrescu','Georgescu','Marinescu','Vasilescu','Petrescu','Nistor','Barbu','Ciobanu','Lungu','Moldovan','Rusu','Serban','Toma','Voicu','Zaharia','Balan','Coman','Dinu','Draculescu','Enescu','Iliescu','Manescu','Nedelescu','Oprescu','Pavelescu','Sandulescu','Tanasescu','Ungureanu','Albu','Cretu','Dobre','Frunza','Gheorghiu','Hriscu','Iordache','Jinga','Lazar','Marin','Neagu','Oancea','Preda','Stoica','Tudor'],
+  },
+  northeast: { // Japanese/Mexican mix — a deliberate cultural blend for this province
+    first: ['Hiroshi','Kenji','Takeshi','Ryo','Daiki','Haruto','Sora','Riku','Diego','Mateo','Santiago','Emilio','Rafael','Alejandro','Cruz','Yuki','Rin','Akira','Daisuke','Hayato','Isamu','Jun','Katsu','Masato','Noboru','Osamu','Shin','Tatsuya','Yamato','Yusuke','Carlos','Eduardo','Fernando','Gabriel','Ignacio','Javier','Leonardo','Manuel','Nicolas','Octavio','Pablo','Ricardo','Kazuki','Ryota','Tomas','Julio','Kentaro','Hideo','Esteban','Ramon'],
+    last: ['Watanabe','Tanaka','Yamamoto','Nakamura','Kobayashi','Saito','Sato','Suzuki','Takahashi','Ito','Reyes','Morales','Guerrero','Delgado','Cabrera','Villanueva','Ochoa','Salazar','Vargas','Nishida','Fujimoto','Hernandez','Castillo','Navarro','Espinoza','Kimura','Matsumoto','Inoue','Kato','Yoshida','Yamada','Sasaki','Yamaguchi','Matsuda','Ono','Ramirez','Torres','Flores','Gutierrez','Chavez','Ramos','Contreras','Aguilar','Mendez','Rios','Solis','Zamora','Cortez','Pena','Duarte'],
+  },
+  bay: { // American
+    first: ['Jack','Ryan','Tyler','Brandon','Justin','Cody','Dustin','Travis','Wyatt','Colton','Hunter','Logan','Mason','Austin','Blake','Kevin','Eric','Jason','Aaron','Derek','Shane','Todd','Scott','Chad','Kurt','Brett','Trevor','Marcus','Jordan','Casey','Brian','Gregory','Timothy','Jeffrey','Sean','Patrick','Matthew','Nathan','Corey','Bryan','Dennis','Wesley','Curtis','Dwayne','Randall','Vincent','Warren','Cole','Grant','Chase'],
+    last: ['Anderson','Miller','Johnson','Davis','Thompson','Wilson','Moore','Taylor','Harris','Clark','Lewis','Walker','Young','Allen','King','Wright','Scott','Green','Baker','Adams','Nelson','Carter','Mitchell','Perez','Roberts','Turner','Phillips','Campbell','Parker','Evans','Edwards','Collins','Stewart','Morris','Rogers','Reed','Cook','Morgan','Bell','Murphy','Bailey','Cooper','Richardson','Cox','Howard','Ward','Peterson','Gray','Ramirez','James'],
+  },
+};
+
+function pickName(provinceId, settlementName){
+  let poolKey = provinceId;
+  if(provinceId === 'alexandretta'){
+    poolKey = ALEXANDRETTA_NORTH_SETTLEMENTS.includes(settlementName) ? 'alexandretta_north' : 'alexandretta_south';
+  }
+  const pool = NAME_POOLS[poolKey] || NAME_POOLS.bay;
+  return `${pick(pool.first)} ${pick(pool.last)}`;
+}
+
+function pickWeightedDiscipline(province){
+  const r = Math.random();
+  if(province.primary.length && r < 0.65) return pick(province.primary);
+  if(province.secondary.length && r < 0.85) return pick(province.secondary);
+  return pick(ALL_DISCIPLINES);
+}
+
+/* ============================ FIGHT SIMULATION ENGINE ============================ */
+/* Ported from the Fight Pit — same math, same feel, so a Junior League team game
+   resolves consistently with everything else in the world. */
+
+const MATCHUP = {
+  boxer:    { boxer:0, brawler:1, wrestler:-1, sambo:-1, mma:-1, karate:1, judo:-1, catch:-1 },
+  brawler:  { boxer:-1, brawler:0, wrestler:-1, sambo:-2, mma:-1, karate:0, judo:-2, catch:-1 },
+  wrestler: { boxer:1, brawler:1, wrestler:0, sambo:-1, mma:0, karate:1, judo:0, catch:1 },
+  sambo:    { boxer:1, brawler:2, wrestler:1, sambo:0, mma:0, karate:1, judo:-1, catch:0 },
+  mma:      { boxer:1, brawler:1, wrestler:0, sambo:0, mma:0, karate:1, judo:0, catch:1 },
+  karate:   { boxer:-1, brawler:0, wrestler:-1, sambo:-1, mma:-1, karate:0, judo:-1, catch:0 },
+  judo:     { boxer:1, brawler:2, wrestler:0, sambo:1, mma:0, karate:1, judo:0, catch:1 },
+  catch:    { boxer:1, brawler:1, wrestler:-1, sambo:0, mma:-1, karate:0, judo:-1, catch:0 },
+};
+const MATCHUP_SCALE = 5;
+function matchupBonus(myDisc, oppDisc){ const row=MATCHUP[myDisc]; return row && row[oppDisc]!==undefined ? row[oppDisc]*MATCHUP_SCALE : 0; }
+function winProbability(effA, effB){ return 1/(1+Math.pow(10, -(effA-effB)/12)); }
+function weightedPick(weights){
+  const r = Math.random(); let acc = 0;
+  for(const [k,w] of Object.entries(weights)){ acc += w; if(r <= acc) return k; }
+  return Object.keys(weights)[Object.keys(weights).length-1];
+}
+
+const ARENA_NAMES = ['The Iron Drum','The Salt Pit','Cinderblock Yard','Foghorn Hall','The Anvil Room','Lantern Court','The Tin Roof','Drydock Arena','The Splinter Yard','Hollow Bell Hall'];
+const FLOOR_TYPES = ['sport court','rubber mat over cement','grass','hard-packed clay','dirt with glass in it'];
+function generateArena(){ return { name: pick(ARENA_NAMES), floor: pick(FLOOR_TYPES), capacity: rand(5,120)*100 }; }
+
+const DISC_FLAVOR = {
+  boxer: ['a sharp jab-cross combo', 'a tight body-head combination', 'a stiff counter right'],
+  brawler: ['a wild looping haymaker', 'a scrappy flurry with no real plan', 'a desperate forward charge'],
+  wrestler: ['a hard level change for a takedown', 'a grinding clinch against the fence', 'a drive through to the mat'],
+  sambo: ['a sweeping hip throw', 'a tight ankle lock attempt', 'a textbook trip takedown'],
+  mma: ['a clean mix of strikes and a takedown attempt', 'a smart check-and-counter sequence', 'a probing combination from the outside'],
+  karate: ['a snapping front kick', 'a sharp reverse punch', 'a quick in-and-out point strike'],
+  judo: ['a hard hip toss', 'a shoulder throw that lands clean', 'a grip fight that ends in a sweep'],
+  catch: ['a scramble into a tight headlock', 'a leg lace fight on the mat', 'a sudden roll into a submission hunt'],
+};
+const ROUND_OPENERS = [
+  '{A} and {B} circle the {floor}, sizing each other up.',
+  'The bell sounds and {A} comes out moving, {B} matching the pace.',
+  '{A} starts working behind a stiff jab as {B} looks for an opening.',
+  'Both fighters trade cautious feints before {A} commits first.',
+];
+const ROUND_EXCHANGES = [
+  '{A} lands {flavorA}, {B} answers right back with {flavorB}.',
+  '{B} eats {flavorA} from {A} but fires back immediately.',
+  '{A} controls the center, mixing in {flavorA} that {B} can\'t quite solve.',
+  '{B} finds a home for {flavorB}, and the crowd reacts.',
+];
+const ROUND_CLOSERS = [
+  'The horn sounds to end the round — close to call.',
+  'Round ends with both corners shouting instructions.',
+  'Round closes with {A} marginally ahead on output.',
+  'Round closes with {B} landing the harder shot at the bell.',
+];
+const FINISH_KO = [
+  '{W} catches {L} clean — {L} goes down and doesn\'t beat the count. KO, {W}!',
+  '{W} lands the perfect shot and {L} hits the {floor}. It\'s over — KO!',
+  'One shot. That\'s all it took. {L} is out. {W} wins by knockout.',
+];
+const FINISH_TKO = [
+  '{L} can\'t answer back anymore. The ref steps in — TKO, {W}!',
+  '{W} swarms {L} and the referee has seen enough. TKO.',
+  '{L}\'s corner is waving it off. TKO, {W} wins.',
+];
+const FINISH_DQ = [
+  '{L} loses all composure — an illegal shot, and the ref has no choice. DQ, {W} wins.',
+  'That\'s a blatant foul from {L}. Referee calls it — DQ, {W} takes it.',
+];
+const DECISION_LINES = [
+  'After three rounds, it goes to the scorecards.',
+  'Both fighters empty the tank — now it\'s in the judges\' hands.',
+  'No finish tonight — the crowd waits on the decision.',
+];
+function fillTpl(text, map){ return text.replace(/{(\w+)}/g, (_,k)=> map[k]!==undefined ? map[k] : ''); }
+
+function simulateBout(fA, fB, ctx){
+  const ovrA = calcOVR(fA.stats), ovrB = calcOVR(fB.stats);
+  const mbA = matchupBonus(fA.primaryDisc, fB.primaryDisc);
+  const mbB = matchupBonus(fB.primaryDisc, fA.primaryDisc);
+  const homeBonusA = ctx && ctx.hometownPit ? 4 : 0;
+  const effA = ovrA + mbA + homeBonusA;
+  const effB = ovrB + mbB;
+  const probA = winProbability(effA, effB);
+  const winnerIsA = Math.random() < probA;
+  const winner = winnerIsA ? fA : fB;
+  const loser = winnerIsA ? fB : fA;
+  const gap = Math.abs(effA - effB);
+
+  let finishWeights;
+  if(gap >= 20) finishWeights = { KO:0.38, TKO:0.34, Decision:0.26, DQ:0.02 };
+  else if(gap >= 10) finishWeights = { KO:0.20, TKO:0.32, Decision:0.46, DQ:0.02 };
+  else finishWeights = { KO:0.09, TKO:0.24, Decision:0.65, DQ:0.02 };
+
+  const method = weightedPick(finishWeights);
+  const finishRound = method === 'Decision' ? 3 : parseInt(weightedPick({1:0.22, 2:0.36, 3:0.42}), 10);
+  const floor = (ctx && ctx.arena && ctx.arena.floor) || 'sport court';
+  const log = [];
+  for(let r=1; r<=3; r++){
+    log.push({ type:'round-header', round:r });
+    const map = { A: fA.name, B: fB.name, floor,
+      flavorA: pick(DISC_FLAVOR[fA.primaryDisc] || DISC_FLAVOR.mma),
+      flavorB: pick(DISC_FLAVOR[fB.primaryDisc] || DISC_FLAVOR.mma) };
+    log.push({ type:'line', text: fillTpl(pick(ROUND_OPENERS), map) });
+    log.push({ type:'line', text: fillTpl(pick(ROUND_EXCHANGES), map) });
+    if(method !== 'Decision' && r === finishRound){
+      const fmap = { W: winner.name, L: loser.name, floor };
+      const lib = method === 'KO' ? FINISH_KO : method === 'TKO' ? FINISH_TKO : FINISH_DQ;
+      log.push({ type:'finish', text: fillTpl(pick(lib), fmap) });
+      break;
+    } else {
+      log.push({ type:'line', text: fillTpl(pick(ROUND_CLOSERS), map) });
+    }
+  }
+  if(method === 'Decision'){
+    log.push({ type:'decision', text: pick(DECISION_LINES) });
+    log.push({ type:'decision', text: `Judges score it for ${winner.name}.` });
+  }
+  return { winner, loser, method, finishRound, ovrA, ovrB, effA, effB, probA, log };
+}
+
+
+/* ============================ STORAGE ============================ */
+
+function loadRoster(){
+  try{ const raw = localStorage.getItem(ROSTER_KEY); return raw ? JSON.parse(raw) : []; }
+  catch(err){ console.error('IIFL roster load failed:', err); return []; }
+}
+function saveRoster(list){
+  try{ localStorage.setItem(ROSTER_KEY, JSON.stringify(list)); return true; }
+  catch(err){ console.error('IIFL roster save failed:', err); return false; }
+}
+function ensureFighterDefaults(f){
+  if(!f.record) f.record = { wins:0, losses:0 };
+  if(!f.fightLog) f.fightLog = [];
+  if(!f.age) f.age = 12;
+  if(!f.talentTier) f.talentTier = 'normal';
+  if(f.wallet === undefined) f.wallet = 10; // starting bankroll
+  if(f.fame === undefined) f.fame = 0;
+  if(f.freeRoamPitKey === undefined) f.freeRoamPitKey = null; // "provinceId|city|pitId" — signed home pit
+  if(f.freeRoamFightCount === undefined) f.freeRoamFightCount = 0;
+  return f;
+}
+function getRoster(){
+  const roster = loadRoster().map(ensureFighterDefaults);
+  saveRoster(roster);
+  return roster;
+}
+function getFighterById(id){ return getRoster().find(f=> f.id === id); }
+function updateFighter(id, mutateFn){
+  const roster = loadRoster().map(ensureFighterDefaults);
+  const f = roster.find(r=> r.id === id);
+  if(f){ mutateFn(f); saveRoster(roster); }
+  return f;
+}
+
+function loadRoamState(){
+  try{ const raw = localStorage.getItem(ROAM_STATE_KEY); return raw ? JSON.parse(raw) : { pits:{}, grids:{} }; }
+  catch(err){ console.error('IIFL free roam state load failed:', err); return { pits:{}, grids:{} }; }
+}
+function saveRoamState(s){
+  try{ localStorage.setItem(ROAM_STATE_KEY, JSON.stringify(s)); return true; }
+  catch(err){ console.error('IIFL free roam state save failed:', err); return false; }
+}
+
+/* ============================ PIT GENERATION ============================ */
+
+const PIT_COUNT_BY_TIER = { Capital:5, City:3, Town:2, Village:1 };
+const PIT_NAMES = [
+  'The Bone Yard','Cinder Pit','The Rust Bucket','Ironback Arena','The Splinter Yard',"Dead Man's Circle",
+  'The Meat Locker','Blood Alley','The Sawdust Ring','Cracked Anvil','The Gutter','Nightfall Pit','The Iron Cage',
+  'Fist City','The Butcher Block','Lowlife Arena','The Dust Bowl','Broken Jaw Alley','The Pit Below',
+  'Salt Mine Arena','The Choke Point',"Widow's Ring",'The Concrete Jungle','Last Call Arena','The Graveyard Shift',
+  'The Tin Roof','Drydock Pit','Foghorn Yard','The Anvil Room','Hollow Bell Hall','The Splinter Room','Cutthroat Court',
+];
+const BOSS_TITLES = ["The Ledger","Two Fists","The Butcher","Iron","Snake Eyes","The Preacher","Cold Blood","The Banker","Old Scratch","The Undertaker","No Mercy","The Widow","One Punch","The Vulture","Straight Razor"];
+
+function weightClassOf3(weightLb){ return weightClassOf(weightLb); }
+
+function generatePitFighter(provinceId, settlementName, weightClass){
+  const wRange = { Light:[75,98], Middle:[99,117], Heavy:[118,140] }[weightClass] || [90,120];
+  const age = rand(12,17);
+  const r = Math.random();
+  const talentTier = r<0.015 ? 'generational' : r<0.18 ? 'prodigy' : 'normal';
+  const ceilings = { normal:35, prodigy:35, generational:65 };
+  const ceiling = Math.round((ceilings[talentTier]||35) * (age/18));
+  const target = rand(Math.round(ceiling*0.3), Math.max(Math.round(ceiling*0.85),4));
+  const stats = {};
+  ['speed','quickness','toughness','power','agility'].forEach(k=>{ stats[k] = clamp(target+rand(-5,5), 3, ceiling+5); });
+  const wins = rand(0, age-11); const losses = rand(0, Math.max(1,age-12));
+  return {
+    id: 'pitfighter_' + Date.now() + '_' + rand(0,999999),
+    name: pickName(provinceId, settlementName),
+    age, weightLb: rand(wRange[0],wRange[1]), weightClass,
+    primaryDisc: pickWeightedDiscipline(PROVINCES.find(p=>p.id===provinceId)),
+    stats, talentTier,
+    allTimeRecord: { wins, losses },
+    appearance: { skin: pick(SKIN_TONES), hair: pick(HAIR_COLORS), build: pick(['lean','athletic','stocky']) },
+  };
+}
+
+// Roster depth per pit scales with the city's actual population, split across however
+// many pits that city supports — bigger cities mean deeper, more numerous pits.
+function pitRosterSize(population, pitCount){
+  const perPit = population / pitCount;
+  return clamp(Math.round(perPit/2200) + rand(-2,3), 5, 24);
+}
+
+function ensureCityPits(provinceId, settlementName){
+  const s = loadRoamState();
+  const key = provinceId + '|' + settlementName;
+  if(s.pits[key]) return s.pits[key];
+  const entry = (SETTLEMENT_DATA[provinceId]||[]).find(e=>e.name===settlementName);
+  const tier = entry ? entry.tier : 'Village';
+  const population = entry ? entry.population : 800;
+  const pitCount = PIT_COUNT_BY_TIER[tier] || 1;
+  const usedNames = new Set();
+  const pits = [];
+  for(let i=0;i<pitCount;i++){
+    let pitName = pick(PIT_NAMES);
+    let guard=0; while(usedNames.has(pitName) && guard<30){ pitName = pick(PIT_NAMES); guard++; }
+    usedNames.add(pitName);
+    const rosterSize = pitRosterSize(population, pitCount);
+    const roster = [];
+    for(let j=0;j<rosterSize;j++){
+      const wc = pick(['Light','Middle','Heavy']);
+      roster.push(generatePitFighter(provinceId, settlementName, wc));
+    }
+    pits.push({
+      id: 'pit_' + key.replace(/\s+/g,'_') + '_' + i,
+      name: pitName,
+      bossName: pickName(provinceId, settlementName),
+      bossTitle: pick(BOSS_TITLES),
+      reputationRequired: i===0 ? 0 : Math.round(8 + i*11 + rand(-2,3)),
+      roster,
+    });
+  }
+  s.pits[key] = pits;
+  saveRoamState(s);
+  return pits;
+}
+
+/* ============================ NPCs & CITY GRID ============================ */
+
+const ADVICE_LINES_PIT = [
+  "There's a fight pit not far from here — {pit} takes on new blood most nights.",
+  "You want to fight? Ask around for {pit}. They're always looking for fresh faces.",
+  "Heard {pit} is where the real action is. Boss there doesn't mess around.",
+];
+const ADVICE_LINES_TRAINING = [
+  "Training? Nobody worth your time round here yet. Word is that's coming.",
+  "You could use a trainer. Nothing set up in this city yet though — soon, they say.",
+  "Big-name trainers exist, but they won't waste time on someone nobody's heard of. Yet.",
+];
+const ADVICE_LINES_GAMES = [
+  "There's talk of a card game running somewhere in the back rooms. Not open yet.",
+  "Dice, cards, all that — coming soon, if the rumors are right. Nothing running now.",
+  "You look like a betting type. Nothing to bet on around here yet, though.",
+];
+const NPC_ROLE_LINES = { pit: ADVICE_LINES_PIT, training: ADVICE_LINES_TRAINING, games: ADVICE_LINES_GAMES };
+
+function generateNpc(provinceId, settlementName, role, pits){
+  const name = pickName(provinceId, settlementName);
+  const lineTemplate = pick(NPC_ROLE_LINES[role]);
+  const line = lineTemplate.replace('{pit}', pits.length ? pick(pits).name : 'one of the local pits');
+  return { name, role, line };
+}
+
+const GRID_SIZE_BY_TIER = { Capital:5, City:4, Town:3, Village:2 };
+
+function ensureCityGrid(provinceId, settlementName){
+  const s = loadRoamState();
+  const key = provinceId + '|' + settlementName;
+  if(s.grids[key]) return s.grids[key];
+  const entry = (SETTLEMENT_DATA[provinceId]||[]).find(e=>e.name===settlementName);
+  const tier = entry ? entry.tier : 'Village';
+  const size = GRID_SIZE_BY_TIER[tier] || 2;
+  const pits = ensureCityPits(provinceId, settlementName);
+
+  const cells = [];
+  for(let r=0;r<size;r++) for(let c=0;c<size;c++) cells.push({ row:r, col:c });
+  // shuffle and place locations, keep start cell (center-ish) empty
+  const startCell = { row: Math.floor(size/2), col: Math.floor(size/2) };
+  const available = cells.filter(c=> !(c.row===startCell.row && c.col===startCell.col));
+  for(let i=available.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [available[i],available[j]]=[available[j],available[i]]; }
+
+  const locations = [];
+  let idx = 0;
+  pits.forEach((pit,i)=>{
+    if(idx < available.length){ locations.push({ ...available[idx], type:'pit', pitId: pit.id }); idx++; }
+  });
+  const npcCount = clamp(Math.round(size), 2, 5);
+  const npcRoles = ['pit','training','games'];
+  for(let i=0;i<npcCount && idx<available.length;i++){
+    locations.push({ ...available[idx], type:'npc', npc: generateNpc(provinceId, settlementName, npcRoles[i%npcRoles.length], pits) });
+    idx++;
+  }
+  if(idx < available.length){ locations.push({ ...available[idx], type:'minigames' }); idx++; }
+
+  const grid = { size, startCell, locations };
+  s.grids[key] = grid;
+  saveRoamState(s);
+  return grid;
+}
+
+
+
+/* ============================ STATE ============================ */
+
+const state = {
+  screen: 'select', // select -> city-walk -> loc-* -> choose-pit-to-fight -> choose-opponent -> preview -> bout -> fight-result
+  fighterId: null,
+  provinceId: null, settlementName: null,
+  position: null,
+  visitingLocation: null,
+  fightPitId: null,
+  opponentChoices: [],
+  opponent: null, arena: null, boutResult: null, revealedCount: 0,
+  flashMessage: null,
+};
+
+const FIGHT_OPPONENT_TIERS = [ { minFights:0, choices:1 }, { minFights:3, choices:2 }, { minFights:7, choices:3 } ];
+function opponentChoiceCount(fightCount){
+  let n = 1;
+  FIGHT_OPPONENT_TIERS.forEach(t=>{ if(fightCount >= t.minFights) n = t.choices; });
+  return n;
+}
+
+/* ============================ RENDER ============================ */
+
+const app = document.getElementById('app');
+
+function render(){
+  let title='FIGHTER SELECT', sub='FREE ROAM', body='';
+  if(state.screen==='select'){ body = renderSelect(); }
+  else if(state.screen==='city-walk'){ body = renderCityWalk(); title='WALKING'; sub=state.settlementName; }
+  else if(state.screen==='loc-npc'){ body = renderLocNpc(); title='STREET TALK'; }
+  else if(state.screen==='loc-minigames'){ body = renderLocMinigames(); title='???'; }
+  else if(state.screen==='loc-pit'){ body = renderLocPit(); title='FIGHT PIT'; }
+  else if(state.screen==='choose-pit-to-fight'){ body = renderChoosePitToFight(); title='FIND A FIGHT'; }
+  else if(state.screen==='choose-opponent'){ body = renderChooseOpponent(); title='PICK YOUR FIGHT'; }
+  else if(state.screen==='preview'){ body = renderPreview(); title='TALE OF THE TAPE'; }
+  else if(state.screen==='bout'){ body = renderBout(); title='FIGHT NIGHT'; }
+  else if(state.screen==='fight-result'){ body = renderFightResult(); title='RESULT'; }
+
+  app.innerHTML = `
+    <div class="ticket-header">
+      <div><div class="ticket-eyebrow">Iron Island · Fight League</div><div class="ticket-title">${title}</div></div>
+      <div class="ticket-sub">${sub}</div>
+    </div>
+    <div class="panel">${body}</div>
+  `;
+  wireEvents();
+}
+
+function renderSelect(){
+  const roster = getRoster();
+  if(!roster.length){
+    return `<div class="empty-note">No fighters saved yet. Build one in the Character Creator first.</div>`;
+  }
+  const rows = roster.map(f=>{
+    const prov = PROVINCES.find(p=>p.id===f.provinceId);
+    const status = f.freeRoamPitKey ? `Signed — ${f.freeRoamPitKey.split('|')[2]||'a pit'}` : 'Not yet signed';
+    return `
+      <div class="fighter-row" style="--fr-color:${prov?prov.color:'#C9A23C'}">
+        <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
+        <div style="flex:1;">
+          <div class="fr-name">${f.name}</div>
+          <div class="fr-meta">Age ${f.age} · ${DISCIPLINE_NAMES[f.primaryDisc]||''} · ${f.settlement||''} · $${f.wallet}</div>
+        </div>
+        <div class="fr-status">${status}</div>
+        <button class="fr-btn" data-select-fighter="${f.id}">Walk →</button>
+      </div>
+    `;
+  }).join('');
+  return `<div class="section-label">Pick a Fighter</div><div class="fighter-grid">${rows}</div>`;
+}
+
+function currentPits(){ return ensureCityPits(state.provinceId, state.settlementName); }
+function currentGrid(){ return ensureCityGrid(state.provinceId, state.settlementName); }
+
+function renderCityWalk(){
+  const f = getFighterById(state.fighterId);
+  const grid = currentGrid();
+  const entry = (SETTLEMENT_DATA[state.provinceId]||[]).find(e=>e.name===state.settlementName);
+  const pits = currentPits();
+  const eligiblePits = pits.filter(p=> f.fame >= p.reputationRequired);
+
+  const cellsHtml = [];
+  for(let r=0;r<grid.size;r++){
+    for(let c=0;c<grid.size;c++){
+      const isYou = state.position.row===r && state.position.col===c;
+      const loc = grid.locations.find(l=>l.row===r && l.col===c);
+      let icon = '', label = '';
+      if(loc){
+        if(loc.type==='pit'){ icon='🥊'; label = pits.find(p=>p.id===loc.pitId).name; }
+        else if(loc.type==='npc'){ icon='🗣️'; label = 'Local'; }
+        else if(loc.type==='minigames'){ icon='🎲'; label = '???'; }
+      }
+      const cls = isYou ? 'you' : (loc ? '' : 'empty');
+      cellsHtml.push(`<div class="block-cell ${cls}" data-walk-cell="${r}|${c}">
+        ${isYou ? '<span class="bc-icon">🧍</span>YOU' : loc ? `<span class="bc-icon">${icon}</span>${label}` : ''}
+      </div>`);
+    }
+  }
+
+  return `
+    <div class="city-head">
+      <div class="city-head-name">${state.settlementName}</div>
+      <div class="city-head-meta">${entry?entry.tier:''} · Pop. ${entry?entry.population.toLocaleString():'?'} · ${pits.length} fight pit${pits.length===1?'':'s'} in town</div>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <span class="wallet-badge">$${f.wallet}</span>
+      <span class="wallet-badge" style="color:var(--bone-dim);">Fame: ${f.fame}</span>
+    </div>
+    <div class="block-grid" style="--gcols:${grid.size};">${cellsHtml.join('')}</div>
+    <div class="walk-hint">Click an adjacent block to walk there.</div>
+    <div class="btn-row">
+      <button class="btn" id="back-to-select-from-walk">← Fighter Select</button>
+      ${f.freeRoamPitKey && eligiblePits.length ? `<button class="btn btn-primary" id="find-a-fight">Find a Fight →</button>` : ''}
+    </div>
+  `;
+}
+
+function renderLocNpc(){
+  const npc = state.visitingLocation.npc;
+  return `
+    <div class="npc-quote">
+      "${npc.line}"
+      <span class="npc-name">— ${npc.name}</span>
+    </div>
+    <div class="btn-row"><span></span><button class="btn btn-primary" id="back-to-walk">Keep Walking →</button></div>
+  `;
+}
+
+function renderLocMinigames(){
+  return `
+    <div class="stub-screen">
+      <h2>???</h2>
+      <p>Something's back here, but it's not running yet. Dice, cards, memory games — word is it's coming. For now, the tables are empty.</p>
+      <button class="btn btn-primary" id="back-to-walk">Keep Walking →</button>
+    </div>
+  `;
+}
+
+function renderLocPit(){
+  const f = getFighterById(state.fighterId);
+  const pit = currentPits().find(p=>p.id===state.visitingLocation.pitId);
+  const cityKey = state.provinceId+'|'+state.settlementName+'|'+pit.id;
+  const isSignedHere = f.freeRoamPitKey === cityKey;
+  const isSignedElsewhere = f.freeRoamPitKey && !isSignedHere;
+  const locked = f.fame < pit.reputationRequired;
+
+  const byClass = { Light:[], Middle:[], Heavy:[] };
+  pit.roster.forEach(r=> byClass[r.weightClass].push(r));
+  Object.values(byClass).forEach(list=> list.sort((a,b)=> b.age-a.age || (b.allTimeRecord.wins-b.allTimeRecord.losses)-(a.allTimeRecord.wins-a.allTimeRecord.losses)));
+
+  const rosterHtml = ['Light','Middle','Heavy'].map(wc=>{
+    if(!byClass[wc].length) return '';
+    const rows = byClass[wc].map(r=>`
+      <div class="roster-fighter-row">
+        <span class="rfr-name">${r.name}</span>
+        <span class="rfr-age">Age ${r.age}</span>
+        <span class="rfr-record">${r.allTimeRecord.wins}-${r.allTimeRecord.losses}</span>
+      </div>
+    `).join('');
+    return `<div class="weight-class-block"><div class="wc-label">${wc}weight</div>${rows}</div>`;
+  }).join('');
+
+  let actionHtml;
+  if(locked){
+    actionHtml = `<p style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center;">This pit doesn't know your name yet. Build some fame first (needs ${pit.reputationRequired}, you have ${f.fame}).</p>`;
+  } else if(!f.freeRoamPitKey){
+    actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="sign-here">Sign Here — Start Your Career</button></div>`;
+  } else {
+    actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="register-fight" data-pit-id="${pit.id}">Register to Fight →</button></div>`;
+  }
+
+  return `
+    <div class="loc-head">
+      <div class="loc-name">${pit.name}</div>
+      <div class="loc-meta">${isSignedHere?'Your home pit':isSignedElsewhere?'Not your pit':'Unsigned'} · Reputation needed: ${pit.reputationRequired}</div>
+    </div>
+    <div class="pit-boss-card">
+      <div class="pit-boss-avatar">${buildSilhouetteSM({skin:pick(SKIN_TONES), hair:pick(HAIR_COLORS)})}</div>
+      <div>
+        <div class="pit-boss-name">${pit.bossName}</div>
+        <div class="pit-boss-title">"${pit.bossTitle}" — Pit Boss</div>
+      </div>
+    </div>
+    <div class="section-label">Registered This Season (${pit.roster.length})</div>
+    ${rosterHtml}
+    ${actionHtml}
+    <div class="btn-row" style="margin-top:8px;"><button class="btn" id="back-to-walk">← Keep Walking</button><span></span></div>
+  `;
+}
+
+function renderChoosePitToFight(){
+  const f = getFighterById(state.fighterId);
+  const pits = currentPits().filter(p=> f.fame >= p.reputationRequired);
+  const rows = pits.map(p=>`
+    <div class="pick-row">
+      <span>${p.name} <span style="color:var(--muted); font-family:var(--mono); font-size:10.5px;">(${p.roster.length} fighters)</span></span>
+      <button class="fr-btn" data-fight-at-pit="${p.id}">Fight Here →</button>
+    </div>
+  `).join('');
+  return `
+    <div class="section-label">Choose Your Pit — ${state.settlementName}</div>
+    <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:16px;">Multiple pits in this city are willing to book you tonight.</p>
+    ${rows}
+    <div class="btn-row" style="margin-top:14px;"><button class="btn" id="back-to-walk">← Back</button><span></span></div>
+  `;
+}
+
+function renderChooseOpponent(){
+  const f = getFighterById(state.fighterId);
+  const cards = state.opponentChoices.map((opp,i)=>{
+    const ovr = calcOVR(opp.stats);
+    return `
+      <div class="tape-side" data-pick-opponent="${i}" style="cursor:pointer;">
+        <div class="tape-avatar">${buildSilhouetteSM(opp.appearance)}</div>
+        <div class="tape-name">${opp.name}</div>
+        <div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div>
+        <div class="tape-ovr">${ovr}</div>
+        <div class="tape-record">${opp.allTimeRecord.wins}-${opp.allTimeRecord.losses} all-time</div>
+      </div>
+    `;
+  }).join('');
+  const pit = currentPits().find(p=>p.id===state.fightPitId);
+  const entryFee = 2 + Math.round(pit.reputationRequired/5);
+  return `
+    <div class="section-label">${pit.name} — Pick Your Opponent</div>
+    <p style="font-family:var(--mono); font-size:11px; color:var(--muted); margin-bottom:16px;">Entry fee: $${entryFee} · Your wallet: $${f.wallet}</p>
+    <div class="tape-grid" style="grid-template-columns:repeat(${state.opponentChoices.length},1fr);">${cards}</div>
+    <div class="btn-row"><button class="btn" id="back-to-walk">← Back Out</button><span></span></div>
+  `;
+}
+
+function renderPreview(){
+  const f = getFighterById(state.fighterId);
+  const opp = state.opponent;
+  const ovrF = calcOVR(f.stats), ovrOpp = calcOVR(opp.stats);
+  const scaleMax = Math.max(ovrF, ovrOpp, 20) * 1.3;
+  function statRow(label, valF, valOpp){
+    return `<div style="margin-bottom:10px;"><div class="round-label" style="text-align:center;">${label}</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div style="text-align:right; font-family:var(--mono); font-size:11px; color:var(--bone);">${valF}</div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--bone);">${valOpp}</div>
+      </div></div>`;
+  }
+  return `
+    <div class="section-label">Tale of the Tape</div>
+    <div class="tape-grid">
+      <div class="tape-side"><div class="tape-avatar">${buildSilhouetteSM(f.appearance)}</div><div class="tape-name">${f.name}</div><div class="tape-disc">${DISCIPLINE_NAMES[f.primaryDisc]}</div><div class="tape-ovr">${ovrF}</div></div>
+      <div class="tape-side"><div class="tape-avatar">${buildSilhouetteSM(opp.appearance)}</div><div class="tape-name">${opp.name}</div><div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div><div class="tape-ovr">${ovrOpp}</div></div>
+    </div>
+    ${statRow('SPEED', f.stats.speed, opp.stats.speed)}
+    ${statRow('QUICKNESS', f.stats.quickness, opp.stats.quickness)}
+    ${statRow('TOUGHNESS', f.stats.toughness, opp.stats.toughness)}
+    ${statRow('POWER', f.stats.power, opp.stats.power)}
+    ${statRow('AGILITY', f.stats.agility, opp.stats.agility)}
+    <div class="btn-row"><span></span><button class="btn btn-primary" id="enter-arena">Enter the Pit →</button></div>
+  `;
+}
+
+function renderBout(){
+  const r = state.boutResult;
+  const visible = r.log.slice(0, state.revealedCount);
+  const logHtml = visible.map(entry=>{
+    if(entry.type==='round-header') return `<div class="round-label">ROUND ${entry.round}</div>`;
+    if(entry.type==='finish') return `<div class="pick-row" style="border-color:var(--ink-red);"><span style="color:var(--ink-red); font-weight:600;">${entry.text}</span></div>`;
+    if(entry.type==='decision') return `<div class="pick-row" style="border-color:var(--brass-dim);"><span style="color:var(--brass);">${entry.text}</span></div>`;
+    return `<div class="pick-row"><span>${entry.text}</span></div>`;
+  }).join('');
+  const done = state.revealedCount >= r.log.length;
+  return `
+    <div>${logHtml}</div>
+    <div class="btn-row"><span></span><button class="btn btn-primary" id="advance-bout">${done?'Confirm Result →':'Next →'}</button></div>
+  `;
+}
+
+function renderFightResult(){
+  const f = getFighterById(state.fighterId);
+  const r = state.boutResult;
+  const won = r.winner.id === f.id;
+  return `
+    <div class="stub-screen">
+      <h2>${won?'YOU WIN':'YOU LOSE'}</h2>
+      <p>${won ? f.name+' defeats '+state.opponent.name : state.opponent.name+' defeats '+f.name} by ${r.method}.</p>
+      <p style="font-family:var(--mono); color:var(--brass);">${state.flashMessage||''}</p>
+      <button class="btn btn-primary" id="back-to-walk-from-result">Continue →</button>
+    </div>
+  `;
+}
+
+/* ============================ EVENTS ============================ */
+
+function wireEvents(){
+  document.querySelectorAll('[data-select-fighter]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const f = getFighterById(btn.dataset.selectFighter);
+      state.fighterId = f.id;
+      if(f.freeRoamPitKey){
+        const [pid, city] = f.freeRoamPitKey.split('|');
+        state.provinceId = pid; state.settlementName = city;
+      } else {
+        state.provinceId = f.provinceId; state.settlementName = f.settlement;
+      }
+      const grid = ensureCityGrid(state.provinceId, state.settlementName);
+      state.position = { ...grid.startCell };
+      state.screen = 'city-walk';
+      render();
+    };
+  });
+
+  const backFromWalk = document.getElementById('back-to-select-from-walk');
+  if(backFromWalk) backFromWalk.onclick = ()=>{ state.screen='select'; render(); };
+
+  document.querySelectorAll('[data-walk-cell]').forEach(cell=>{
+    cell.onclick = ()=>{
+      const [r,c] = cell.dataset.walkCell.split('|').map(Number);
+      const dr = Math.abs(state.position.row-r), dc = Math.abs(state.position.col-c);
+      if(dr>1 || dc>1) return; // not adjacent, can't walk there directly
+      if(dr===0 && dc===0) return;
+      state.position = { row:r, col:c };
+      const grid = currentGrid();
+      const loc = grid.locations.find(l=>l.row===r && l.col===c);
+      if(loc){
+        state.visitingLocation = loc;
+        if(loc.type==='pit') state.screen = 'loc-pit';
+        else if(loc.type==='npc') state.screen = 'loc-npc';
+        else if(loc.type==='minigames') state.screen = 'loc-minigames';
+      }
+      render();
+    };
+  });
+
+  const backToWalk = document.getElementById('back-to-walk');
+  if(backToWalk) backToWalk.onclick = ()=>{ state.screen='city-walk'; render(); };
+
+  const findAFight = document.getElementById('find-a-fight');
+  if(findAFight) findAFight.onclick = ()=>{ state.screen='choose-pit-to-fight'; render(); };
+
+  const signHere = document.getElementById('sign-here');
+  if(signHere) signHere.onclick = ()=>{
+    const pit = currentPits().find(p=>p.id===state.visitingLocation.pitId);
+    const cityKey = state.provinceId+'|'+state.settlementName+'|'+pit.id;
+    updateFighter(state.fighterId, f=>{ f.freeRoamPitKey = cityKey; });
+    state.screen = 'city-walk';
+    render();
+  };
+
+  function beginFightRegistration(pitId){
+    const f = getFighterById(state.fighterId);
+    const pit = currentPits().find(p=>p.id===pitId);
+    const entryFee = 2 + Math.round(pit.reputationRequired/5);
+    if(f.wallet < entryFee){
+      state.flashMessage = `Can't afford the $${entryFee} entry fee — go win some money first.`;
+      state.screen = 'city-walk';
+      render();
+      return;
+    }
+    const myWc = weightClassOf(f.weightLb);
+    let candidates = pit.roster.filter(r=>r.weightClass===myWc);
+    if(candidates.length < 3) candidates = candidates.concat(pit.roster.filter(r=>r.weightClass!==myWc));
+    const n = Math.min(opponentChoiceCount(f.freeRoamFightCount), candidates.length || 1);
+    const chosen = [];
+    const pool = [...candidates];
+    for(let i=0;i<n && pool.length;i++){
+      const idx = Math.floor(Math.random()*pool.length);
+      chosen.push(pool.splice(idx,1)[0]);
+    }
+    state.fightPitId = pitId;
+    state.opponentChoices = chosen;
+    state.screen = 'choose-opponent';
+    render();
+  }
+
+  const registerFight = document.getElementById('register-fight');
+  if(registerFight) registerFight.onclick = ()=> beginFightRegistration(registerFight.dataset.pitId);
+
+  document.querySelectorAll('[data-fight-at-pit]').forEach(btn=>{
+    btn.onclick = ()=> beginFightRegistration(btn.dataset.fightAtPit);
+  });
+
+  document.querySelectorAll('[data-pick-opponent]').forEach(card=>{
+    card.onclick = ()=>{
+      const idx = parseInt(card.dataset.pickOpponent, 10);
+      const f = getFighterById(state.fighterId);
+      const pit = currentPits().find(p=>p.id===state.fightPitId);
+      const entryFee = 2 + Math.round(pit.reputationRequired/5);
+      updateFighter(state.fighterId, ff=>{ ff.wallet -= entryFee; });
+      state.opponent = state.opponentChoices[idx];
+      state.arena = { name: pit.name };
+      const freshF = getFighterById(state.fighterId);
+      state.boutResult = simulateBout(freshF, state.opponent, { arena:{floor:'dirt'}, hometownPit:true });
+      state.revealedCount = 0;
+      state.screen = 'preview';
+      render();
+    };
+  });
+
+  const enterArena = document.getElementById('enter-arena');
+  if(enterArena) enterArena.onclick = ()=>{ state.screen='bout'; render(); };
+
+  const advanceBout = document.getElementById('advance-bout');
+  if(advanceBout) advanceBout.onclick = ()=>{
+    const r = state.boutResult;
+    if(state.revealedCount < r.log.length){
+      state.revealedCount = Math.min(r.log.length, state.revealedCount + 3);
+      render();
+      return;
+    }
+    const f = getFighterById(state.fighterId);
+    const won = r.winner.id === f.id;
+    const pit = currentPits().find(p=>p.id===state.fightPitId);
+    const entryFee = 2 + Math.round(pit.reputationRequired/5);
+    const prize = won ? entryFee*3 + rand(0,5) : Math.round(entryFee*0.5);
+    const fameGain = won ? (r.method==='Decision' ? rand(1,2) : rand(2,4)) : (Math.random()<0.2 ? 1 : 0);
+
+    let flash = null;
+    updateFighter(state.fighterId, ff=>{
+      if(won) ff.record.wins += 1; else ff.record.losses += 1;
+      ff.fightLog.push({
+        tier:'Juvenile', opponent: state.opponent.name, result: won?'W':'L', method:r.method,
+        location: `${pit.name}, ${state.settlementName}`, date: new Date().toISOString(),
+      });
+      ff.wallet += prize;
+      ff.fame += fameGain;
+      ff.freeRoamFightCount += 1;
+      const nextChoices = opponentChoiceCount(ff.freeRoamFightCount);
+      const prevChoices = opponentChoiceCount(ff.freeRoamFightCount-1);
+      if(nextChoices > prevChoices) flash = `Word's getting around — you can now pick from ${nextChoices} opponents when you register.`;
+      const allPits = currentPits();
+      const nextTierPit = allPits.find(p=> p.reputationRequired > (ff.fame-fameGain) && p.reputationRequired <= ff.fame);
+      if(nextTierPit) flash = `A face from ${nextTierPit.name} was watching tonight — you're on their radar now.`;
+    });
+    state.flashMessage = flash ? flash : (won ? `+$${prize} · +${fameGain} fame` : `+$${prize} consolation`);
+    state.screen = 'fight-result';
+    render();
+  };
+
+  const backFromResult = document.getElementById('back-to-walk-from-result');
+  if(backFromResult) backFromResult.onclick = ()=>{ state.flashMessage=null; state.screen='city-walk'; render(); };
+}
+
+render();
+</script>
+</body>
+</html>
