@@ -791,7 +791,19 @@ const GRID_SIZE_BY_TIER = { Capital:5, City:4, Town:3, Village:2 };
 function ensureCityGrid(provinceId, settlementName){
   const s = loadRoamState();
   const key = provinceId + '|' + settlementName;
-  if(s.grids[key]) return s.grids[key];
+  if(s.grids[key]){
+    // Repair pass: grids cached before roaming events existed won't have this field —
+    // without this, walking into an older-saved city crashes on grid.roamingEvents.find().
+    const grid = s.grids[key];
+    if(!Array.isArray(grid.roamingEvents)){
+      const tierForRepair = (SETTLEMENT_DATA[provinceId]||[]).find(e=>e.name===settlementName);
+      const roamingCount = tierForRepair && tierForRepair.tier==='Capital' ? 2 : 1;
+      grid.roamingEvents = [];
+      placeRoamingEvents(grid, roamingCount);
+      saveRoamState(s);
+    }
+    return grid;
+  }
   const entry = (SETTLEMENT_DATA[provinceId]||[]).find(e=>e.name===settlementName);
   const tier = entry ? entry.tier : 'Village';
   const size = GRID_SIZE_BY_TIER[tier] || 2;
@@ -1686,6 +1698,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V3 · 2026-07-11</div>
+<div class="version-badge">FREE ROAM · V4 · 2026-07-11</div>
 </body>
 </html>
