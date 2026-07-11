@@ -146,6 +146,11 @@
     .fighter-row{ flex-wrap:wrap; }
     .tape-grid{ grid-template-columns:1fr; }
   }
+
+  .version-badge{
+    position:fixed; bottom:14px; right:16px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8B8070;
+    background:#241D17; border:1px solid #43392D; padding:5px 9px; letter-spacing:.5px; z-index:999;
+  }
 </style>
 </head>
 <body>
@@ -1080,5 +1085,6 @@ function wireEvents(){
 
 render();
 </script>
+<div class="version-badge">FREE ROAM · V1 · 2026-07-11</div>
 </body>
 </html>
