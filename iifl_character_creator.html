@@ -1550,6 +1550,7 @@ function renderRosterScreen(){
         </div>
         <div class="rc-actions">
           <button class="rc-btn" data-replay="${f.id}">▶ Replay Intro</button>
+          <a class="rc-btn" href="iifl_free_roam.html" style="text-decoration:none; display:inline-block;">🚶 Walk the City</a>
           ${f.mate ? `<button class="rc-btn" data-child="${f.id}">👶 Have a Child</button>` : `<button class="rc-btn" data-mate="${f.id}">💍 Find a Mate</button>`}
           <button class="rc-btn danger" data-delete="${f.id}">Delete</button>
         </div>
@@ -1665,8 +1666,11 @@ function renderCutsceneScreen(){
     body = `
       <div class="stub-screen">
         <h2>To Be Continued…</h2>
-        <p>${record.name} is on the ground in ${record.settlement}, ${province.name}. Free roam — walking the city, training, fight pits, mini-games — is the next layer to build. For now, your fighter is locked in and ready.</p>
-        <button class="btn btn-primary" id="end-to-roster">Return to Roster</button>
+        <p>${record.name} is on the ground in ${record.settlement}, ${province.name}. Time to see what the streets have for you — find a fight pit, hear what the locals say, make a name.</p>
+        <div class="btn-row" style="justify-content:center; gap:12px;">
+          <button class="btn" id="end-to-roster">Return to Roster</button>
+          <button class="btn btn-primary" id="end-to-free-roam">Walk the City →</button>
+        </div>
       </div>
     `;
   } else {
@@ -1722,6 +1726,11 @@ function renderCutsceneScreen(){
     state.cutsceneFighter = null;
     state.cutsceneBeat = 0;
     render();
+  };
+
+  const roamBtn = document.getElementById('end-to-free-roam');
+  if(roamBtn) roamBtn.onclick = ()=>{
+    window.location.href = 'iifl_free_roam.html';
   };
 }
 
@@ -2267,6 +2276,6 @@ function updateNextBasicsDisabled(){
 
 render();
 </script>
-<div class="version-badge">CHARACTER CREATOR · V8 · 2026-07-11</div>
+<div class="version-badge">CHARACTER CREATOR · V9 · 2026-07-11</div>
 </body>
 </html>
