@@ -293,6 +293,28 @@
   }
   .settlement-tier.Capital{ color:var(--brass); border-color:var(--brass-dim); }
   .settlement-pop{ font-family:var(--mono); font-size:11px; color:var(--brass); flex-shrink:0; }
+  .settlement-info-btn{
+    flex-shrink:0; width:22px; height:22px; border:1px solid var(--line); background:var(--bg-raised-2);
+    color:var(--brass); font-size:12px; cursor:pointer; line-height:1; padding:0;
+  }
+  .settlement-info-btn:hover{ border-color:var(--brass); background:var(--brass); color:var(--bg-base); }
+
+  /* city detail modal */
+  .city-modal-overlay{
+    position:fixed; inset:0; background:rgba(10,8,6,0.78); display:flex; align-items:center; justify-content:center;
+    padding:20px; z-index:1000;
+  }
+  .city-modal-card{ background:var(--bg-panel); border:1px solid var(--brass-dim); max-width:420px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.55); }
+  .city-modal-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .city-modal-title{ font-family:var(--display); font-size:22px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .city-modal-close{ background:transparent; border:1px solid var(--line); color:var(--muted); width:28px; height:28px; cursor:pointer; font-family:var(--mono); font-size:13px; }
+  .city-modal-close:hover{ border-color:var(--ink-red); color:var(--ink-red); }
+  .city-modal-body{ padding:18px 20px; }
+  .city-stat-row{ display:flex; justify-content:space-between; align-items:baseline; padding:9px 0; border-bottom:1px solid var(--line); }
+  .city-stat-row:last-of-type{ border-bottom:none; }
+  .city-stat-label{ font-family:var(--label); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); }
+  .city-stat-val{ font-family:var(--mono); font-size:13px; color:var(--bone); text-align:right; }
+  .city-fighters-text{ font-family:var(--body); font-size:13px; color:var(--bone-dim); line-height:1.6; margin-top:12px; }
 
   /* ---- sequencing question ---- */
   .q-wrap{ min-height:300px; }
@@ -803,6 +825,11 @@
   .mfh-result.win{ color:var(--good); }
   .mfh-result.loss{ color:var(--ink-red); }
   .mf-empty{ text-align:center; padding:24px 10px; color:var(--muted); font-family:var(--body); font-size:13px; }
+
+  .version-badge{
+    position:fixed; bottom:14px; right:16px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8B8070;
+    background:#241D17; border:1px solid #43392D; padding:5px 9px; letter-spacing:.5px; z-index:999;
+  }
 </style>
 </head>
 <body>
@@ -1328,12 +1355,38 @@ function heightLabel(inches){
 const TIERS = ['All','Juvenile','Amateur','Semi-Pro','Pro','Exhibition'];
 let modalFighterId = null;
 let modalActiveTier = 'All';
+let modalCityKey = null; // { provinceId, settlementName }
 
-function openFighterCard(id){ modalFighterId = id; modalActiveTier = 'All'; renderModal(); }
+function openFighterCard(id){ modalCityKey = null; modalFighterId = id; modalActiveTier = 'All'; renderModal(); }
 function closeFighterCard(){ modalFighterId = null; renderModal(); }
+function openCityModal(provinceId, settlementName){ modalFighterId = null; modalCityKey = { provinceId, settlementName }; renderModal(); }
+function closeCityModal(){ modalCityKey = null; renderModal(); }
+
+const ECONOMY_BY_TIER = {
+  Capital: ['Thriving commercial hub — money moves fast here', 'Booming trade center, wealth on display', 'The provincial seat — banks, guilds, old money'],
+  City: ['Prosperous and steady — solid trade economy', 'Comfortable, well-established commerce', 'Growing fast, new money everywhere'],
+  Town: ['Modest, working-class — everyone knows everyone', 'Getting by on trade and local industry', 'Steady but unremarkable — a working town'],
+  Village: ['Poor, mostly subsistence living', 'Small and struggling, but proud', 'Quiet, isolated, scraping by'],
+};
+function economicStatusFor(settlementName, tier){
+  // Deterministic pick per settlement so it doesn't change on every reopen.
+  let hash = 0;
+  for(let i=0;i<settlementName.length;i++) hash = (hash*31 + settlementName.charCodeAt(i)) & 0xffffffff;
+  const options = ECONOMY_BY_TIER[tier] || ECONOMY_BY_TIER.Town;
+  return options[Math.abs(hash) % options.length];
+}
+function commonFightersTextFor(province){
+  const primary = (province.primary||[]).map(d=>DISCIPLINE_NAMES[d]).filter(Boolean);
+  const secondary = (province.secondary||[]).map(d=>DISCIPLINE_NAMES[d]).filter(Boolean);
+  let text = '';
+  if(primary.length) text += `${primary.join(' and ')} ${primary.length>1?'are':'is'} the local style — most fighters here come up through it.`;
+  if(secondary.length) text += ` ${secondary.join(' and ')} ${secondary.length>1?'show':'shows'} up too, just less often.`;
+  return text || 'No dominant style here — a real mixed bag.';
+}
 
 function renderModal(){
   const root = document.getElementById('modal-root');
+  if(modalCityKey){ renderCityModal(root); return; }
   if(!modalFighterId){ root.innerHTML = ''; return; }
   const roster = loadRoster();
   const f = roster.find(r=> r.id === modalFighterId);
@@ -1393,6 +1446,33 @@ function renderModal(){
   `;
 }
 
+function renderCityModal(root){
+  const { provinceId, settlementName } = modalCityKey;
+  const province = PROVINCES.find(p=>p.id===provinceId);
+  const entry = (SETTLEMENT_DATA[provinceId]||[]).find(s=>s.name===settlementName);
+  if(!province || !entry){ root.innerHTML = ''; return; }
+  const econ = economicStatusFor(entry.name, entry.tier);
+  const fightersText = commonFightersTextFor(province);
+
+  root.innerHTML = `
+    <div class="city-modal-overlay" data-city-overlay>
+      <div class="city-modal-card">
+        <div class="city-modal-head">
+          <div class="city-modal-title">${entry.name}</div>
+          <button class="city-modal-close" data-city-close>✕</button>
+        </div>
+        <div class="city-modal-body">
+          <div class="city-stat-row"><span class="city-stat-label">Province</span><span class="city-stat-val">${province.name}</span></div>
+          <div class="city-stat-row"><span class="city-stat-label">Population</span><span class="city-stat-val">${entry.population.toLocaleString()}</span></div>
+          <div class="city-stat-row"><span class="city-stat-label">Settlement Tier</span><span class="city-stat-val">${entry.tier}</span></div>
+          <div class="city-stat-row"><span class="city-stat-label">Economic Status</span><span class="city-stat-val" style="text-align:right; max-width:220px;">${econ}</span></div>
+          <div class="city-fighters-text">${fightersText}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 document.addEventListener('click', (e)=>{
   const openEl = e.target.closest('[data-open-fighter]');
   if(openEl){ openFighterCard(openEl.dataset.openFighter); return; }
@@ -1402,6 +1482,18 @@ document.addEventListener('click', (e)=>{
   if(overlayEl && e.target === overlayEl){ closeFighterCard(); return; }
   const tabEl = e.target.closest('[data-mf-tab]');
   if(tabEl){ modalActiveTier = tabEl.dataset.mfTab; renderModal(); return; }
+
+  const cityInfoEl = e.target.closest('[data-city-info]');
+  if(cityInfoEl){
+    e.stopPropagation();
+    const [pid, name] = cityInfoEl.dataset.cityInfo.split('|');
+    openCityModal(pid, name);
+    return;
+  }
+  const cityCloseEl = e.target.closest('[data-city-close]');
+  if(cityCloseEl){ closeCityModal(); return; }
+  const cityOverlayEl = e.target.closest('[data-city-overlay]');
+  if(cityOverlayEl && e.target === cityOverlayEl){ closeCityModal(); return; }
 });
 
 function render(){
@@ -1694,6 +1786,7 @@ function renderBasics(){
             <div class="settlement-row ${state.settlement===s.name?'chosen':''}" data-pick-settlement="${s.name}">
               <span class="settlement-row-name"><b>${s.name}</b><span class="settlement-tier ${s.tier}">${s.tier}</span></span>
               <span class="settlement-pop">${s.population.toLocaleString()}</span>
+              <button class="settlement-info-btn" data-city-info="${province.id}|${s.name}" title="City details">ⓘ</button>
             </div>
           `).join('')}
         </div>
@@ -2018,7 +2111,8 @@ function wireEvents(){
   if(settlementInput) settlementInput.onchange = (e)=>{ state.settlement = e.target.value; updateNextBasicsDisabled(); };
 
   document.querySelectorAll('[data-pick-settlement]').forEach(row=>{
-    row.onclick = ()=>{
+    row.onclick = (e)=>{
+      if(e.target.closest('[data-city-info]')) return; // info button handles its own click
       state.settlement = row.dataset.pickSettlement;
       render();
     };
@@ -2173,5 +2267,6 @@ function updateNextBasicsDisabled(){
 
 render();
 </script>
+<div class="version-badge">CHARACTER CREATOR · V8 · 2026-07-11</div>
 </body>
 </html>
