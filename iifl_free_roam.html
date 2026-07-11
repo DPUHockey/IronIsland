@@ -140,6 +140,10 @@
     font-family:var(--mono); font-size:13px; color:var(--brass); background:var(--bg-raised); border:1px solid var(--brass-dim);
     padding:6px 12px; display:inline-block;
   }
+  .mt-record-grid{ display:grid; gap:10px; }
+  .mt-record-box{ background:var(--bg-raised); border:1px solid var(--line); text-align:center; padding:12px; }
+  .mt-record-box .mrv{ font-family:var(--mono); font-size:20px; font-weight:700; color:var(--brass); }
+  .mt-record-box .mrl{ font-family:var(--label); font-size:9.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-top:2px; }
 
   @media (max-width:600px){
     .ticket-header{ flex-direction:column; align-items:flex-start; gap:6px; }
@@ -270,6 +274,43 @@ const SKIN_TONES = ['#3E2A1E','#5C3A24','#8C5A35','#C68642','#E0AC69','#F1C27D']
 const HAIR_COLORS = ['#0E0C0A','#3B2417','#6B4226','#A85C2A','#C9A23C','#D9D2C5','none'];
 
 function calcOVR(stats){ return Math.round((stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5); }
+
+const AGE_BAND_TYPICAL      = { 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35 };
+const AGE_BAND_PRODIGY      = { 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35 };
+const AGE_BAND_GENERATIONAL = { 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88 };
+function bandCeiling(age, tier){
+  const table = tier==='generational' ? AGE_BAND_GENERATIONAL : tier==='prodigy' ? AGE_BAND_PRODIGY : AGE_BAND_TYPICAL;
+  return table[clamp(age, 12, 18)];
+}
+// Same earned-growth pattern as the rest of the game: win, finish, and beating someone
+// tougher than you are the levers. Returns which stats actually changed for display.
+function growFighterStats(f, playerWon, method, oppOVR){
+  const ceiling = bandCeiling(f.age||12, f.talentTier||'normal');
+  const potentialFactor = clamp((f.potential || 50) / 99, 0, 1);
+  const ownOVR = calcOVR(f.stats);
+  let growthTicks = 0;
+  if(playerWon){
+    growthTicks += 1;
+    if(method !== 'Decision') growthTicks += 1;
+    if(oppOVR > ownOVR) growthTicks += 1;
+  } else if(Math.random() < 0.3){
+    growthTicks += 1;
+  }
+  growthTicks = Math.round(growthTicks * (0.4 + potentialFactor * 0.9));
+  const before = { ...f.stats };
+  const statKeys = ['speed','quickness','toughness','power','agility'];
+  for(let i=0;i<growthTicks;i++){
+    const key = pick(statKeys);
+    const current = f.stats[key];
+    if(current >= ceiling) continue;
+    const room = 1 - (current/ceiling);
+    if(Math.random() < 0.45 + room*0.4) f.stats[key] = clamp(current+1, 1, ceiling);
+  }
+  const deltas = {};
+  statKeys.forEach(k=>{ if(f.stats[k] !== before[k]) deltas[k] = f.stats[k]-before[k]; });
+  return deltas;
+}
+
 function weightClassOf(weightLb){ if(weightLb<=98) return 'Light'; if(weightLb<=117) return 'Middle'; return 'Heavy'; }
 function heightLabel(inches){ if(!inches) return ''; const ft=Math.floor(inches/12), inch=inches%12; return `${ft}'${inch}"`; }
 function buildSilhouetteSM(app){
@@ -374,6 +415,9 @@ const DISC_FLAVOR = {
   judo: ['a hard hip toss', 'a shoulder throw that lands clean', 'a grip fight that ends in a sweep'],
   catch: ['a scramble into a tight headlock', 'a leg lace fight on the mat', 'a sudden roll into a submission hunt'],
 };
+const GRAPPLING_DISC = ['judo','sambo','catch','wrestler'];
+const SUBMISSION_TYPES = ['a rear-naked choke','an armbar','a guillotine choke','a kimura','a triangle choke','an ankle lock','a heel hook','a kneebar','a d\'arce choke'];
+
 const ROUND_OPENERS = [
   '{A} and {B} circle the {floor}, sizing each other up.',
   'The bell sounds and {A} comes out moving, {B} matching the pace.',
@@ -392,6 +436,45 @@ const ROUND_CLOSERS = [
   'Round closes with {A} marginally ahead on output.',
   'Round closes with {B} landing the harder shot at the bell.',
 ];
+// Mid-round scares: a knockdown that DOESN'T end the fight — pure drama, keeps rounds tense.
+const SCARE_KNOCKDOWN = [
+  '{W} connects clean and {L} hits the {floor}!',
+  '{L} is rocked — down goes {L}! {W} smells blood.',
+  'A short shot buckles {L}\'s legs and {L} goes down.',
+];
+const SCARE_RECOVERY = [
+  '{L} beats the count, wobbly but still in this.',
+  'Somehow {L} survives the storm and the round limps to the horn.',
+  '{L} clears the cobwebs and resets — still alive in this fight.',
+];
+// Finish build-ups, method-specific
+const BUILDUP_STRIKE = [
+  '{W} starts finding the range — {L} is having trouble answering.',
+  'The pace shifts. {W} is landing more than {L} can afford.',
+];
+const KNOCKDOWN_LINES = [
+  '{W} lands clean and {L} crashes to the {floor}!',
+  'A perfect shot — {L} is down and the crowd is on its feet!',
+  '{W} times it perfectly and {L} hits the deck!',
+];
+const BARRAGE_LINES = [
+  '{W} pounces immediately, unloading as {L} tries to cover up.',
+  'No letting up — {W} swarms with everything left in the tank.',
+  '{W} smells the finish and closes the door, shot after shot.',
+];
+const BUILDUP_GRAPPLE = [
+  '{W} changes levels and gets a hold of {L}.',
+  '{W} works the clinch, looking for an opening to the mat.',
+];
+const CONTROL_LINES = [
+  '{W} takes {L} down and immediately starts working for position.',
+  '{W} gets to {L}\'s back — this is trouble.',
+  '{W} passes into full mount, {L} scrambling underneath.',
+];
+const SUB_LOCKED_LINES = [
+  '{W} locks in {sub} — deep, no room to escape.',
+  '{sub}. {W} has it sunk in tight.',
+];
 const FINISH_KO = [
   '{W} catches {L} clean — {L} goes down and doesn\'t beat the count. KO, {W}!',
   '{W} lands the perfect shot and {L} hits the {floor}. It\'s over — KO!',
@@ -401,6 +484,11 @@ const FINISH_TKO = [
   '{L} can\'t answer back anymore. The ref steps in — TKO, {W}!',
   '{W} swarms {L} and the referee has seen enough. TKO.',
   '{L}\'s corner is waving it off. TKO, {W} wins.',
+];
+const FINISH_SUBMISSION = [
+  '{L} has no choice but to tap. Submission, {W}!',
+  '{L} taps immediately — it\'s over. Submission win for {W}.',
+  '{L} scrambles for space but there\'s nowhere to go — forced to tap. {W} wins by submission.',
 ];
 const FINISH_DQ = [
   '{L} loses all composure — an illegal shot, and the ref has no choice. DQ, {W} wins.',
@@ -412,6 +500,27 @@ const DECISION_LINES = [
   'No finish tonight — the crowd waits on the decision.',
 ];
 function fillTpl(text, map){ return text.replace(/{(\w+)}/g, (_,k)=> map[k]!==undefined ? map[k] : ''); }
+
+function submissionWeight(fA, fB){
+  const grapplers = [fA.primaryDisc, fB.primaryDisc].filter(d=>GRAPPLING_DISC.includes(d)).length;
+  const mmaCount = [fA.primaryDisc, fB.primaryDisc].filter(d=>d==='mma').length;
+  if(grapplers>=1) return 0.30 + grapplers*0.08;
+  if(mmaCount>=1) return 0.15;
+  return 0.03; // pure strikers — rare scrambles still happen
+}
+function computeFinishWeights(gap, fA, fB){
+  let base;
+  if(gap >= 20) base = { KO:0.38, TKO:0.34, Decision:0.26, DQ:0.02 };
+  else if(gap >= 10) base = { KO:0.20, TKO:0.32, Decision:0.46, DQ:0.02 };
+  else base = { KO:0.09, TKO:0.24, Decision:0.65, DQ:0.02 };
+  const subW = submissionWeight(fA, fB);
+  const strikeShare = base.KO + base.TKO;
+  const takeFromStrikes = Math.min(strikeShare*0.65, subW);
+  const scale = strikeShare>0 ? (strikeShare - takeFromStrikes) / strikeShare : 1;
+  base.KO *= scale; base.TKO *= scale;
+  base.Submission = takeFromStrikes;
+  return base;
+}
 
 function simulateBout(fA, fB, ctx){
   const ovrA = calcOVR(fA.stats), ovrB = calcOVR(fB.stats);
@@ -426,15 +535,13 @@ function simulateBout(fA, fB, ctx){
   const loser = winnerIsA ? fB : fA;
   const gap = Math.abs(effA - effB);
 
-  let finishWeights;
-  if(gap >= 20) finishWeights = { KO:0.38, TKO:0.34, Decision:0.26, DQ:0.02 };
-  else if(gap >= 10) finishWeights = { KO:0.20, TKO:0.32, Decision:0.46, DQ:0.02 };
-  else finishWeights = { KO:0.09, TKO:0.24, Decision:0.65, DQ:0.02 };
-
+  const finishWeights = computeFinishWeights(gap, fA, fB);
   const method = weightedPick(finishWeights);
-  const finishRound = method === 'Decision' ? 3 : parseInt(weightedPick({1:0.22, 2:0.36, 3:0.42}), 10);
+  const finishRound = method === 'Decision' ? 3 : parseInt(weightedPick({1:0.18, 2:0.34, 3:0.48}), 10);
   const floor = (ctx && ctx.arena && ctx.arena.floor) || 'sport court';
+  const isGrappleFinish = method === 'Submission';
   const log = [];
+
   for(let r=1; r<=3; r++){
     log.push({ type:'round-header', round:r });
     const map = { A: fA.name, B: fB.name, floor,
@@ -442,13 +549,35 @@ function simulateBout(fA, fB, ctx){
       flavorB: pick(DISC_FLAVOR[fB.primaryDisc] || DISC_FLAVOR.mma) };
     log.push({ type:'line', text: fillTpl(pick(ROUND_OPENERS), map) });
     log.push({ type:'line', text: fillTpl(pick(ROUND_EXCHANGES), map) });
+
     if(method !== 'Decision' && r === finishRound){
-      const fmap = { W: winner.name, L: loser.name, floor };
-      const lib = method === 'KO' ? FINISH_KO : method === 'TKO' ? FINISH_TKO : FINISH_DQ;
-      log.push({ type:'finish', text: fillTpl(pick(lib), fmap) });
+      const wmap = { A: fA.name, B: fB.name, W: winner.name, L: loser.name, floor, sub: pick(SUBMISSION_TYPES) };
+      if(isGrappleFinish){
+        log.push({ type:'line', text: fillTpl(pick(BUILDUP_GRAPPLE), wmap) });
+        log.push({ type:'line', text: fillTpl(pick(CONTROL_LINES), wmap) });
+        log.push({ type:'line', text: fillTpl(pick(SUB_LOCKED_LINES), wmap) });
+        log.push({ type:'finish', text: fillTpl(pick(FINISH_SUBMISSION), wmap) });
+      } else if(method === 'DQ'){
+        log.push({ type:'line', text: fillTpl(pick(BUILDUP_STRIKE), wmap) });
+        log.push({ type:'finish', text: fillTpl(pick(FINISH_DQ), wmap) });
+      } else {
+        log.push({ type:'line', text: fillTpl(pick(BUILDUP_STRIKE), wmap) });
+        log.push({ type:'line', text: fillTpl(pick(KNOCKDOWN_LINES), wmap) });
+        log.push({ type:'line', text: fillTpl(pick(BARRAGE_LINES), wmap) });
+        const lib = method === 'KO' ? FINISH_KO : FINISH_TKO;
+        log.push({ type:'finish', text: fillTpl(pick(lib), wmap) });
+      }
       break;
     } else {
-      log.push({ type:'line', text: fillTpl(pick(ROUND_CLOSERS), map) });
+      // Non-finish round — a chance of a dramatic scare that doesn't end the fight.
+      if(Math.random() < 0.22){
+        const scareWinnerIsA = Math.random() < probA;
+        const smap = { A: fA.name, B: fB.name, W: scareWinnerIsA?fA.name:fB.name, L: scareWinnerIsA?fB.name:fA.name, floor };
+        log.push({ type:'line', text: fillTpl(pick(SCARE_KNOCKDOWN), smap) });
+        log.push({ type:'line', text: fillTpl(pick(SCARE_RECOVERY), smap) });
+      } else {
+        log.push({ type:'line', text: fillTpl(pick(ROUND_CLOSERS), map) });
+      }
     }
   }
   if(method === 'Decision'){
@@ -478,6 +607,7 @@ function ensureFighterDefaults(f){
   if(f.fame === undefined) f.fame = 0;
   if(f.freeRoamPitKey === undefined) f.freeRoamPitKey = null; // "provinceId|city|pitId" — signed home pit
   if(f.freeRoamFightCount === undefined) f.freeRoamFightCount = 0;
+  if(f.agentType === undefined) f.agentType = null;
   return f;
 }
 function getRoster(){
@@ -579,7 +709,20 @@ function ensureCityPits(provinceId, settlementName){
   return pits;
 }
 
-/* ============================ NPCs & CITY GRID ============================ */
+// Persists a win/loss back onto a specific pit-roster fighter — without this, every
+// registered fighter would stay frozen at their generated starting record forever.
+function updateOpponentRecord(provinceId, settlementName, pitId, opponentId, opponentWon){
+  const s = loadRoamState();
+  const key = provinceId + '|' + settlementName;
+  const pits = s.pits[key];
+  if(!pits) return;
+  const pit = pits.find(p=>p.id===pitId);
+  if(!pit) return;
+  const opp = pit.roster.find(r=>r.id===opponentId);
+  if(!opp) return;
+  if(opponentWon) opp.allTimeRecord.wins += 1; else opp.allTimeRecord.losses += 1;
+  saveRoamState(s);
+}
 
 const ADVICE_LINES_PIT = [
   "There's a fight pit not far from here — {pit} takes on new blood most nights.",
@@ -654,6 +797,7 @@ const state = {
   visitingLocation: null,
   fightPitId: null,
   opponentChoices: [],
+  scoutedIndex: null,
   opponent: null, arena: null, boutResult: null, revealedCount: 0,
   flashMessage: null,
 };
@@ -663,6 +807,37 @@ function opponentChoiceCount(fightCount){
   let n = 1;
   FIGHT_OPPONENT_TIERS.forEach(t=>{ if(fightCount >= t.minFights) n = t.choices; });
   return n;
+}
+
+/* ============================ AGENT / SCOUTING ============================ */
+
+const AGENT_TYPES = [
+  { id:'pitmaster', label:'The Pit Master', skill:4, desc:"Runs the show. Knows every fighter in town cold — the real numbers." },
+  { id:'streetguy', label:'A Street Guy', skill:3, desc:"Been around, knows who's who. Solid read, not exact." },
+  { id:'brother', label:'Your Older Brother', skill:2, desc:"Believes in you more than he actually knows fighters." },
+  { id:'friend', label:'A Friend, A Year Older', skill:1, desc:"Means well. Doesn't really know what he's talking about." },
+];
+function agentTypeInfo(id){ return AGENT_TYPES.find(a=>a.id===id) || AGENT_TYPES[3]; }
+
+function generateScoutingReport(f, opp, agentSkill){
+  const ovrF = calcOVR(f.stats), ovrOpp = calcOVR(opp.stats);
+  const mbF = matchupBonus(f.primaryDisc, opp.primaryDisc);
+  const trueProb = winProbability(ovrF+mbF, ovrOpp);
+
+  if(agentSkill >= 4){
+    const styleNote = mbF>0 ? 'Your style has a real edge here.' : mbF<0 ? 'The matchup leans against you stylistically.' : 'Styles are roughly neutral.';
+    return `Real numbers: you've got about a ${Math.round(trueProb*100)}% shot. ${styleNote}`;
+  }
+  if(agentSkill === 3){
+    const band = trueProb>=0.65 ? 'a good chance' : trueProb>=0.45 ? "a real shot, could go either way" : 'an uphill fight';
+    const statLean = ovrF>ovrOpp ? 'You look sharper overall.' : 'He looks like the tougher matchup on paper.';
+    return `I'd call this ${band}. ${statLean}`;
+  }
+  const errRate = agentSkill===2 ? 0.25 : 0.45;
+  const actuallyGood = trueProb >= 0.5;
+  const saysGood = Math.random()<errRate ? !actuallyGood : actuallyGood;
+  if(agentSkill===2) return saysGood ? "I like your chances on this one." : "Honestly? Tough matchup. Be careful out there.";
+  return saysGood ? "You got this, easy! Don't even worry about it." : "I dunno man... this guy looks scary.";
 }
 
 /* ============================ RENDER ============================ */
@@ -676,6 +851,7 @@ function render(){
   else if(state.screen==='loc-npc'){ body = renderLocNpc(); title='STREET TALK'; }
   else if(state.screen==='loc-minigames'){ body = renderLocMinigames(); title='???'; }
   else if(state.screen==='loc-pit'){ body = renderLocPit(); title='FIGHT PIT'; }
+  else if(state.screen==='choose-agent'){ body = renderChooseAgent(); title='YOUR CORNER'; }
   else if(state.screen==='choose-pit-to-fight'){ body = renderChoosePitToFight(); title='FIND A FIGHT'; }
   else if(state.screen==='choose-opponent'){ body = renderChooseOpponent(); title='PICK YOUR FIGHT'; }
   else if(state.screen==='preview'){ body = renderPreview(); title='TALE OF THE TAPE'; }
@@ -792,13 +968,16 @@ function renderLocPit(){
 
   const byClass = { Light:[], Middle:[], Heavy:[] };
   pit.roster.forEach(r=> byClass[r.weightClass].push(r));
+  if(isSignedHere){
+    byClass[weightClassOf(f.weightLb)].push({ id:f.id, name:f.name, age:f.age, allTimeRecord:f.record, isPlayer:true });
+  }
   Object.values(byClass).forEach(list=> list.sort((a,b)=> b.age-a.age || (b.allTimeRecord.wins-b.allTimeRecord.losses)-(a.allTimeRecord.wins-a.allTimeRecord.losses)));
 
   const rosterHtml = ['Light','Middle','Heavy'].map(wc=>{
     if(!byClass[wc].length) return '';
     const rows = byClass[wc].map(r=>`
       <div class="roster-fighter-row">
-        <span class="rfr-name">${r.name}</span>
+        <span class="rfr-name">${r.isPlayer?'⭐ ':''}${r.name}${r.isPlayer?' (you)':''}</span>
         <span class="rfr-age">Age ${r.age}</span>
         <span class="rfr-record">${r.allTimeRecord.wins}-${r.allTimeRecord.losses}</span>
       </div>
@@ -810,7 +989,7 @@ function renderLocPit(){
   if(locked){
     actionHtml = `<p style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center;">This pit doesn't know your name yet. Build some fame first (needs ${pit.reputationRequired}, you have ${f.fame}).</p>`;
   } else if(!f.freeRoamPitKey){
-    actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="sign-here">Sign Here — Start Your Career</button></div>`;
+    actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="sign-here" data-pit-id="${pit.id}">Sign Here — Start Your Career</button></div>`;
   } else {
     actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="register-fight" data-pit-id="${pit.id}">Register to Fight →</button></div>`;
   }
@@ -827,16 +1006,35 @@ function renderLocPit(){
         <div class="pit-boss-title">"${pit.bossTitle}" — Pit Boss</div>
       </div>
     </div>
-    <div class="section-label">Registered This Season (${pit.roster.length})</div>
+    <div class="section-label">Registered This Season (${pit.roster.length + (isSignedHere?1:0)})</div>
     ${rosterHtml}
     ${actionHtml}
     <div class="btn-row" style="margin-top:8px;"><button class="btn" id="back-to-walk">← Keep Walking</button><span></span></div>
   `;
 }
 
+function renderChooseAgent(){
+  const cards = AGENT_TYPES.map(a=>`
+    <div class="pit-boss-card" data-pick-agent="${a.id}" style="cursor:pointer;">
+      <div class="pit-boss-avatar">${buildSilhouetteSM({skin:pick(SKIN_TONES), hair:pick(HAIR_COLORS)})}</div>
+      <div>
+        <div class="pit-boss-name">${a.label}</div>
+        <div class="pit-boss-title" style="color:var(--bone-dim); font-family:var(--body); text-transform:none; letter-spacing:0;">${a.desc}</div>
+      </div>
+    </div>
+  `).join('');
+  return `
+    <div class="stub-screen" style="padding-top:0;">
+      <h2 style="color:var(--brass);">You're In</h2>
+      <p>Every fighter needs someone in their corner — somebody who can tell you what you're actually walking into before you sign up for a fight. Who's got your back?</p>
+    </div>
+    ${cards}
+  `;
+}
+
+
 function renderChoosePitToFight(){
   const f = getFighterById(state.fighterId);
-  const pits = currentPits().filter(p=> f.fame >= p.reputationRequired);
   const rows = pits.map(p=>`
     <div class="pick-row">
       <span>${p.name} <span style="color:var(--muted); font-family:var(--mono); font-size:10.5px;">(${p.roster.length} fighters)</span></span>
@@ -853,15 +1051,21 @@ function renderChoosePitToFight(){
 
 function renderChooseOpponent(){
   const f = getFighterById(state.fighterId);
+  const agent = agentTypeInfo(f.agentType);
   const cards = state.opponentChoices.map((opp,i)=>{
     const ovr = calcOVR(opp.stats);
+    const scouted = state.scoutedIndex === i;
+    const report = scouted ? generateScoutingReport(f, opp, agent.skill) : null;
     return `
-      <div class="tape-side" data-pick-opponent="${i}" style="cursor:pointer;">
+      <div class="tape-side" style="cursor:default;">
         <div class="tape-avatar">${buildSilhouetteSM(opp.appearance)}</div>
         <div class="tape-name">${opp.name}</div>
         <div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div>
         <div class="tape-ovr">${ovr}</div>
         <div class="tape-record">${opp.allTimeRecord.wins}-${opp.allTimeRecord.losses} all-time</div>
+        <button class="fr-btn" data-scout="${i}" style="margin-top:8px; width:100%;">🔍 Scout Report</button>
+        ${report ? `<p style="font-family:var(--body); font-size:11.5px; color:var(--bone-dim); margin-top:8px; text-align:left; line-height:1.5;"><span style="color:var(--brass); font-family:var(--label); font-size:9.5px; letter-spacing:1px; text-transform:uppercase;">${agent.label} says:</span><br>"${report}"</p>` : ''}
+        <button class="btn btn-primary" data-pick-opponent="${i}" style="margin-top:10px; width:100%; padding:9px;">Fight Him</button>
       </div>
     `;
   }).join('');
@@ -869,7 +1073,7 @@ function renderChooseOpponent(){
   const entryFee = 2 + Math.round(pit.reputationRequired/5);
   return `
     <div class="section-label">${pit.name} — Pick Your Opponent</div>
-    <p style="font-family:var(--mono); font-size:11px; color:var(--muted); margin-bottom:16px;">Entry fee: $${entryFee} · Your wallet: $${f.wallet}</p>
+    <p style="font-family:var(--mono); font-size:11px; color:var(--muted); margin-bottom:16px;">Entry fee: $${entryFee} · Your wallet: $${f.wallet} · Corner: ${agent.label}</p>
     <div class="tape-grid" style="grid-template-columns:repeat(${state.opponentChoices.length},1fr);">${cards}</div>
     <div class="btn-row"><button class="btn" id="back-to-walk">← Back Out</button><span></span></div>
   `;
@@ -921,14 +1125,28 @@ function renderBout(){
 function renderFightResult(){
   const f = getFighterById(state.fighterId);
   const r = state.boutResult;
-  const won = r.winner.id === f.id;
+  const res = state.lastResult;
+  const won = res.won;
+  const statLabels = { speed:'SPD', quickness:'QCK', toughness:'TGH', power:'PWR', agility:'AGL' };
+  const growthEntries = Object.entries(res.deltas || {});
+
   return `
     <div class="stub-screen">
       <h2>${won?'YOU WIN':'YOU LOSE'}</h2>
-      <p>${won ? f.name+' defeats '+state.opponent.name : state.opponent.name+' defeats '+f.name} by ${r.method}.</p>
-      <p style="font-family:var(--mono); color:var(--brass);">${state.flashMessage||''}</p>
-      <button class="btn btn-primary" id="back-to-walk-from-result">Continue →</button>
+      <p>${won ? f.name+' defeats '+state.opponent.name : state.opponent.name+' defeats '+f.name} by ${res.method}.</p>
     </div>
+    <div class="mt-record-grid" style="grid-template-columns:1fr 1fr; margin-bottom:14px;">
+      <div class="mt-record-box"><div class="mrv" style="color:var(--good);">+$${res.prize}</div><div class="mrl">Earned</div></div>
+      <div class="mt-record-box"><div class="mrv">+${res.fameGain}</div><div class="mrl">Fame</div></div>
+    </div>
+    ${growthEntries.length ? `
+      <div class="section-label">Skill Growth</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:18px;">
+        ${growthEntries.map(([k,v])=>`<span class="wallet-badge" style="color:var(--good);">${statLabels[k]} +${v}</span>`).join('')}
+      </div>
+    ` : `<p style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center; margin-bottom:18px;">No stat growth this fight.</p>`}
+    ${state.flashMessage ? `<p style="font-family:var(--mono); font-size:12px; color:var(--brass); text-align:center; margin-bottom:14px;">${state.flashMessage}</p>` : ''}
+    <div class="btn-row" style="justify-content:center;"><button class="btn btn-primary" id="back-to-walk-from-result">Continue →</button></div>
   `;
 }
 
@@ -985,11 +1203,22 @@ function wireEvents(){
     const pit = currentPits().find(p=>p.id===state.visitingLocation.pitId);
     const cityKey = state.provinceId+'|'+state.settlementName+'|'+pit.id;
     updateFighter(state.fighterId, f=>{ f.freeRoamPitKey = cityKey; });
+    const f = getFighterById(state.fighterId);
+    if(!f.agentType){ state.screen = 'choose-agent'; render(); return; }
     state.screen = 'city-walk';
     render();
   };
 
+  document.querySelectorAll('[data-pick-agent]').forEach(card=>{
+    card.onclick = ()=>{
+      updateFighter(state.fighterId, f=>{ f.agentType = card.dataset.pickAgent; });
+      state.screen = 'city-walk';
+      render();
+    };
+  });
+
   function beginFightRegistration(pitId){
+    state.scoutedIndex = null;
     const f = getFighterById(state.fighterId);
     const pit = currentPits().find(p=>p.id===pitId);
     const entryFee = 2 + Math.round(pit.reputationRequired/5);
@@ -1019,7 +1248,15 @@ function wireEvents(){
   if(registerFight) registerFight.onclick = ()=> beginFightRegistration(registerFight.dataset.pitId);
 
   document.querySelectorAll('[data-fight-at-pit]').forEach(btn=>{
-    btn.onclick = ()=> beginFightRegistration(btn.dataset.fightAtPit);
+    btn.onclick = ()=>{ state.scoutedIndex = null; beginFightRegistration(btn.dataset.fightAtPit); };
+  });
+
+  document.querySelectorAll('[data-scout]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const idx = parseInt(btn.dataset.scout, 10);
+      state.scoutedIndex = state.scoutedIndex === idx ? null : idx;
+      render();
+    };
   });
 
   document.querySelectorAll('[data-pick-opponent]').forEach(card=>{
@@ -1046,7 +1283,7 @@ function wireEvents(){
   if(advanceBout) advanceBout.onclick = ()=>{
     const r = state.boutResult;
     if(state.revealedCount < r.log.length){
-      state.revealedCount = Math.min(r.log.length, state.revealedCount + 3);
+      state.revealedCount = Math.min(r.log.length, state.revealedCount + 1);
       render();
       return;
     }
@@ -1056,8 +1293,14 @@ function wireEvents(){
     const entryFee = 2 + Math.round(pit.reputationRequired/5);
     const prize = won ? entryFee*3 + rand(0,5) : Math.round(entryFee*0.5);
     const fameGain = won ? (r.method==='Decision' ? rand(1,2) : rand(2,4)) : (Math.random()<0.2 ? 1 : 0);
+    const oppOVR = calcOVR(state.opponent.stats);
+
+    // The opponent's record needs to persist back to the pit roster, or they'd stay
+    // frozen at whatever record they were generated with forever.
+    updateOpponentRecord(state.provinceId, state.settlementName, pit.id, state.opponent.id, !won);
 
     let flash = null;
+    let deltas = {};
     updateFighter(state.fighterId, ff=>{
       if(won) ff.record.wins += 1; else ff.record.losses += 1;
       ff.fightLog.push({
@@ -1067,6 +1310,7 @@ function wireEvents(){
       ff.wallet += prize;
       ff.fame += fameGain;
       ff.freeRoamFightCount += 1;
+      deltas = growFighterStats(ff, won, r.method, oppOVR);
       const nextChoices = opponentChoiceCount(ff.freeRoamFightCount);
       const prevChoices = opponentChoiceCount(ff.freeRoamFightCount-1);
       if(nextChoices > prevChoices) flash = `Word's getting around — you can now pick from ${nextChoices} opponents when you register.`;
@@ -1074,7 +1318,8 @@ function wireEvents(){
       const nextTierPit = allPits.find(p=> p.reputationRequired > (ff.fame-fameGain) && p.reputationRequired <= ff.fame);
       if(nextTierPit) flash = `A face from ${nextTierPit.name} was watching tonight — you're on their radar now.`;
     });
-    state.flashMessage = flash ? flash : (won ? `+$${prize} · +${fameGain} fame` : `+$${prize} consolation`);
+    state.lastResult = { won, prize, fameGain, deltas, method:r.method };
+    state.flashMessage = flash;
     state.screen = 'fight-result';
     render();
   };
@@ -1085,6 +1330,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V1 · 2026-07-11</div>
+<div class="version-badge">FREE ROAM · V2 · 2026-07-11</div>
 </body>
 </html>
