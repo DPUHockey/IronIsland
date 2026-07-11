@@ -215,6 +215,11 @@
   .mfh-result.win{ color:var(--good); }
   .mfh-result.loss{ color:var(--ink-red); }
   .mf-empty{ text-align:center; padding:24px 10px; color:var(--muted); font-family:var(--body); font-size:13px; }
+
+  .version-badge{
+    position:fixed; bottom:14px; right:16px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8B8070;
+    background:#241D17; border:1px solid #43392D; padding:5px 9px; letter-spacing:.5px; z-index:999;
+  }
 </style>
 </head>
 <body>
@@ -821,5 +826,6 @@ function applyResultToRoster(){
 
 render();
 </script>
+<div class="version-badge">FIGHT ENGINE · V3 · 2026-07-11</div>
 </body>
 </html>
