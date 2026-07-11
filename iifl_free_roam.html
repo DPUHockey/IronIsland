@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Iron Island Fight League — Free Roam</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Oswald:wght@400;500;600&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Playfair+Display:wght@700;900&family=Special+Elite&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg-base:#1B1714; --bg-panel:#241D17; --bg-raised:#312820; --bg-raised-2:#3A2F25;
@@ -82,6 +82,34 @@
   .block-cell .bc-icon{ font-size:18px; display:block; margin-bottom:3px; }
   .block-cell.locked{ opacity:.4; }
   .walk-hint{ font-family:var(--mono); font-size:10.5px; color:var(--muted); text-align:center; margin-bottom:18px; }
+  .time-bar{
+    display:flex; justify-content:space-between; align-items:center; padding:8px 14px; margin-bottom:10px;
+    background:var(--bg-raised-2); border:1px solid var(--brass-dim);
+  }
+  .time-day{ font-family:var(--label); font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--bone); margin-right:10px; }
+  .time-period{ font-family:var(--mono); font-size:11px; color:var(--brass); }
+  .time-moves{ font-family:var(--mono); font-size:13px; color:var(--brass); letter-spacing:2px; }
+
+  /* newspaper */
+  .newspaper{
+    background:#EDE4CC; color:#221D14; padding:22px 20px 30px; margin:-32px; border:1px solid #43392D;
+  }
+  .np-masthead{ text-align:center; border-bottom:4px double #221D14; padding-bottom:10px; margin-bottom:12px; }
+  .np-title{ font-family:'Playfair Display',serif; font-weight:900; font-size:38px; letter-spacing:1px; line-height:1; }
+  .np-subtitle{ font-family:'Special Elite',monospace; font-size:11px; letter-spacing:2px; text-transform:uppercase; margin-top:6px; }
+  .np-dateline{
+    display:flex; justify-content:space-between; font-family:'Special Elite',monospace; font-size:10.5px;
+    border-bottom:1px solid #221D14; border-top:1px solid #221D14; padding:4px 0; margin-bottom:16px;
+  }
+  .np-columns{ column-count:1; }
+  .np-section{ margin-bottom:18px; break-inside:avoid; }
+  .np-headline{ font-family:'Playfair Display',serif; font-weight:700; font-size:18px; margin-bottom:6px; line-height:1.15; }
+  .np-byline{ font-family:'Special Elite',monospace; font-size:9.5px; color:#5A5138; margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }
+  .np-body{ font-family:'Special Elite',monospace; font-size:12px; line-height:1.7; color:#2B2415; }
+  .np-body b{ font-weight:normal; text-decoration:underline; }
+  .np-divider{ border:none; border-top:1px dashed #8A7F5C; margin:16px 0; }
+  .np-list{ font-family:'Special Elite',monospace; font-size:11.5px; line-height:1.9; }
+  .np-list li{ margin-left:18px; }
 
   /* location detail */
   .loc-head{ text-align:center; padding:18px 10px; background:var(--bg-raised); border:1px solid var(--brass-dim); margin-bottom:20px; }
@@ -284,6 +312,14 @@ function bandCeiling(age, tier){
 }
 // Same earned-growth pattern as the rest of the game: win, finish, and beating someone
 // tougher than you are the levers. Returns which stats actually changed for display.
+// Applies a one-fight-only stat boost from the potion event, without permanently
+// mutating the fighter's real stats.
+function addTempBoost(stats, amount){
+  const boosted = { ...stats };
+  Object.keys(boosted).forEach(k=> boosted[k] += amount);
+  return boosted;
+}
+
 function growFighterStats(f, playerWon, method, oppOVR){
   const ceiling = bandCeiling(f.age||12, f.talentTier||'normal');
   const potentialFactor = clamp((f.potential || 50) / 99, 0, 1);
@@ -608,6 +644,8 @@ function ensureFighterDefaults(f){
   if(f.freeRoamPitKey === undefined) f.freeRoamPitKey = null; // "provinceId|city|pitId" — signed home pit
   if(f.freeRoamFightCount === undefined) f.freeRoamFightCount = 0;
   if(f.agentType === undefined) f.agentType = null;
+  if(!f.blackMarketLog) f.blackMarketLog = [];
+  if(f.tempBoost === undefined) f.tempBoost = null;
   return f;
 }
 function getRoster(){
@@ -779,10 +817,34 @@ function ensureCityGrid(provinceId, settlementName){
   }
   if(idx < available.length){ locations.push({ ...available[idx], type:'minigames' }); idx++; }
 
-  const grid = { size, startCell, locations };
+  const roamingCount = tier==='Capital' ? 2 : 1;
+  const grid = { size, startCell, locations, roamingEvents: [] };
   s.grids[key] = grid;
+  placeRoamingEvents(grid, roamingCount);
   saveRoamState(s);
   return grid;
+}
+
+// Roaming event squares wander the grid — they relocate to a fresh empty cell every time
+// the period changes, representing chance encounters as the day moves along.
+function placeRoamingEvents(grid, count){
+  const occupied = new Set(grid.locations.map(l=>l.row+'_'+l.col));
+  occupied.add(grid.startCell.row+'_'+grid.startCell.col);
+  const options = [];
+  for(let r=0;r<grid.size;r++) for(let c=0;c<grid.size;c++){
+    if(!occupied.has(r+'_'+c)) options.push({row:r,col:c});
+  }
+  for(let i=options.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [options[i],options[j]]=[options[j],options[i]]; }
+  grid.roamingEvents = options.slice(0, count).map(pos=> ({ ...pos }));
+}
+function relocateEventSquares(){
+  if(!state.provinceId || !state.settlementName) return;
+  const s = loadRoamState();
+  const key = state.provinceId + '|' + state.settlementName;
+  const grid = s.grids[key];
+  if(!grid) return;
+  placeRoamingEvents(grid, grid.roamingEvents.length || 1);
+  saveRoamState(s);
 }
 
 
@@ -800,7 +862,38 @@ const state = {
   scoutedIndex: null,
   opponent: null, arena: null, boutResult: null, revealedCount: 0,
   flashMessage: null,
+  day: 1, period: 'Morning', movesRemaining: 3,
+  isBlackMarket: false,
+  randomEventPending: null, // event type awaiting resolution on the current screen
 };
+
+const PERIODS = ['Morning','Afternoon','Night'];
+const MOVES_PER_PERIOD = 3;
+const START_DATE = new Date(1958, 2, 3); // March 3, 1958 — flavor date, fixed epoch
+function formatGameDate(day){
+  const d = new Date(START_DATE);
+  d.setDate(d.getDate() + (day-1));
+  return d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+}
+function advanceDay(){
+  state.day += 1;
+  state.period = 'Morning';
+  state.movesRemaining = MOVES_PER_PERIOD;
+  relocateEventSquares();
+}
+function spendMove(){
+  state.movesRemaining -= 1;
+  if(state.movesRemaining <= 0){
+    const idx = PERIODS.indexOf(state.period);
+    if(idx < PERIODS.length-1){
+      state.period = PERIODS[idx+1];
+      state.movesRemaining = MOVES_PER_PERIOD;
+      relocateEventSquares();
+    } else {
+      advanceDay();
+    }
+  }
+}
 
 const FIGHT_OPPONENT_TIERS = [ { minFights:0, choices:1 }, { minFights:3, choices:2 }, { minFights:7, choices:3 } ];
 function opponentChoiceCount(fightCount){
@@ -850,6 +943,9 @@ function render(){
   else if(state.screen==='city-walk'){ body = renderCityWalk(); title='WALKING'; sub=state.settlementName; }
   else if(state.screen==='loc-npc'){ body = renderLocNpc(); title='STREET TALK'; }
   else if(state.screen==='loc-minigames'){ body = renderLocMinigames(); title='???'; }
+  else if(state.screen==='random-event'){ body = renderRandomEvent(); title='ON THE STREET'; }
+  else if(state.screen==='newspaper'){ body = renderNewspaper(); title=''; sub=''; }
+  else if(state.screen==='black-market'){ body = renderBlackMarket(); title='BLACK MARKET'; }
   else if(state.screen==='loc-pit'){ body = renderLocPit(); title='FIGHT PIT'; }
   else if(state.screen==='choose-agent'){ body = renderChooseAgent(); title='YOUR CORNER'; }
   else if(state.screen==='choose-pit-to-fight'){ body = renderChoosePitToFight(); title='FIND A FIGHT'; }
@@ -906,15 +1002,16 @@ function renderCityWalk(){
     for(let c=0;c<grid.size;c++){
       const isYou = state.position.row===r && state.position.col===c;
       const loc = grid.locations.find(l=>l.row===r && l.col===c);
+      const roaming = grid.roamingEvents.find(e=>e.row===r && e.col===c);
       let icon = '', label = '';
       if(loc){
         if(loc.type==='pit'){ icon='🥊'; label = pits.find(p=>p.id===loc.pitId).name; }
         else if(loc.type==='npc'){ icon='🗣️'; label = 'Local'; }
         else if(loc.type==='minigames'){ icon='🎲'; label = '???'; }
-      }
-      const cls = isYou ? 'you' : (loc ? '' : 'empty');
+      } else if(roaming){ icon='❓'; label = '???'; }
+      const cls = isYou ? 'you' : (loc||roaming ? '' : 'empty');
       cellsHtml.push(`<div class="block-cell ${cls}" data-walk-cell="${r}|${c}">
-        ${isYou ? '<span class="bc-icon">🧍</span>YOU' : loc ? `<span class="bc-icon">${icon}</span>${label}` : ''}
+        ${isYou ? '<span class="bc-icon">🧍</span>YOU' : (loc||roaming) ? `<span class="bc-icon">${icon}</span>${label}` : ''}
       </div>`);
     }
   }
@@ -924,14 +1021,20 @@ function renderCityWalk(){
       <div class="city-head-name">${state.settlementName}</div>
       <div class="city-head-meta">${entry?entry.tier:''} · Pop. ${entry?entry.population.toLocaleString():'?'} · ${pits.length} fight pit${pits.length===1?'':'s'} in town</div>
     </div>
+    <div class="time-bar">
+      <div><span class="time-day">Day ${state.day}</span><span class="time-period">${state.period}</span></div>
+      <div class="time-moves">${'●'.repeat(state.movesRemaining)}${'○'.repeat(MOVES_PER_PERIOD-state.movesRemaining)} moves left</div>
+    </div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
       <span class="wallet-badge">$${f.wallet}</span>
       <span class="wallet-badge" style="color:var(--bone-dim);">Fame: ${f.fame}</span>
     </div>
     <div class="block-grid" style="--gcols:${grid.size};">${cellsHtml.join('')}</div>
-    <div class="walk-hint">Click an adjacent block to walk there.</div>
+    <div class="walk-hint">Click an adjacent block to walk there. Each step costs a move.</div>
     <div class="btn-row">
       <button class="btn" id="back-to-select-from-walk">← Fighter Select</button>
+      <button class="btn" id="read-newspaper">📰 Newspaper</button>
+      <button class="btn" id="view-black-market">🕶️ Black Market (${(f.blackMarketLog||[]).length})</button>
       ${f.freeRoamPitKey && eligiblePits.length ? `<button class="btn btn-primary" id="find-a-fight">Find a Fight →</button>` : ''}
     </div>
   `;
@@ -948,7 +1051,207 @@ function renderLocNpc(){
   `;
 }
 
+function triggerRandomEvent(){
+  const f = getFighterById(state.fighterId);
+  const roll = Math.random();
+  if(roll < 0.34){
+    const amount = rand(3,6);
+    updateFighter(state.fighterId, ff=>{ ff.tempBoost = { amount, usesLeft:1 }; });
+    state.randomEventPending = { type:'potion', amount };
+  } else if(roll < 0.67){
+    const opp = generatePitFighter(state.provinceId, state.settlementName, weightClassOf(f.weightLb));
+    state.randomEventPending = { type:'kid-challenge', opponent: opp };
+  } else {
+    const pits = currentPits();
+    const rivalPit = pick(pits);
+    const opp = generatePitFighter(state.provinceId, state.settlementName, weightClassOf(f.weightLb));
+    state.randomEventPending = { type:'pit-rival-challenge', opponent: opp, pitName: rivalPit.name };
+  }
+  state.screen = 'random-event';
+}
+
+/* ============================ NEWSPAPER ============================ */
+
+const NEWSPAPER_NAMES = ['Herald','Gazette','Times','Tribune','Chronicle','Bulletin','Courier','Ledger'];
+const JR_TEAMS_BY_PROVINCE = {
+  kolsati: ['Kolsati Ironclads','St. Johnson Wolves','Bakii Foundry','Briggston Vipers'],
+  ditiero: ['Di Tiero Tideburners','South Bender Grinders','Bellechasse Wardens'],
+  sherwood: ['Frontenac City Anchors','Lawrenceville Timberwolves'],
+  alexandretta: ['Williamsburg Ridge Runners','St. Anne Sentries'],
+  bay: ['Charleston Seabreakers','Bayport Riptide'],
+  northeast: ['Mizukoshi Shoguns','Tsubaki Bay Tide','Santorino Ronin'],
+  carpathia: ['Vyrholm Nightwatch','Castle Reach Wraiths'],
+  gazon: ['Gazon Main Dust Runners','Gazon Northern Sandstorm'],
+};
+const PRO_TEAM_BLURBS = [
+  'Word from camp is the {city} pro club is deep in training ahead of the new season — management is staying tight-lipped on the roster.',
+  'The {city} outfit ran a closed-door tune-up card last week. Nothing official yet on who is fighting when the real season opens.',
+  'Scouts have been spotted around {city} gyms all month — everybody has a theory on who the pro club is looking at.',
+];
+const RUMOR_LINES = [
+  'Word around the pits is a hot prospect from out of town is fighting under a fake name to dodge attention.',
+  'Somebody is offering side money for fighters willing to skip the weigh-in. Nobody has confirmed it, but it is all anyone is talking about.',
+  'There is a rumor a big-name trainer is quietly setting up shop somewhere in town. Nobody knows exactly where yet.',
+  'Talk is a pit boss got into it with a rival over a poached fighter. Take it as you will.',
+  'Some say the last few cards had the fix in. Cannot prove it, but the crowd is not happy about it.',
+  'A retired fighter was seen back around the gyms this week. Comeback talk, or just visiting old friends?',
+];
+const TRAINER_TIP_LINES = [
+  'Big-name trainers do not come cheap, and they do not work with just anybody — build a reputation first, or do not bother knocking.',
+  'Word is the best trainers hang around the nicer pits. Get your name up, then go looking.',
+  'Nobody serious trains for free. Bring money, or bring wins — preferably both.',
+  'The old-timers say the best trainers find you, not the other way around. Keep winning and see who shows up.',
+];
+const NEW_PROSPECT_LINES = [
+  'Keep an eye on {name} — word is this kid is turning heads in the juvenile ranks already.',
+  '{name} just started fighting and people are already talking.',
+  'Heard good things about a new kid going by {name}. Time will tell.',
+];
+
+function generateTopFighterList(provinceId, settlementName, n){
+  const list = [];
+  for(let i=0;i<n;i++){ list.push({ name: pickName(provinceId, settlementName), wins: rand(5,20), losses: rand(0,6) }); }
+  list.sort((a,b)=> (b.wins-b.losses)-(a.wins-a.losses));
+  return list;
+}
+
+function ensureNewspaper(provinceId, settlementName, day){
+  const s = loadRoamState();
+  if(!s.newspapers) s.newspapers = {};
+  const key = provinceId+'|'+settlementName+'|'+day;
+  if(s.newspapers[key]) return s.newspapers[key];
+  const paper = {
+    paperName: pick(NEWSPAPER_NAMES),
+    proTeamBlurb: pick(PRO_TEAM_BLURBS),
+    jrTeams: JR_TEAMS_BY_PROVINCE[provinceId] || [],
+    topFighters: {
+      Juvenile: generateTopFighterList(provinceId, settlementName, 3),
+      Amateur: generateTopFighterList(provinceId, settlementName, 3),
+      Junior: generateTopFighterList(provinceId, settlementName, 3),
+    },
+    rumors: [pick(RUMOR_LINES), pick(RUMOR_LINES)],
+    newProspects: [0,1].map(()=> fillTpl(pick(NEW_PROSPECT_LINES), { name: pickName(provinceId, settlementName) })),
+    trainerTip: pick(TRAINER_TIP_LINES),
+  };
+  s.newspapers[key] = paper;
+  saveRoamState(s);
+  return paper;
+}
+
+function renderNewspaper(){
+  const paper = ensureNewspaper(state.provinceId, state.settlementName, state.day);
+  const topHtml = Object.entries(paper.topFighters).map(([tier,list])=>`
+    <div style="margin-bottom:10px;"><b>${tier} Division Leaders</b><br>
+    ${list.map(f=>`${f.name} (${f.wins}-${f.losses})`).join(' · ')}</div>
+  `).join('');
+
+  return `
+    <div class="newspaper">
+      <div class="np-masthead">
+        <div class="np-title">THE ${state.settlementName.toUpperCase()} ${paper.paperName.toUpperCase()}</div>
+        <div class="np-subtitle">★ Fight Edition ★ All The News That's Fit To Print, Ring Style ★</div>
+      </div>
+      <div class="np-dateline"><span>${formatGameDate(state.day)}</span><span>TWO CENTS</span></div>
+
+      <div class="np-section">
+        <div class="np-headline">Pro Club Notes</div>
+        <div class="np-byline">From Our Sports Desk</div>
+        <div class="np-body">${fillTpl(paper.proTeamBlurb, {city: state.settlementName})}</div>
+      </div>
+      <hr class="np-divider">
+
+      ${paper.jrTeams.length ? `
+      <div class="np-section">
+        <div class="np-headline">Junior League Roundup</div>
+        <div class="np-body">Local squads active this season: <b>${paper.jrTeams.join(', ')}</b>.</div>
+      </div>
+      <hr class="np-divider">` : ''}
+
+      <div class="np-section">
+        <div class="np-headline">Around The Circuit</div>
+        <div class="np-body">${topHtml}</div>
+      </div>
+      <hr class="np-divider">
+
+      <div class="np-section">
+        <div class="np-headline">On The Grapevine</div>
+        <div class="np-body">${paper.rumors.map(r=>`<p style="margin-bottom:8px;">${r}</p>`).join('')}</div>
+      </div>
+      <hr class="np-divider">
+
+      <div class="np-section">
+        <div class="np-headline">New Faces</div>
+        <div class="np-body">${paper.newProspects.map(p=>`<p style="margin-bottom:8px;">${p}</p>`).join('')}</div>
+      </div>
+      <hr class="np-divider">
+
+      <div class="np-section">
+        <div class="np-headline">Trainer's Corner</div>
+        <div class="np-body">${paper.trainerTip}</div>
+      </div>
+    </div>
+    <div class="btn-row" style="margin-top:16px;"><button class="btn btn-primary" id="close-newspaper">Fold It Up →</button></div>
+  `;
+}
+
+function renderBlackMarket(){
+  const f = getFighterById(state.fighterId);
+  const log = f.blackMarketLog || [];
+  const rows = log.length ? [...log].reverse().map(e=>`
+    <div class="pick-row">
+      <span class="pick-team">${new Date(e.date).toLocaleDateString()}</span>
+      <span class="pick-fighter ${e.result==='W'?'you':''}">${e.result==='W'?'def.':'lost to'} ${e.opponent} (${e.method})</span>
+    </div>
+  `).join('') : `<div class="empty-note">No black market fights yet — these happen when you stumble into random encounters while walking.</div>`;
+  return `
+    <div class="section-label">Black Market Fights (Off the Books)</div>
+    <p style="font-family:var(--mono); font-size:11px; color:var(--muted); margin-bottom:16px;">These don't touch your official record — pure side money and reputation.</p>
+    ${rows}
+    <div class="btn-row" style="margin-top:14px;"><button class="btn" id="back-to-walk">← Back</button><span></span></div>
+  `;
+}
+
+
+function renderRandomEvent(){
+  const ev = state.randomEventPending;
+  if(ev.type === 'potion'){
+    return `
+      <div class="stub-screen">
+        <h2>A Stranger's Deal</h2>
+        <p>Someone in the crowd presses a little bottle into your hand. "Drink this before your next fight — you'll feel it." Whatever it is, your corner's not going to ask questions.</p>
+        <p style="font-family:var(--mono); color:var(--brass);">+${ev.amount} to every stat, next fight only.</p>
+        <button class="btn btn-primary" id="dismiss-event">Pocket It →</button>
+      </div>
+    `;
+  }
+  const opp = ev.opponent;
+  const ovr = calcOVR(opp.stats);
+  const title = ev.type==='kid-challenge' ? 'A Kid Wants Smoke' : 'A Rival Pit Steps Up';
+  const flavor = ev.type==='kid-challenge'
+    ? `${opp.name} from around the block says he's heard about you. He wants a piece — right here, right now, no pit, no ref.`
+    : `${opp.name} out of ${ev.pitName} caught wind of you and came looking. "Let's see what you got. Won't cost you a dime to find out."`;
+  return `
+    <div class="loc-head">
+      <div class="loc-name">${title}</div>
+      <div class="loc-meta">Off the books — won't touch your official record</div>
+    </div>
+    <p style="font-family:var(--body); font-size:13.5px; color:var(--bone-dim); margin-bottom:16px;">${flavor}</p>
+    <div class="tape-side" style="margin-bottom:16px;">
+      <div class="tape-avatar">${buildSilhouetteSM(opp.appearance)}</div>
+      <div class="tape-name">${opp.name}</div>
+      <div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div>
+      <div class="tape-ovr">${ovr}</div>
+      <div class="tape-record">${opp.allTimeRecord.wins}-${opp.allTimeRecord.losses}</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" id="decline-event">Walk Away</button>
+      <button class="btn btn-primary" id="accept-event">Fight Him →</button>
+    </div>
+  `;
+}
+
 function renderLocMinigames(){
+
   return `
     <div class="stub-screen">
       <h2>???</h2>
@@ -1082,6 +1385,7 @@ function renderChooseOpponent(){
 function renderPreview(){
   const f = getFighterById(state.fighterId);
   const opp = state.opponent;
+  const boostNote = f.tempBoost ? `<p style="font-family:var(--mono); font-size:11px; color:var(--good); text-align:center; margin-bottom:12px;">⚗️ Whatever was in that bottle is kicking in — +${f.tempBoost.amount} to everything, this fight only.</p>` : '';
   const ovrF = calcOVR(f.stats), ovrOpp = calcOVR(opp.stats);
   const scaleMax = Math.max(ovrF, ovrOpp, 20) * 1.3;
   function statRow(label, valF, valOpp){
@@ -1093,6 +1397,7 @@ function renderPreview(){
   }
   return `
     <div class="section-label">Tale of the Tape</div>
+    ${boostNote}
     <div class="tape-grid">
       <div class="tape-side"><div class="tape-avatar">${buildSilhouetteSM(f.appearance)}</div><div class="tape-name">${f.name}</div><div class="tape-disc">${DISCIPLINE_NAMES[f.primaryDisc]}</div><div class="tape-ovr">${ovrF}</div></div>
       <div class="tape-side"><div class="tape-avatar">${buildSilhouetteSM(opp.appearance)}</div><div class="tape-name">${opp.name}</div><div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div><div class="tape-ovr">${ovrOpp}</div></div>
@@ -1180,13 +1485,17 @@ function wireEvents(){
       if(dr>1 || dc>1) return; // not adjacent, can't walk there directly
       if(dr===0 && dc===0) return;
       state.position = { row:r, col:c };
+      spendMove();
       const grid = currentGrid();
       const loc = grid.locations.find(l=>l.row===r && l.col===c);
+      const roaming = grid.roamingEvents.find(e=>e.row===r && e.col===c);
       if(loc){
         state.visitingLocation = loc;
         if(loc.type==='pit') state.screen = 'loc-pit';
         else if(loc.type==='npc') state.screen = 'loc-npc';
         else if(loc.type==='minigames') state.screen = 'loc-minigames';
+      } else if(roaming){
+        triggerRandomEvent();
       }
       render();
     };
@@ -1197,6 +1506,32 @@ function wireEvents(){
 
   const findAFight = document.getElementById('find-a-fight');
   if(findAFight) findAFight.onclick = ()=>{ state.screen='choose-pit-to-fight'; render(); };
+
+  const readNewspaper = document.getElementById('read-newspaper');
+  if(readNewspaper) readNewspaper.onclick = ()=>{ state.screen='newspaper'; render(); };
+  const closeNewspaper = document.getElementById('close-newspaper');
+  if(closeNewspaper) closeNewspaper.onclick = ()=>{ state.screen='city-walk'; render(); };
+
+  const viewBlackMarket = document.getElementById('view-black-market');
+  if(viewBlackMarket) viewBlackMarket.onclick = ()=>{ state.screen='black-market'; render(); };
+
+  const dismissEvent = document.getElementById('dismiss-event');
+  if(dismissEvent) dismissEvent.onclick = ()=>{ state.randomEventPending=null; state.screen='city-walk'; render(); };
+  const declineEvent = document.getElementById('decline-event');
+  if(declineEvent) declineEvent.onclick = ()=>{ state.randomEventPending=null; state.screen='city-walk'; render(); };
+  const acceptEvent = document.getElementById('accept-event');
+  if(acceptEvent) acceptEvent.onclick = ()=>{
+    const f = getFighterById(state.fighterId);
+    state.opponent = state.randomEventPending.opponent;
+    state.isBlackMarket = true;
+    state.fightPitId = null;
+    const fighterForBout = f.tempBoost ? { ...f, stats: addTempBoost(f.stats, f.tempBoost.amount) } : f;
+    state.boutResult = simulateBout(fighterForBout, state.opponent, { arena:{floor:'the street'}, hometownPit:false });
+    state.revealedCount = 0;
+    state.randomEventPending = null;
+    state.screen = 'preview';
+    render();
+  };
 
   const signHere = document.getElementById('sign-here');
   if(signHere) signHere.onclick = ()=>{
@@ -1268,8 +1603,10 @@ function wireEvents(){
       updateFighter(state.fighterId, ff=>{ ff.wallet -= entryFee; });
       state.opponent = state.opponentChoices[idx];
       state.arena = { name: pit.name };
+      state.isBlackMarket = false;
       const freshF = getFighterById(state.fighterId);
-      state.boutResult = simulateBout(freshF, state.opponent, { arena:{floor:'dirt'}, hometownPit:true });
+      const fighterForBout = freshF.tempBoost ? { ...freshF, stats: addTempBoost(freshF.stats, freshF.tempBoost.amount) } : freshF;
+      state.boutResult = simulateBout(fighterForBout, state.opponent, { arena:{floor:'dirt'}, hometownPit:true });
       state.revealedCount = 0;
       state.screen = 'preview';
       render();
@@ -1289,35 +1626,54 @@ function wireEvents(){
     }
     const f = getFighterById(state.fighterId);
     const won = r.winner.id === f.id;
-    const pit = currentPits().find(p=>p.id===state.fightPitId);
-    const entryFee = 2 + Math.round(pit.reputationRequired/5);
-    const prize = won ? entryFee*3 + rand(0,5) : Math.round(entryFee*0.5);
-    const fameGain = won ? (r.method==='Decision' ? rand(1,2) : rand(2,4)) : (Math.random()<0.2 ? 1 : 0);
     const oppOVR = calcOVR(state.opponent.stats);
-
-    // The opponent's record needs to persist back to the pit roster, or they'd stay
-    // frozen at whatever record they were generated with forever.
-    updateOpponentRecord(state.provinceId, state.settlementName, pit.id, state.opponent.id, !won);
 
     let flash = null;
     let deltas = {};
-    updateFighter(state.fighterId, ff=>{
-      if(won) ff.record.wins += 1; else ff.record.losses += 1;
-      ff.fightLog.push({
-        tier:'Juvenile', opponent: state.opponent.name, result: won?'W':'L', method:r.method,
-        location: `${pit.name}, ${state.settlementName}`, date: new Date().toISOString(),
+    let prize, fameGain;
+
+    if(state.isBlackMarket){
+      prize = won ? rand(5,12) : rand(1,3);
+      fameGain = won ? rand(1,3) : 0;
+      updateFighter(state.fighterId, ff=>{
+        ff.blackMarketLog.push({
+          opponent: state.opponent.name, result: won?'W':'L', method:r.method,
+          location: `the street, ${state.settlementName}`, date: new Date().toISOString(),
+        });
+        ff.wallet += prize;
+        ff.fame += fameGain;
+        ff.tempBoost = null;
+        deltas = growFighterStats(ff, won, r.method, oppOVR);
       });
-      ff.wallet += prize;
-      ff.fame += fameGain;
-      ff.freeRoamFightCount += 1;
-      deltas = growFighterStats(ff, won, r.method, oppOVR);
-      const nextChoices = opponentChoiceCount(ff.freeRoamFightCount);
-      const prevChoices = opponentChoiceCount(ff.freeRoamFightCount-1);
-      if(nextChoices > prevChoices) flash = `Word's getting around — you can now pick from ${nextChoices} opponents when you register.`;
-      const allPits = currentPits();
-      const nextTierPit = allPits.find(p=> p.reputationRequired > (ff.fame-fameGain) && p.reputationRequired <= ff.fame);
-      if(nextTierPit) flash = `A face from ${nextTierPit.name} was watching tonight — you're on their radar now.`;
-    });
+      flash = "Word won't get back to any pit boss about this one.";
+    } else {
+      const pit = currentPits().find(p=>p.id===state.fightPitId);
+      const entryFee = 2 + Math.round(pit.reputationRequired/5);
+      prize = won ? entryFee*3 + rand(0,5) : Math.round(entryFee*0.5);
+      fameGain = won ? (r.method==='Decision' ? rand(1,2) : rand(2,4)) : (Math.random()<0.2 ? 1 : 0);
+      // The opponent's record needs to persist back to the pit roster, or they'd stay
+      // frozen at whatever record they were generated with forever.
+      updateOpponentRecord(state.provinceId, state.settlementName, pit.id, state.opponent.id, !won);
+      updateFighter(state.fighterId, ff=>{
+        if(won) ff.record.wins += 1; else ff.record.losses += 1;
+        ff.fightLog.push({
+          tier:'Juvenile', opponent: state.opponent.name, result: won?'W':'L', method:r.method,
+          location: `${pit.name}, ${state.settlementName}`, date: new Date().toISOString(),
+        });
+        ff.wallet += prize;
+        ff.fame += fameGain;
+        ff.freeRoamFightCount += 1;
+        ff.tempBoost = null;
+        deltas = growFighterStats(ff, won, r.method, oppOVR);
+        const nextChoices = opponentChoiceCount(ff.freeRoamFightCount);
+        const prevChoices = opponentChoiceCount(ff.freeRoamFightCount-1);
+        if(nextChoices > prevChoices) flash = `Word's getting around — you can now pick from ${nextChoices} opponents when you register.`;
+        const allPits = currentPits();
+        const nextTierPit = allPits.find(p=> p.reputationRequired > (ff.fame-fameGain) && p.reputationRequired <= ff.fame);
+        if(nextTierPit) flash = `A face from ${nextTierPit.name} was watching tonight — you're on their radar now.`;
+      });
+    }
+    advanceDay(); // a fight — official or off the books — ends the day
     state.lastResult = { won, prize, fameGain, deltas, method:r.method };
     state.flashMessage = flash;
     state.screen = 'fight-result';
@@ -1330,6 +1686,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V2 · 2026-07-11</div>
+<div class="version-badge">FREE ROAM · V3 · 2026-07-11</div>
 </body>
 </html>
