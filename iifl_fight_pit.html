@@ -470,17 +470,18 @@ function generateAmateurFieldFighter(division, weightClass, province, leagueId){
   ['speed','quickness','toughness','power','agility'].forEach(k=>{
     stats[k] = clamp(targetOVR + rand(-4,4), 1, 35);
   });
-  const opp = finalizeOpponent(stats, targetOVR, weightClass, province);
-  opp.division = division;
-  opp.weightClass = weightClass;
-  opp.provinceId = province.id;
-  opp.leagueId = leagueId;
   // Amateur is the 18+ adult money league — Junior League (not Amateur) is what drafts
   // out of the 14-17 Juvenile window now. Amateur rosters are grown men: some are Junior
   // grads who took the Amateur payday instead of staying in the dev pipeline, most are
   // 18-year-olds who aged out of Juvenile undrafted and never made it to Pro or Junior.
   // Skews toward the younger end of "adult" since career length here is short and rough.
-  opp.age = Math.random() < 0.6 ? rand(18,21) : rand(22,30);
+  const age = Math.random() < 0.6 ? rand(18,21) : rand(22,30);
+  const opp = finalizeOpponent(stats, targetOVR, weightClass, province, age);
+  opp.division = division;
+  opp.weightClass = weightClassOf(opp.weightLb); // derive from the real BMI-based weight, not the pre-picked target
+  opp.provinceId = province.id;
+  opp.leagueId = leagueId;
+  opp.age = age;
   return opp;
 }
 
@@ -494,10 +495,10 @@ function generateJuvenileFieldFighter(weightClass, province){
     stats[k] = compressStat(raw, age, tier);
   });
   const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
-  const opp = finalizeOpponent(stats, avgOvr, weightClass, province);
+  const opp = finalizeOpponent(stats, avgOvr, weightClass, province, age);
   opp.age = age;
   opp.talentTier = tier;
-  opp.weightClass = weightClass;
+  opp.weightClass = weightClassOf(opp.weightLb); // derive from the real BMI-based weight, not the pre-picked target
   opp.provinceId = province.id;
   return opp;
 }
@@ -613,7 +614,7 @@ function drawJuvenileFromFieldPool(provinceId, weightClass, playerAge){
   return pick(candidates);
 }
 
-function updateFieldFighterRecord(fighterId, poolKey, won, isJuvenile){
+function updateFieldFighterRecord(fighterId, poolKey, won, isJuvenile, logEntry){
   const pools = loadFieldPools();
   const bucket = isJuvenile ? pools.juvenile : pools.amateur;
   const pool = bucket ? bucket[poolKey] : null;
@@ -621,6 +622,11 @@ function updateFieldFighterRecord(fighterId, poolKey, won, isJuvenile){
   const f = pool.find(x=>x.id===fighterId);
   if(!f) return;
   if(won) f.record.wins += 1; else f.record.losses += 1;
+  if(logEntry){
+    if(!f.fightLog) f.fightLog = [];
+    f.fightLog.push(logEntry);
+    if(f.fightLog.length > 10) f.fightLog = f.fightLog.slice(-10); // cap — this is flavor history, not a full ledger
+  }
   saveFieldPools(pools);
 }
 
@@ -660,26 +666,36 @@ function groupFightersBySettlement(list){
   return map;
 }
 
-function runJuvenileLeagueNight(pools, provinceId){
+function logNpcBout(winner, loser, tier, location, day){
+  const dateStr = dateForDay(day).toISOString();
+  [[winner,loser,'W'],[loser,winner,'L']].forEach(([self, opp, result])=>{
+    if(!self.fightLog) self.fightLog = [];
+    self.fightLog.push({ tier, opponent: opp.name, result, method: pick(['Decision','TKO','KO']), location, date: dateStr });
+    if(self.fightLog.length > 10) self.fightLog = self.fightLog.slice(-10); // flavor history, not a full ledger
+  });
+}
+
+function runJuvenileLeagueNight(pools, provinceId, day){
   const pool = pools.juvenile[provinceId];
   if(!pool || pool.length < 2) return;
-  Object.values(groupFightersBySettlement(pool)).forEach(group=>{
+  Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
     // Not everybody fights every week — roughly 40% of a settlement's roster is on any
     // given week's card, paired off within it.
     const participants = group.filter(()=> Math.random() < 0.4);
     for(let i=0;i+1<participants.length;i+=2){
       const { winner, loser } = quickSimBout(participants[i], participants[i+1]);
       winner.record.wins += 1; loser.record.losses += 1;
+      logNpcBout(winner, loser, 'Juvenile', `${settlement} — League Night`, day);
       applyNpcGrowthTick(winner);
       if(Math.random() < 0.5) applyNpcGrowthTick(loser);
     }
   });
 }
 
-function runJuvenileTournamentDay(pools, provinceId){
+function runJuvenileTournamentDay(pools, provinceId, day){
   const pool = pools.juvenile[provinceId];
   if(!pool || pool.length < 8) return;
-  Object.values(groupFightersBySettlement(pool)).forEach(group=>{
+  Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
     if(group.length < 8) return;
     const size = group.length >= 16 ? 16 : 8;
     let field = [...group].sort(()=>Math.random()-0.5).slice(0, size);
@@ -688,6 +704,7 @@ function runJuvenileTournamentDay(pools, provinceId){
       for(let i=0;i+1<field.length;i+=2){
         const { winner, loser } = quickSimBout(field[i], field[i+1]);
         winner.record.wins += 1; loser.record.losses += 1;
+        logNpcBout(winner, loser, 'Juvenile', `${settlement} — Local Tournament`, day);
         nextRound.push(winner);
       }
       field = nextRound;
@@ -696,7 +713,7 @@ function runJuvenileTournamentDay(pools, provinceId){
   });
 }
 
-function runJuvenileFiestaDay(pools, provinceId){
+function runJuvenileFiestaDay(pools, provinceId, day){
   const pool = pools.juvenile[provinceId];
   if(!pool || pool.length < 2) return;
   const participants = [...pool].sort(()=>Math.random()-0.5).filter(()=> Math.random() < 0.3);
@@ -715,6 +732,7 @@ function runJuvenileFiestaDay(pools, provinceId){
     if(!fB || fB.id === fA.id) continue;
     const { winner, loser } = quickSimBout(fA, fB);
     winner.record.wins += 1; loser.record.losses += 1;
+    logNpcBout(winner, loser, 'Juvenile', 'Fiesta Fights', day);
     applyNpcGrowthTick(winner);
   }
 }
@@ -742,10 +760,10 @@ function runJuvenileIntake(pools, provinceId, day){
     });
     const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
     const weightClass = pick(weightClasses);
-    const f = finalizeOpponent(stats, avgOvr, weightClass, province);
+    const f = finalizeOpponent(stats, avgOvr, weightClass, province, age);
     f.age = age;
     f.talentTier = tier;
-    f.weightClass = weightClass;
+    f.weightClass = weightClassOf(f.weightLb); // derive from the real BMI-based weight, not the pre-picked target
     f.provinceId = province.id;
     f.record = { wins:0, losses:0 }; // brand new — no starting flavor record
     f.entryDay = day;
@@ -765,9 +783,9 @@ function catchUpJuvenileSimulation(){
   for(let d=startDay; d<=today; d++){
     const weekday = weekdayNameForDay(d);
     PROVINCES.forEach(p=>{
-      if(weekday==='Monday'){ runJuvenileLeagueNight(pools, p.id); runJuvenileIntake(pools, p.id, d); }
-      else if(weekday==='Tuesday'){ runJuvenileTournamentDay(pools, p.id); }
-      else if(weekday==='Wednesday'){ runJuvenileFiestaDay(pools, p.id); }
+      if(weekday==='Monday'){ runJuvenileLeagueNight(pools, p.id, d); runJuvenileIntake(pools, p.id, d); }
+      else if(weekday==='Tuesday'){ runJuvenileTournamentDay(pools, p.id, d); }
+      else if(weekday==='Wednesday'){ runJuvenileFiestaDay(pools, p.id, d); }
     });
   }
   pools.juvenileLastSimDay = today;
@@ -826,8 +844,10 @@ function matchupBonus(myDisc, oppDisc){ const row=MATCHUP[myDisc]; return row &&
 function winProbability(effA, effB){ return 1/(1+Math.pow(10, -(effA-effB)/12)); }
 
 function weightClassOf(weightLb){
-  if(weightLb <= 98) return 'Light';
-  if(weightLb <= 117) return 'Middle';
+  // Widened for the BMI-based body model (realistic weights now span ~60lb youth up to
+  // 300+lb grown heavyweights, not the old flat 80-135lb-for-everyone range).
+  if(weightLb <= 140) return 'Light';
+  if(weightLb <= 185) return 'Middle';
   return 'Heavy';
 }
 
@@ -1140,9 +1160,46 @@ function liveMatchOpponent(match){
   return match.a.pending ? match.b.fighter : match.a.fighter;
 }
 
-function finalizeOpponent(stats, avgOvrForFlavor, weightClass, pitProvince){
-  const weightLb = weightClass === 'Light' ? rand(80,98) : weightClass === 'Middle' ? rand(99,117) : rand(118,135);
-  const heightIn = rand(56,66);
+/* ============================ BODY MODEL (height/weight) ============================ */
+/*
+  Every fighter gets a rolled adult-height target first (floor 5'4" — nobody wants to
+  watch a 4'11" fighter, per direct note), then weight is DERIVED from height via BMI
+  rather than rolled independently. This is what keeps a 7-footer in the 280-320lb range
+  instead of reading like a beanpole, and keeps a 5'4" fighter from being assigned a
+  giant's weight. Still-growing Juveniles get their current height as a fraction of that
+  adult target (same maturity curve as the Doctor's Review), and a slightly lower BMI
+  since kids are leaner pre-growth-spurt, tapering up to the full adult BMI target by 18.
+*/
+function rollAdultHeightIn(){
+  // Sum of 3 uniform rolls approximates a bell curve — cheap, no external deps.
+  const t = (Math.random()+Math.random()+Math.random())/3; // 0..1, centered ~.5
+  return clamp(Math.round(64 + t*20), 64, 84); // 5'4" to 7'0", centered ~6'2"
+}
+function bmiForBuild(build){
+  if(build==='lean') return rand(19,23);
+  if(build==='stocky') return rand(27,32);
+  return rand(23,27); // athletic
+}
+function weightFromHeight(heightIn, bmi){
+  const heightM = heightIn * 0.0254;
+  return Math.round(bmi * heightM * heightM * 2.20462);
+}
+function heightForAge(adultHeightIn, age){
+  if(!age || age >= 18) return adultHeightIn;
+  const pct = MATURITY_PCT_BY_AGE[clamp(age,11,18)] || 1.0;
+  return Math.max(50, Math.round(adultHeightIn * pct));
+}
+function weightForAge(currentHeightIn, age, bmi){
+  const youthFactor = (!age || age>=18) ? 1.0 : 0.85 + (clamp(age,11,18)-11)/7*0.15;
+  return weightFromHeight(currentHeightIn, bmi*youthFactor);
+}
+
+function finalizeOpponent(stats, avgOvrForFlavor, weightClass, pitProvince, age){
+  const build = pick(['lean','athletic','stocky']);
+  const bmiTarget = bmiForBuild(build);
+  const adultHeightIn = rollAdultHeightIn();
+  const heightIn = heightForAge(adultHeightIn, age);
+  const weightLb = weightForAge(heightIn, age, bmiTarget);
   const settlements = SETTLEMENTS_SHORT[pitProvince.id] || ['a nearby town'];
   const hometown = pick(settlements);
   const recWins = clamp(Math.round(avgOvrForFlavor / 5) + rand(-1,1), 0, 9);
@@ -1151,10 +1208,11 @@ function finalizeOpponent(stats, avgOvrForFlavor, weightClass, pitProvince){
     id: 'rival_' + Date.now() + '_' + rand(0,9999),
     name: pickName(pitProvince.id, hometown),
     primaryDisc: pickWeightedDiscipline(pitProvince),
-    stats, weightLb, heightIn,
+    stats, weightLb, heightIn, adultHeightIn, bmiTarget,
     hometown,
     record: { wins: recWins, losses: recLosses },
-    appearance: { skin: pick(SKIN_TONES), hair: pick(HAIR_COLORS), build: pick(['lean','athletic','stocky']) },
+    fightLog: [],
+    appearance: { skin: pick(SKIN_TONES), hair: pick(HAIR_COLORS), build },
   };
 }
 
@@ -1201,20 +1259,28 @@ function generateCommentatorTakes(f){
 }
 
 // Rough real-world-style maturity curve — current size as a fraction of eventual adult size.
-const MATURITY_PCT_BY_AGE = { 12:0.79, 13:0.84, 14:0.89, 15:0.93, 16:0.96, 17:0.98, 18:1.0 };
-function projectAdultSize(heightIn, weightLb, age, build){
-  const pct = MATURITY_PCT_BY_AGE[clamp(age||18, 12, 18)] || 1.0;
-  const buildMult = { lean:0.92, athletic:1.0, stocky:1.12 }[build] || 1.0;
-  return {
-    adultHeightIn: Math.round((heightIn||64) / pct),
-    adultWeightLb: Math.round(((weightLb||120) / pct) * buildMult),
-    isGrown: pct >= 1.0,
-  };
+const MATURITY_PCT_BY_AGE = { 11:0.74, 12:0.79, 13:0.84, 14:0.89, 15:0.93, 16:0.96, 17:0.98, 18:1.0 };
+function projectAdultSize(f){
+  const age = f.age || 18;
+  const pct = MATURITY_PCT_BY_AGE[clamp(age, 11, 18)] || 1.0;
+  const build = f.appearance ? f.appearance.build : 'athletic';
+  // New fighters carry their true rolled adult-height target — use it directly for an
+  // exact, always-consistent projection instead of re-estimating.
+  let adultHeightIn = f.adultHeightIn;
+  let bmiTarget = f.bmiTarget;
+  if(!adultHeightIn){
+    // Legacy fighter (created before the BMI body model) — back out a reasonable adult
+    // height from current height/age, floored at 5'4" same as everyone else.
+    adultHeightIn = clamp(Math.round((f.heightIn||64) / pct), 64, 84);
+    bmiTarget = bmiForBuild(build);
+  }
+  const adultWeightLb = weightFromHeight(adultHeightIn, bmiTarget);
+  return { adultHeightIn, adultWeightLb, isGrown: pct >= 1.0 };
 }
 
 function growthOutlook(f){
   const isAmateurTier = !!f.amateurLeagueId || !f.juvenileHomeProvinceId;
-  const ceiling = isAmateurTier ? bandCeiling(18, f.talentTier||'normal') : bandCeiling(f.age||12, f.talentTier||'normal');
+  const ceiling = isAmateurTier ? bandCeiling(18, f.talentTier||'normal') : bandCeiling(f.age||11, f.talentTier||'normal');
   const avgStat = (f.stats.speed+f.stats.quickness+f.stats.toughness+f.stats.power+f.stats.agility)/5;
   const pctOfCeiling = clamp(avgStat/ceiling*100, 0, 100);
   let outlook;
@@ -1223,6 +1289,101 @@ function growthOutlook(f){
   else if(pctOfCeiling >= 30) outlook = 'Early in the development curve — plenty of runway left.';
   else outlook = 'Very raw. Most of the growth curve is still ahead.';
   return { ceiling, avgStat, pctOfCeiling, outlook };
+}
+
+/* ============================ PROJECTED PATH ============================ */
+/*
+  A scouting-style projection of where this career tops out — combines talent tier
+  (a true outlier vs. everyone else) with how far along their own development curve they
+  already are (pctOfCeiling, from growthOutlook) to land on a rough outcome bucket, then
+  fills in a weight-class + discipline flavored line from a big pool of options.
+*/
+const PROJECTED_PATH_TEMPLATES = {
+  eliteWithRoom: [
+    "Pro {weightClass} title threat in {discipline} — if the frame fills out on schedule, this is a future island champion.",
+    "The kind of {discipline} prospect a Pro scout circles twice. {weightClass} contender, and soon.",
+    "Generational buzz. Realistic ceiling is a Pro {weightClass} champion in {discipline} once the growth curve catches up.",
+    "Franchise-piece talk. {weightClass} division, {discipline} — this is what Pro scouting departments are built to find.",
+  ],
+  eliteMatured: [
+    "Pro-caliber right now. {weightClass} {discipline} specialist, ready for the top level the day the rules allow it.",
+    "Already fighting like a Pro. {weightClass} division, {discipline} — the ceiling and the floor are basically the same.",
+    "Fast-tracked. Realistic outcome is an early Pro debut and a real run at a {weightClass} title in {discipline}.",
+  ],
+  solidPro: [
+    "Rotational Pro roster piece. Won't headline, but a {weightClass} {discipline} team wants this on the depth chart.",
+    "Realistic ceiling: a dependable Pro {weightClass} fighter — not a champion, but a real paycheck for a real career.",
+    "Pro debut likely once the frame catches up. The {discipline} instincts translate at the next level.",
+    "Card-filler with upside. {weightClass} {discipline}, probably a multi-year Pro roster spot if development holds.",
+  ],
+  topAmateur: [
+    "Ceiling is a strong Amateur run — {weightClass} {discipline} money-maker, but the Pro offers probably don't come.",
+    "Good enough to make a real living in the Amateur ranks. Pro is a stretch at this rate of growth.",
+    "Amateur {weightClass} contender projection — the {discipline} tools are there, the ceiling just isn't Pro-high.",
+    "Realistic outcome: a genuine Amateur draw, main-card level, without ever getting the Pro call.",
+  ],
+  averageAmateur: [
+    "Likely average Amateur-level ceiling. {weightClass} journeyman, steady paychecks, no title runs.",
+    "Realistic outcome: a serviceable Amateur {discipline} fighter who pays the bills and nothing more.",
+    "Middle-of-the-pack Amateur projection. {weightClass} division, no real upside beyond that at this pace.",
+    "Fine, unremarkable career outlook — {weightClass} Amateur, {discipline} basics, a record that lands around .500.",
+  ],
+  juniorDepth: [
+    "Junior League depth piece at best — {weightClass} {discipline}, more roster-filler than prospect.",
+    "The tools are raw. Realistic ceiling is hanging onto a Junior roster spot, not much further than that.",
+    "Needs a real jump in development just to stick in Junior. {weightClass} {discipline}, unproven.",
+  ],
+  washout: [
+    "Hard to project a path past Juvenile at this rate. Might not make it to a Junior roster at all.",
+    "Realistic read: this one may be out of organized fighting before adulthood without a big jump in development.",
+    "Nothing wrong with the effort, but the tools aren't there yet. Long odds on a Junior roster spot.",
+  ],
+};
+function generateProjectedPath(f){
+  const wc = f.weightClass || weightClassOf(f.weightLb||140);
+  const discName = DISCIPLINE_NAMES[f.primaryDisc] || 'fighting';
+  const growth = growthOutlook(f);
+  let bucket;
+  if(f.talentTier === 'generational') bucket = growth.pctOfCeiling >= 65 ? 'eliteMatured' : 'eliteWithRoom';
+  else if(f.talentTier === 'prodigy') bucket = growth.pctOfCeiling >= 80 ? 'solidPro' : 'eliteWithRoom';
+  else if(growth.pctOfCeiling >= 85) bucket = 'topAmateur';
+  else if(growth.pctOfCeiling >= 60) bucket = 'averageAmateur';
+  else if(growth.pctOfCeiling >= 35) bucket = 'juniorDepth';
+  else bucket = 'washout';
+  const line = pick(PROJECTED_PATH_TEMPLATES[bucket]);
+  return fillTpl(line, { weightClass: wc, discipline: discName });
+}
+
+/* ============================ DRAFT WATCH ============================ */
+/*
+  Juvenile-only. Shows the real draft-eligibility window (14th birth-year earliest, 17
+  latest — see the GDD's Career Ladder) computed off the fighter's age and the current
+  in-game year, plus a scouting-style projected draft slot based on the same trajectory
+  read as Projected Path.
+*/
+function draftWatchHtml(f){
+  if(!f.age || f.age < 11 || f.age > 18) return '';
+  if(f.juniorTeamId || f.amateurLeagueId) return ''; // already past the draft window
+  const currentYear = dateForDay(getCurrentDay()).getFullYear();
+  const birthYear = currentYear - f.age;
+  const eligibleYear = birthYear + 14;
+  const lastYear = birthYear + 17;
+  const growth = growthOutlook(f);
+  let spotLine;
+  if(f.talentTier === 'generational') spotLine = 'Locked in as a Round 1 pick, likely top 3 overall, the moment they hit 14.';
+  else if(f.talentTier === 'prodigy' && growth.pctOfCeiling >= 70) spotLine = 'Round 1 buzz — teams are already circling.';
+  else if(growth.pctOfCeiling >= 80) spotLine = 'Early Day 1 projection — mid-to-late first round.';
+  else if(growth.pctOfCeiling >= 60) spotLine = 'Day 2 projection — solid mid-round value.';
+  else if(growth.pctOfCeiling >= 35) spotLine = 'Late-round flier territory right now — needs a jump to move up boards.';
+  else spotLine = 'Off the board as of today. Would need a real leap in development to get drafted at all.';
+  const status = f.age < 14
+    ? `Eligible starting ${eligibleYear} (turns 14), through ${lastYear}.`
+    : (f.age <= 17 ? `Eligible now, through ${lastYear}.` : `Final year of Junior draft eligibility — ages out after this.`);
+  return `
+    <div class="mf-section-title">Draft Watch</div>
+    <p class="mf-growth-text">${status}</p>
+    <p class="mf-growth-text">Current projected spot: ${spotLine}</p>
+  `;
 }
 
 const DISC_FLAVOR = {
@@ -1431,8 +1592,13 @@ function renderModal(){
     <div class="mf-quote"><span class="mf-quote-name">${t.name}:</span> "${t.quote}"</div>
   `).join('');
 
+  const projectedPathHtml = `
+    <div class="mf-section-title">Projected Path</div>
+    <p class="mf-growth-text">${generateProjectedPath(f)}</p>
+  `;
+
   const growth = growthOutlook(f);
-  const doc = projectAdultSize(f.heightIn, f.weightLb, f.age, f.appearance ? f.appearance.build : 'athletic');
+  const doc = projectAdultSize(f);
   const growthHtml = `
     <div class="mf-section-title">Growth Outlook</div>
     <div class="mf-growth-bar"><div class="mf-growth-fill" style="width:${growth.pctOfCeiling}%"></div></div>
@@ -1441,36 +1607,32 @@ function renderModal(){
     <p class="mf-growth-text">${doc.isGrown
       ? `Fully grown — current size is expected to hold.`
       : `Early projection, subject to change: expected adult height ~${heightLabel(doc.adultHeightIn)}, weight ~${doc.adultWeightLb} lb.`}</p>
+    ${draftWatchHtml(f)}
   `;
 
-  let bodyExtra;
-  if(isEphemeral && f.division){
-    const prov2 = PROVINCES.find(p=>p.id===f.provinceId);
-    bodyExtra = `<div class="mf-empty">Registered Amateur fighter — ${f.division} Division${f.leagueId && getLeague(f.leagueId) ? ', '+getLeague(f.leagueId).name : (prov2?', '+prov2.name:'')}. Record updates as you fight them; detailed round-by-round history isn't tracked for field fighters yet.</div>`;
-  } else if(isEphemeral && f.age && f.provinceId){
-    const prov2 = PROVINCES.find(p=>p.id===f.provinceId);
-    bodyExtra = `<div class="mf-empty">Registered Juvenile fighter, age ${f.age}${prov2?' — '+prov2.name:''}. Record updates as you fight them; detailed round-by-round history isn't tracked for field fighters yet.</div>`;
-  } else if(isEphemeral){
+  // Career fight card — same tabbed history view for everyone now that field/NPC
+  // fighters carry a real (capped) fight log from the background simulation too, not
+  // just a "not tracked yet" placeholder.
+  const log = f.fightLog || [];
+  const filtered = modalActiveTier === 'All' ? log : log.filter(e=> e.tier === modalActiveTier);
+  const sorted = [...filtered].sort((a,b)=> new Date(b.date) - new Date(a.date));
+  const historyHtml = sorted.length ? sorted.map(e=>{
+    const dateStr = e.date ? new Date(e.date).toLocaleDateString() : '—';
+    return `
+      <div class="mf-history-row">
+        <div class="mfh-date">${dateStr}</div>
+        <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
+        <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
+      </div>
+    `;
+  }).join('') : `<div class="mf-empty">No fights on record${modalActiveTier==='All'?'':' at this level'} yet${isEphemeral?' — only the last 10 are kept for field fighters':''}.</div>`;
+  const tabsHtml = TIERS.map(t=>{
+    const count = t==='All' ? log.length : log.filter(e=>e.tier===t).length;
+    return `<button class="mf-tier-tab ${modalActiveTier===t?'active':''}" data-mf-tab="${t}">${t} (${count})</button>`;
+  }).join('');
+  let bodyExtra = `<div class="mf-tier-tabs">${tabsHtml}</div><div class="mf-history">${historyHtml}</div>`;
+  if(isEphemeral && !f.fightLog && !f.age){
     bodyExtra = `<div class="mf-empty">Procedural opponent — generated for this bout only, no persistent career record kept.</div>`;
-  } else {
-    const log = f.fightLog || [];
-    const filtered = modalActiveTier === 'All' ? log : log.filter(e=> e.tier === modalActiveTier);
-    const sorted = [...filtered].sort((a,b)=> new Date(b.date) - new Date(a.date));
-    const historyHtml = sorted.length ? sorted.map(e=>{
-      const dateStr = e.date ? new Date(e.date).toLocaleDateString() : '—';
-      return `
-        <div class="mf-history-row">
-          <div class="mfh-date">${dateStr}</div>
-          <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
-          <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
-        </div>
-      `;
-    }).join('') : `<div class="mf-empty">No fights on record${modalActiveTier==='All'?'':' at this level'} yet.</div>`;
-    const tabsHtml = TIERS.map(t=>{
-      const count = t==='All' ? log.length : log.filter(e=>e.tier===t).length;
-      return `<button class="mf-tier-tab ${modalActiveTier===t?'active':''}" data-mf-tab="${t}">${t} (${count})</button>`;
-    }).join('');
-    bodyExtra = `<div class="mf-tier-tabs">${tabsHtml}</div><div class="mf-history">${historyHtml}</div>`;
   }
 
   root.innerHTML = `
@@ -1498,6 +1660,7 @@ function renderModal(){
           </div>
           <div class="mf-section-title">On the Broadcast</div>
           <div class="mf-quotes">${commentaryHtml}</div>
+          ${projectedPathHtml}
           ${growthHtml}
           ${bodyExtra}
         </div>
@@ -2325,7 +2488,11 @@ function applyBoutResult(){
 
   const poolKey = isAmateur ? state.opponent.leagueId : state.opponent.provinceId;
   if(poolKey){
-    updateFieldFighterRecord(state.opponent.id, poolKey, !playerWon, !isAmateur);
+    const playerName = getFighterById(state.fighterId).name;
+    updateFieldFighterRecord(state.opponent.id, poolKey, !playerWon, !isAmateur, {
+      tier: tierName, opponent: playerName, result: playerWon ? 'L' : 'W', method: r.method,
+      location: `${state.arena.name} — ${s.pitName}`, date: dateForDay(getCurrentDay()).toISOString(),
+    });
   }
 
   // A fight night represents roughly a week of build-up/travel in-fiction — advance the
@@ -2364,13 +2531,17 @@ function applyTournamentBoutResult(){
     if(playerWon) f.record.wins += 1; else f.record.losses += 1;
     f.fightLog.push({
       tier: 'Amateur', opponent: state.opponent.name, result: playerWon ? 'W':'L', method: r.method,
-      location: `${state.arena.name} — ${stage} ${roundName}`, date: new Date().toISOString(),
+      location: `${state.arena.name} — ${stage} ${roundName}`, date: dateForDay(getCurrentDay()).toISOString(),
     });
     growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), true);
   });
 
   if(state.opponent.leagueId){
-    updateFieldFighterRecord(state.opponent.id, state.opponent.leagueId, !playerWon, false);
+    const playerName = getFighterById(state.fighterId).name;
+    updateFieldFighterRecord(state.opponent.id, state.opponent.leagueId, !playerWon, false, {
+      tier: 'Amateur', opponent: playerName, result: playerWon ? 'L' : 'W', method: r.method,
+      location: `${state.arena.name} — ${stage} ${roundName}`, date: dateForDay(getCurrentDay()).toISOString(),
+    });
   }
 
   if(!playerWon){
@@ -2410,6 +2581,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V13 · 2026-07-12</div>
+<div class="version-badge">FIGHT PIT · V14 · 2026-07-12</div>
 </body>
 </html>
