@@ -110,6 +110,31 @@
   .np-divider{ border:none; border-top:1px dashed #8A7F5C; margin:16px 0; }
   .np-list{ font-family:'Special Elite',monospace; font-size:11.5px; line-height:1.9; }
   .np-list li{ margin-left:18px; }
+  .np-standings-links{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  .np-standings-btn{
+    font-family:'Special Elite',monospace; font-size:11px; text-transform:uppercase; letter-spacing:1px;
+    padding:10px; border:1.5px solid #221D14; background:#DDD2AF; color:#221D14; cursor:pointer;
+  }
+  .np-standings-btn:hover{ background:#221D14; color:#EDE4CC; }
+
+  /* league standings screen (regular dark theme) */
+  .standings-tabs{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+  .standings-tab{
+    font-family:var(--label); font-size:11px; letter-spacing:1px; text-transform:uppercase; padding:8px 14px;
+    border:1px solid var(--line); background:var(--bg-raised); color:var(--muted); cursor:pointer;
+  }
+  .standings-tab.active{ background:var(--ink-red); border-color:var(--ink-red); color:var(--bone); }
+  .team-standings-row{
+    display:grid; grid-template-columns:28px 1fr auto; gap:10px; align-items:center; padding:7px 10px;
+    background:var(--bg-raised); border:1px solid var(--line); margin-bottom:3px; font-family:var(--body); font-size:12.5px;
+  }
+  .tsr-rank{ font-family:var(--mono); color:var(--brass); font-weight:700; }
+  .tsr-record{ font-family:var(--mono); font-size:11.5px; color:var(--muted); }
+  .weight-tier-block{ margin-bottom:16px; }
+  .wtb-label{
+    font-family:var(--label); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--brass);
+    margin-bottom:6px; padding-bottom:4px; border-bottom:1px solid var(--line);
+  }
 
   /* location detail */
   .loc-head{ text-align:center; padding:18px 10px; background:var(--bg-raised); border:1px solid var(--brass-dim); margin-bottom:20px; }
@@ -210,6 +235,7 @@ const DISCIPLINE_NAMES = {
 };
 const ALL_DISCIPLINES = Object.keys(DISCIPLINE_NAMES);
 const WEIGHT_CLASSES_3 = ['Light','Middle','Heavy']; // Juvenile-tier weight bands
+const WEIGHT_CLASSES_5 = ['Fly','Light','Middle','Heavy','Mega']; // Junior/Pro-tier weight bands
 
 function rand(lo,hi){ return Math.floor(Math.random()*(hi-lo+1))+lo; }
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
@@ -877,6 +903,7 @@ const state = {
   day: 1, period: 'Morning', movesRemaining: 3,
   isBlackMarket: false,
   randomEventPending: null, // event type awaiting resolution on the current screen
+  standingsTier: 'pro',
 };
 
 const PERIODS = ['Morning','Afternoon','Night'];
@@ -958,6 +985,7 @@ function render(){
   else if(state.screen==='random-event'){ body = renderRandomEvent(); title='ON THE STREET'; }
   else if(state.screen==='newspaper'){ body = renderNewspaper(); title=''; sub=''; }
   else if(state.screen==='black-market'){ body = renderBlackMarket(); title='BLACK MARKET'; }
+  else if(state.screen==='league-standings'){ body = renderLeagueStandings(); title='STANDINGS'; }
   else if(state.screen==='loc-pit'){ body = renderLocPit(); title='FIGHT PIT'; }
   else if(state.screen==='choose-agent'){ body = renderChooseAgent(); title='YOUR CORNER'; }
   else if(state.screen==='choose-pit-to-fight'){ body = renderChoosePitToFight(); title='FIND A FIGHT'; }
@@ -1082,6 +1110,75 @@ function triggerRandomEvent(){
   state.screen = 'random-event';
 }
 
+/* ============================ LEAGUE STANDINGS (made up for now) ============================ */
+/* Pro and Junior are team-based — standings plus a top 5 per weight class. Amateur and
+   Juvenile don't have teams, just an island-wide top 10. All flavor-generated for now;
+   not wired to the real Junior League file's live state yet. */
+
+const TEAM_NICKNAME_POOL = ['Ironclads','Wolves','Vipers','Sentinels','Marauders','Drifters','Rebels','Stormguard','Tideburners','Grinders','Wardens','Outriders','Brawlers','Anchors','Timberwolves','Ridge Runners','Riptide','Fury','Shoguns','Ronin','Nightwatch','Wraiths','Hollowmen','Dust Runners','Sandstorm','Shades','Foundry'];
+function generateTeamName(){
+  const prov = pick(PROVINCES);
+  const settlements = SETTLEMENT_DATA[prov.id] || [];
+  const city = settlements.length ? pick(settlements).name : prov.name;
+  return `${city} ${pick(TEAM_NICKNAME_POOL)}`;
+}
+
+function generateTeamTierData(teamCount){
+  const teams = [];
+  const usedNames = new Set();
+  for(let i=0;i<teamCount;i++){
+    let name = generateTeamName();
+    let guard=0; while(usedNames.has(name) && guard<20){ name = generateTeamName(); guard++; }
+    usedNames.add(name);
+    teams.push({ name, wins: rand(2,18), losses: rand(2,18) });
+  }
+  teams.sort((a,b)=> (b.wins-b.losses)-(a.wins-a.losses));
+  const topByWeight = {};
+  WEIGHT_CLASSES_5.forEach(wc=>{
+    const list = [];
+    for(let i=0;i<5;i++){
+      const prov = pick(PROVINCES);
+      list.push({ name: pickName(prov.id, null), wins: rand(8,25), losses: rand(0,6), team: pick(teams).name });
+    }
+    list.sort((a,b)=> (b.wins-b.losses)-(a.wins-a.losses));
+    topByWeight[wc] = list;
+  });
+  return { teams, topByWeight };
+}
+
+function generateIndividualTierData(){
+  const list = [];
+  for(let i=0;i<10;i++){
+    const prov = pick(PROVINCES);
+    const settlements = SETTLEMENT_DATA[prov.id] || [];
+    const hometown = settlements.length ? pick(settlements).name : prov.name;
+    list.push({
+      name: pickName(prov.id, hometown),
+      wins: rand(8,25), losses: rand(0,6),
+      style: DISCIPLINE_NAMES[pickWeightedDiscipline(prov)],
+      hometown,
+      homePit: pick(PIT_NAMES),
+    });
+  }
+  list.sort((a,b)=> (b.wins-b.losses)-(a.wins-a.losses));
+  return list;
+}
+
+function ensureLeagueStandings(day){
+  const s = loadRoamState();
+  if(!s.leagueStandings) s.leagueStandings = {};
+  if(s.leagueStandings[day]) return s.leagueStandings[day];
+  const data = {
+    pro: generateTeamTierData(10),
+    junior: generateTeamTierData(12),
+    amateur: generateIndividualTierData(),
+    juvenile: generateIndividualTierData(),
+  };
+  s.leagueStandings[day] = data;
+  saveRoamState(s);
+  return data;
+}
+
 /* ============================ NEWSPAPER ============================ */
 
 const NEWSPAPER_NAMES = ['Herald','Gazette','Times','Tribune','Chronicle','Bulletin','Courier','Ledger'];
@@ -1201,8 +1298,77 @@ function renderNewspaper(){
         <div class="np-headline">Trainer's Corner</div>
         <div class="np-body">${paper.trainerTip}</div>
       </div>
+      <hr class="np-divider">
+
+      <div class="np-section">
+        <div class="np-headline">League Standings</div>
+        <div class="np-byline">Tap a Division</div>
+        <div class="np-standings-links">
+          <button class="np-standings-btn" data-view-standings="pro">Pro League</button>
+          <button class="np-standings-btn" data-view-standings="junior">Junior League</button>
+          <button class="np-standings-btn" data-view-standings="amateur">Amateur</button>
+          <button class="np-standings-btn" data-view-standings="juvenile">Juvenile</button>
+        </div>
+      </div>
     </div>
     <div class="btn-row" style="margin-top:16px;"><button class="btn btn-primary" id="close-newspaper">Fold It Up →</button></div>
+  `;
+}
+
+function renderLeagueStandings(){
+  const data = ensureLeagueStandings(state.day);
+  const tabs = [
+    { id:'pro', label:'Pro' }, { id:'junior', label:'Junior' },
+    { id:'amateur', label:'Amateur' }, { id:'juvenile', label:'Juvenile' },
+  ];
+  const tabsHtml = tabs.map(t=>`<button class="standings-tab ${state.standingsTier===t.id?'active':''}" data-standings-tab="${t.id}">${t.label}</button>`).join('');
+
+  const tierData = data[state.standingsTier];
+  let body;
+  if(state.standingsTier === 'pro' || state.standingsTier === 'junior'){
+    const teamRows = tierData.teams.map((t,i)=>`
+      <div class="team-standings-row">
+        <span class="tsr-rank">${i+1}</span>
+        <span>${t.name}</span>
+        <span class="tsr-record">${t.wins}-${t.losses}</span>
+      </div>
+    `).join('');
+    const weightBlocks = WEIGHT_CLASSES_5.map(wc=>{
+      const list = tierData.topByWeight[wc];
+      const rows = list.map((f,i)=>`
+        <div class="team-standings-row">
+          <span class="tsr-rank">${i+1}</span>
+          <span>${f.name} <span style="color:var(--muted); font-family:var(--mono); font-size:10px;">— ${f.team}</span></span>
+          <span class="tsr-record">${f.wins}-${f.losses}</span>
+        </div>
+      `).join('');
+      return `<div class="weight-tier-block"><div class="wtb-label">${wc}weight — Top 5</div>${rows}</div>`;
+    }).join('');
+    body = `
+      <div class="section-label">Standings</div>
+      ${teamRows}
+      <div class="section-label" style="margin-top:20px;">Top Fighters by Weight Class</div>
+      ${weightBlocks}
+    `;
+  } else {
+    const rows = tierData.map((f,i)=>`
+      <div class="team-standings-row" style="grid-template-columns:28px 1fr auto;">
+        <span class="tsr-rank">${i+1}</span>
+        <span>${f.name}<br><span style="color:var(--muted); font-family:var(--mono); font-size:10px;">${f.style} · ${f.hometown} · ${f.homePit}</span></span>
+        <span class="tsr-record">${f.wins}-${f.losses}</span>
+      </div>
+    `).join('');
+    body = `
+      <div class="section-label">Island-Wide Top 10</div>
+      ${rows}
+    `;
+  }
+
+  return `
+    <p style="font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-bottom:14px;">${formatGameDate(state.day)} · Rankings, made up for now — not synced to live league play yet.</p>
+    <div class="standings-tabs">${tabsHtml}</div>
+    ${body}
+    <div class="btn-row" style="margin-top:16px;"><button class="btn" id="back-to-newspaper">← Back to Paper</button><span></span></div>
   `;
 }
 
@@ -1524,6 +1690,15 @@ function wireEvents(){
   const closeNewspaper = document.getElementById('close-newspaper');
   if(closeNewspaper) closeNewspaper.onclick = ()=>{ state.screen='city-walk'; render(); };
 
+  document.querySelectorAll('[data-view-standings]').forEach(btn=>{
+    btn.onclick = ()=>{ state.standingsTier = btn.dataset.viewStandings; state.screen='league-standings'; render(); };
+  });
+  document.querySelectorAll('[data-standings-tab]').forEach(btn=>{
+    btn.onclick = ()=>{ state.standingsTier = btn.dataset.standingsTab; render(); };
+  });
+  const backToNewspaper = document.getElementById('back-to-newspaper');
+  if(backToNewspaper) backToNewspaper.onclick = ()=>{ state.screen='newspaper'; render(); };
+
   const viewBlackMarket = document.getElementById('view-black-market');
   if(viewBlackMarket) viewBlackMarket.onclick = ()=>{ state.screen='black-market'; render(); };
 
@@ -1698,6 +1873,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V4 · 2026-07-11</div>
+<div class="version-badge">FREE ROAM · V5 · 2026-07-11</div>
 </body>
 </html>
