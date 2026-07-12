@@ -202,6 +202,16 @@
   .mf-stat{ background:var(--bg-raised); border:1px solid var(--line); text-align:center; padding:8px 4px; }
   .mf-stat .msv{ font-family:var(--mono); font-size:15px; font-weight:700; color:var(--brass); }
   .mf-stat .msl{ font-family:var(--label); font-size:8.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-top:2px; }
+  .mf-section-title{
+    font-family:var(--label); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--brass);
+    margin:14px 0 8px; padding-top:12px; border-top:1px solid var(--line);
+  }
+  .mf-quotes{ display:flex; flex-direction:column; gap:6px; }
+  .mf-quote{ font-family:var(--body); font-size:12px; color:var(--bone-dim); line-height:1.5; font-style:italic; }
+  .mf-quote-name{ font-family:var(--label); font-style:normal; font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); margin-right:4px; }
+  .mf-growth-bar{ height:7px; background:var(--bg-base); border:1px solid var(--line); position:relative; overflow:hidden; }
+  .mf-growth-fill{ position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, var(--brass-dim), var(--brass)); }
+  .mf-growth-text{ font-family:var(--body); font-size:12px; color:var(--bone-dim); margin-top:6px; line-height:1.5; }
   .mf-tier-tabs{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
   .mf-tier-tab{ font-family:var(--label); font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; padding:7px 11px; border:1px solid var(--line); background:var(--bg-raised); color:var(--muted); cursor:pointer; }
   .mf-tier-tab.active{ background:var(--ink-red); border-color:var(--ink-red); color:var(--bone); }
@@ -320,6 +330,81 @@ function weightedPick(weights){
     if(r <= acc) return k;
   }
   return Object.keys(weights)[Object.keys(weights).length-1];
+}
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+/* ============================ AGE BANDS (mirrors Character Creator / Fight Pit) ============================ */
+const AGE_BAND_TYPICAL      = { 11:13, 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35, 19:36, 20:37 };
+const AGE_BAND_PRODIGY      = { 11:17, 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35, 19:36, 20:37 };
+const AGE_BAND_GENERATIONAL = { 11:22, 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88, 19:90, 20:92 };
+function bandCeiling(age, tier){
+  const table = tier==='generational' ? AGE_BAND_GENERATIONAL : tier==='prodigy' ? AGE_BAND_PRODIGY : AGE_BAND_TYPICAL;
+  return table[clamp(age, 11, 20)];
+}
+
+/* ============================ FIGHTER CARD EXTRAS ============================ */
+/* Commentator takes, growth outlook, and a doctor's adult-size projection — ported
+   from iifl_fight_pit.html so the Fighter Card modal matches everywhere. */
+
+const COMMENTATOR_NAMES = ['Duke Callahan', 'Jamie Voss', 'Lena Marsh'];
+const DISCIPLINE_TAKES = {
+  boxer: ["Clean hands, doesn't waste motion.", "That jab could carry a whole career.", "Old-school boxing IQ for someone this age."],
+  brawler: ["Pure chaos in there — hard to game-plan for.", "Wild, but wild works when it lands.", "No fear whatsoever. Might be a problem down the road, might be the whole appeal."],
+  wrestler: ["Relentless on the mat. Wears people down.", "Control game is already ahead of schedule.", "Grinds you into dust, round after round."],
+  sambo: ["Throws for days — that's a Carpathian style if I've ever seen one.", "Underrated skill set. People sleep on Sambo until it's too late.", "Sneaky finishes. Blink and it's over."],
+  mma: ["Complete game, no real holes yet.", "Doesn't have one bad matchup on paper.", "The kind of fighter that makes booking a card difficult — nobody wants that smoke."],
+  karate: ["Point-fighter speed with real pop on it.", "In and out before you know what hit you.", "That karate background shows up in the footwork."],
+  judo: ["One bad grip and it's over for the other guy.", "Throws with real bad intentions.", "Judo background is criminally underused on this island — this one could change that."],
+  catch: ["Sneaky mat game, comes out of nowhere.", "Old carny tricks — and I mean that as a compliment.", "Scrambles are where this one lives and dies."],
+};
+
+function generateCommentatorTakes(f){
+  const names = [...COMMENTATOR_NAMES];
+  for(let i=names.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [names[i],names[j]]=[names[j],names[i]]; }
+
+  const statEntries = Object.entries(f.stats);
+  statEntries.sort((a,b)=> b[1]-a[1]);
+  const bottomStat = statEntries[statEntries.length-1][0];
+
+  const takes = [];
+  takes.push({ name: names[0], quote: pick(DISCIPLINE_TAKES[f.primaryDisc] || DISCIPLINE_TAKES.mma) });
+
+  let potentialLine;
+  if(f.talentTier === 'generational') potentialLine = "This isn't hype — once-a-generation type talent. Circle this name.";
+  else if(f.talentTier === 'prodigy') potentialLine = "Ahead of schedule for the age. Worth keeping an eye on.";
+  else if(f.potential !== undefined && f.potential >= 70) potentialLine = "Real ceiling here if the work gets put in.";
+  else if(f.potential !== undefined && f.potential <= 30) potentialLine = "What you see now might be close to what you get — but plenty of careers get built on exactly that.";
+  else potentialLine = "Solid, unspectacular — the kind of fighter leagues are actually built on.";
+  takes.push({ name: names[1], quote: potentialLine });
+
+  takes.push({ name: names[2], quote: `Needs to tighten up the ${bottomStat} before somebody tougher finds it.` });
+
+  return takes;
+}
+
+// Rough real-world-style maturity curve — current size as a fraction of eventual adult size.
+const MATURITY_PCT_BY_AGE = { 11:0.74, 12:0.79, 13:0.84, 14:0.89, 15:0.93, 16:0.96, 17:0.98, 18:1.0 };
+function projectAdultSize(heightIn, weightLb, age, build){
+  const pct = MATURITY_PCT_BY_AGE[clamp(age||18, 11, 18)] || 1.0;
+  const buildMult = { lean:0.92, athletic:1.0, stocky:1.12 }[build] || 1.0;
+  return {
+    adultHeightIn: Math.round((heightIn||64) / pct),
+    adultWeightLb: Math.round(((weightLb||120) / pct) * buildMult),
+    isGrown: pct >= 1.0,
+  };
+}
+
+function growthOutlook(f){
+  const isAmateurTier = !!f.amateurLeagueId || !f.juvenileHomeProvinceId;
+  const ceiling = isAmateurTier ? bandCeiling(18, f.talentTier||'normal') : bandCeiling(f.age||11, f.talentTier||'normal');
+  const avgStat = (f.stats.speed+f.stats.quickness+f.stats.toughness+f.stats.power+f.stats.agility)/5;
+  const pctOfCeiling = clamp(avgStat/ceiling*100, 0, 100);
+  let outlook;
+  if(pctOfCeiling >= 90) outlook = 'Close to maxed out for where they are right now — future growth mostly comes from aging up.';
+  else if(pctOfCeiling >= 60) outlook = 'Solid development so far, real room left to keep climbing.';
+  else if(pctOfCeiling >= 30) outlook = 'Early in the development curve — plenty of runway left.';
+  else outlook = 'Very raw. Most of the growth curve is still ahead.';
+  return { ceiling, avgStat, pctOfCeiling, outlook };
 }
 
 const ARENA_NAMES = ['The Iron Drum','Concrete Coliseum','The Rusty Bell','Sundown Arena','The Salt Pit','Cinderblock Yard','The Velvet Cage','Foghorn Hall','The Anvil Room','Lantern Court','The Tin Roof','Drydock Arena'];
@@ -528,6 +613,22 @@ function renderModal(){
     return `<button class="mf-tier-tab ${modalActiveTier===t?'active':''}" data-mf-tab="${t}">${t} (${count})</button>`;
   }).join('');
 
+  const commentaryHtml = generateCommentatorTakes(f).map(t=>`
+    <div class="mf-quote"><span class="mf-quote-name">${t.name}:</span> "${t.quote}"</div>
+  `).join('');
+
+  const growth = growthOutlook(f);
+  const doc = projectAdultSize(f.heightIn, f.weightLb, f.age, f.appearance ? f.appearance.build : 'athletic');
+  const growthHtml = `
+    <div class="mf-section-title">Growth Outlook</div>
+    <div class="mf-growth-bar"><div class="mf-growth-fill" style="width:${growth.pctOfCeiling}%"></div></div>
+    <p class="mf-growth-text">${Math.round(growth.pctOfCeiling)}% of current ceiling reached. ${growth.outlook}</p>
+    <div class="mf-section-title">Doctor's Review</div>
+    <p class="mf-growth-text">${doc.isGrown
+      ? `Fully grown — current size is expected to hold.`
+      : `Early projection, subject to change: expected adult height ~${heightLabel(doc.adultHeightIn)}, weight ~${doc.adultWeightLb} lb.`}</p>
+  `;
+
   root.innerHTML = `
     <div class="modal-overlay">
       <div class="modal-card">
@@ -540,7 +641,7 @@ function renderModal(){
             <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
             <div>
               <div class="mf-name">${f.name}</div>
-              <div class="mf-meta">${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement||''}${prov?', '+prov.name:''}</div>
+              <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement||''}${prov?', '+prov.name:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
               <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Career ${rec.wins}-${rec.losses}</div>
             </div>
           </div>
@@ -551,6 +652,9 @@ function renderModal(){
             <div class="mf-stat"><div class="msv">${f.stats.power}</div><div class="msl">PWR</div></div>
             <div class="mf-stat"><div class="msv">${f.stats.agility}</div><div class="msl">AGL</div></div>
           </div>
+          <div class="mf-section-title">On the Broadcast</div>
+          <div class="mf-quotes">${commentaryHtml}</div>
+          ${growthHtml}
           <div class="mf-tier-tabs">${tabsHtml}</div>
           <div class="mf-history">${historyHtml}</div>
         </div>
@@ -826,6 +930,6 @@ function applyResultToRoster(){
 
 render();
 </script>
-<div class="version-badge">FIGHT ENGINE · V3 · 2026-07-11</div>
+<div class="version-badge">FIGHT ENGINE · V4 · 2026-07-11</div>
 </body>
 </html>
