@@ -893,10 +893,14 @@ function growJuniorStats(f, playerWon, method, oppOVR){
 
 /* ============================ DRAFT ENGINE ============================ */
 
-// Draft eligibility: an Amateur-active fighter aged 14-17. (Per spec: 14-17 is the
-// window Junior League scouts watch.)
+// Draft eligibility: a Juvenile-active fighter aged 14-17. Earliest eligibility is a
+// fighter's 14th birth-year; 17 is the last age they can still be picked before aging
+// out of Juvenile into the Amateur ranks undrafted. (Junior and Amateur were swapped
+// from an earlier design pass — Junior now drafts straight out of Juvenile, and Amateur
+// is the older 18+ money league that sits between Junior and Pro. An amateurLeagueId
+// check is intentionally NOT required here anymore.)
 function isDraftEligible(f){
-  return !!f.amateurLeagueId && f.age >= 14 && f.age <= 17 && !f.juniorTeamId;
+  return !!f.juvenileHomeProvinceId && f.age >= 14 && f.age <= 17 && !f.juniorTeamId;
 }
 
 function getFighterScouting(f){
