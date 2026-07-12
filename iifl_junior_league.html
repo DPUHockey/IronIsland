@@ -429,17 +429,22 @@ function generateTeammateFighter(weightClass, league, provinceIdHint){
   ['speed','quickness','toughness','power','agility'].forEach(k=>{
     stats[k] = clamp(targetOVR + rand(-6,6), 5, ceiling);
   });
-  const wRange = WC_WEIGHT_RANGES[weightClass] || [90,140];
+  const age = rand(14,20); // Junior League's full age span
+  const build = pick(['lean','athletic','stocky']);
+  const bmiTarget = bmiForBuild(build);
+  const adultHeightIn = rollAdultHeightIn();
+  const heightIn = heightForAge(adultHeightIn, age);
+  const weightLb = weightForAge(heightIn, age, bmiTarget);
   return {
     id: 'teammate_' + Date.now() + '_' + rand(0,99999),
     name: pickName(provinceId, null),
     primaryDisc: pick(ALL_DISCIPLINES),
-    stats,
-    weightLb: rand(wRange[0], wRange[1]),
-    heightIn: rand(60,74),
+    stats, age,
+    weightLb, heightIn, adultHeightIn, bmiTarget,
+    weightClass: weightClassOf(weightLb),
     talentTier: tier,
     potential: rand(30,80),
-    appearance: { skin: pick(TEAMMATE_SKIN_TONES), hair: pick(TEAMMATE_HAIR_COLORS), build: pick(['lean','athletic','stocky']) },
+    appearance: { skin: pick(TEAMMATE_SKIN_TONES), hair: pick(TEAMMATE_HAIR_COLORS), build },
   };
 }
 
@@ -503,11 +508,12 @@ function resolveSlotFighter(slot){
   return slot.fighter;
 }
 function weightClassOf(weightLb){
-  // 5-class Junior/Pro split (rough, matches the amateur Light/Middle/Heavy plus outer bands)
-  if(weightLb <= 90) return 'Fly';
-  if(weightLb <= 105) return 'Light';
-  if(weightLb <= 120) return 'Middle';
-  if(weightLb <= 140) return 'Heavy';
+  // 5-class Junior/Pro split, widened for the BMI-based body model (realistic weights
+  // now span teen-lean up to full-grown-heavyweight, not the old flat low range).
+  if(weightLb <= 135) return 'Fly';
+  if(weightLb <= 165) return 'Light';
+  if(weightLb <= 195) return 'Middle';
+  if(weightLb <= 230) return 'Heavy';
   return 'Mega';
 }
 
@@ -793,12 +799,12 @@ function simulateBout(fA, fB, ctx){
 }
 
 /* ============================ AGE BANDS (for Fighter Card growth outlook) ============================ */
-const AGE_BAND_TYPICAL      = { 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35 };
-const AGE_BAND_PRODIGY      = { 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35 };
-const AGE_BAND_GENERATIONAL = { 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88 };
+const AGE_BAND_TYPICAL      = { 11:13, 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35, 19:36, 20:37 };
+const AGE_BAND_PRODIGY      = { 11:17, 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35, 19:36, 20:37 };
+const AGE_BAND_GENERATIONAL = { 11:22, 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88, 19:90, 20:92 };
 function bandCeiling(age, tier){
   const table = tier==='generational' ? AGE_BAND_GENERATIONAL : tier==='prodigy' ? AGE_BAND_PRODIGY : AGE_BAND_TYPICAL;
-  return table[clamp(age, 12, 18)];
+  return table[clamp(age, 11, 20)];
 }
 
 /* ============================ FIGHTER CARD EXTRAS ============================ */
@@ -830,21 +836,47 @@ function generateCommentatorTakes(f){
   takes.push({ name: names[2], quote: `Needs to tighten up the ${bottomStat} before somebody tougher finds it.` });
   return takes;
 }
-const MATURITY_PCT_BY_AGE = { 12:0.79, 13:0.84, 14:0.89, 15:0.93, 16:0.96, 17:0.98, 18:1.0 };
-function projectAdultSize(heightIn, weightLb, age, build){
-  const pct = MATURITY_PCT_BY_AGE[clamp(age||18, 12, 18)] || 1.0;
-  const buildMult = { lean:0.92, athletic:1.0, stocky:1.12 }[build] || 1.0;
-  return {
-    adultHeightIn: Math.round((heightIn||64) / pct),
-    adultWeightLb: Math.round(((weightLb||120) / pct) * buildMult),
-    isGrown: pct >= 1.0,
-  };
+const MATURITY_PCT_BY_AGE = { 11:0.74, 12:0.79, 13:0.84, 14:0.89, 15:0.93, 16:0.96, 17:0.98, 18:1.0 };
+function bmiForBuild(build){
+  if(build==='lean') return rand(19,23);
+  if(build==='stocky') return rand(27,32);
+  return rand(23,27);
+}
+function weightFromHeight(heightIn, bmi){
+  const heightM = heightIn * 0.0254;
+  return Math.round(bmi * heightM * heightM * 2.20462);
+}
+function rollAdultHeightIn(){
+  const t = (Math.random()+Math.random()+Math.random())/3;
+  return clamp(Math.round(64 + t*20), 64, 84);
+}
+function heightForAge(adultHeightIn, age){
+  if(!age || age >= 18) return adultHeightIn;
+  const pct = MATURITY_PCT_BY_AGE[clamp(age,11,18)] || 1.0;
+  return Math.max(50, Math.round(adultHeightIn * pct));
+}
+function weightForAge(currentHeightIn, age, bmi){
+  const youthFactor = (!age || age>=18) ? 1.0 : 0.85 + (clamp(age,11,18)-11)/7*0.15;
+  return weightFromHeight(currentHeightIn, bmi*youthFactor);
+}
+function projectAdultSize(f){
+  const age = f.age || 18;
+  const pct = MATURITY_PCT_BY_AGE[clamp(age, 11, 18)] || 1.0;
+  const build = f.appearance ? f.appearance.build : 'athletic';
+  let adultHeightIn = f.adultHeightIn;
+  let bmiTarget = f.bmiTarget;
+  if(!adultHeightIn){
+    adultHeightIn = clamp(Math.round((f.heightIn||64) / pct), 64, 84);
+    bmiTarget = bmiForBuild(build);
+  }
+  const adultWeightLb = weightFromHeight(adultHeightIn, bmiTarget);
+  return { adultHeightIn, adultWeightLb, isGrown: pct >= 1.0 };
 }
 function growthOutlook(f){
   let ceiling;
   if(f.juniorTeamId) ceiling = juniorCeiling(f.talentTier||'normal');
   else if(f.amateurLeagueId) ceiling = f.talentTier==='generational' ? 90 : 35;
-  else ceiling = bandCeiling(f.age||12, f.talentTier||'normal');
+  else ceiling = bandCeiling(f.age||11, f.talentTier||'normal');
   const avgStat = (f.stats.speed+f.stats.quickness+f.stats.toughness+f.stats.power+f.stats.agility)/5;
   const pctOfCeiling = clamp(avgStat/ceiling*100, 0, 100);
   let outlook;
@@ -1002,14 +1034,62 @@ function renderModal(){
   else renderTeamModal(root);
 }
 
+const PROJECTED_PATH_TEMPLATES = {
+  eliteWithRoom: [
+    "Pro {weightClass} title threat in {discipline} — if the frame fills out on schedule, this is a future island champion.",
+    "The kind of {discipline} prospect a Pro scout circles twice. {weightClass} contender, and soon.",
+    "Generational buzz. Realistic ceiling is a Pro {weightClass} champion in {discipline} once the growth curve catches up.",
+  ],
+  eliteMatured: [
+    "Pro-caliber right now. {weightClass} {discipline} specialist, ready for the top level the day the rules allow it.",
+    "Already fighting like a Pro. {weightClass} division, {discipline} — the ceiling and the floor are basically the same.",
+  ],
+  solidPro: [
+    "Rotational Pro roster piece. Won't headline, but a {weightClass} {discipline} team wants this on the depth chart.",
+    "Realistic ceiling: a dependable Pro {weightClass} fighter — not a champion, but a real paycheck for a real career.",
+    "Pro debut likely once the frame catches up. The {discipline} instincts translate at the next level.",
+  ],
+  topAmateur: [
+    "Ceiling is a strong Amateur run — {weightClass} {discipline} money-maker, but the Pro offers probably don't come.",
+    "Amateur {weightClass} contender projection — the {discipline} tools are there, the ceiling just isn't Pro-high.",
+  ],
+  averageAmateur: [
+    "Likely average Amateur-level ceiling. {weightClass} journeyman, steady paychecks, no title runs.",
+    "Middle-of-the-pack Amateur projection. {weightClass} division, no real upside beyond that at this pace.",
+  ],
+  juniorDepth: [
+    "Junior roster depth piece — {weightClass} {discipline}, more roster-filler than prospect at this rate.",
+    "The tools are raw. Realistic ceiling is hanging onto a Junior roster spot, not much further than that.",
+  ],
+  washout: [
+    "Hard to project much of a path from here without a real jump in development.",
+    "Realistic read: may not hold a Junior roster spot much longer without visible growth.",
+  ],
+};
+function generateProjectedPath(f){
+  const wc = f.weightClass || weightClassOf(f.weightLb||140);
+  const discName = DISCIPLINE_NAMES[f.primaryDisc] || 'fighting';
+  const growth = growthOutlook(f);
+  let bucket;
+  if(f.talentTier === 'generational') bucket = growth.pctOfCeiling >= 65 ? 'eliteMatured' : 'eliteWithRoom';
+  else if(f.talentTier === 'prodigy') bucket = growth.pctOfCeiling >= 80 ? 'solidPro' : 'eliteWithRoom';
+  else if(growth.pctOfCeiling >= 85) bucket = 'topAmateur';
+  else if(growth.pctOfCeiling >= 60) bucket = 'averageAmateur';
+  else if(growth.pctOfCeiling >= 35) bucket = 'juniorDepth';
+  else bucket = 'washout';
+  const line = pick(PROJECTED_PATH_TEMPLATES[bucket]);
+  return fillTpl(line, { weightClass: wc, discipline: discName });
+}
+
 function renderFighterModal(root){
   const { f, isField } = findFighterAnywhere(modalFighterId);
   if(!f){ root.innerHTML=''; return; }
   const prov = PROVINCES.find(p=>p.id===f.provinceId);
 
   const commentaryHtml = generateCommentatorTakes(f).map(t=>`<div class="mf-quote"><span class="mf-quote-name">${t.name}:</span> "${t.quote}"</div>`).join('');
+  const projectedPathHtml = `<div class="mf-section-title">Projected Path</div><p class="mf-growth-text">${generateProjectedPath(f)}</p>`;
   const growth = growthOutlook(f);
-  const doc = projectAdultSize(f.heightIn, f.weightLb, f.age, f.appearance ? f.appearance.build : 'athletic');
+  const doc = projectAdultSize(f);
   const growthHtml = `
     <div class="mf-section-title">Growth Outlook</div>
     <div class="mf-growth-bar"><div class="mf-growth-fill" style="width:${growth.pctOfCeiling}%"></div></div>
@@ -1080,6 +1160,7 @@ function renderFighterModal(root){
           </div>
           <div class="mf-section-title">On the Broadcast — Analyst Takes</div>
           <div class="mf-quotes">${commentaryHtml}</div>
+          ${projectedPathHtml}
           ${growthHtml}
           ${bodyExtra}
         </div>
@@ -1870,7 +1951,7 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V9 · 2026-07-11</div>
+<div class="version-badge">JUNIOR LEAGUE · V10 · 2026-07-12</div>
 </body>
 </html>
 
