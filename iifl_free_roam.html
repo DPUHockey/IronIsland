@@ -50,6 +50,17 @@
 
   /* fighter select */
   .fighter-grid{ display:grid; gap:10px; }
+  .pit-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .pit-card{
+    background:var(--bg-raised); border:1px solid var(--line); border-left:4px solid var(--pc-color, var(--brass));
+    padding:14px 16px; cursor:pointer; transition:all .15s ease;
+  }
+  .pit-card:hover{ background:var(--bg-raised-2); }
+  .pit-name{ font-family:var(--label); font-size:14.5px; font-weight:600; color:var(--bone); }
+  .pit-meta{ font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:4px; }
+  .np-list-fighters{ font-family:'Special Elite',monospace; font-size:12px; line-height:2; }
+  .np-list-fighters .clickable-name, .np-body .clickable-name{ color:#221D14; text-decoration-color:transparent; font-weight:bold; }
+  .np-list-fighters .clickable-name:hover, .np-body .clickable-name:hover{ text-decoration-color:#221D14; }
   .fighter-row{
     background:var(--bg-raised); border:1px solid var(--line); border-left:4px solid var(--fr-color, var(--brass));
     padding:13px 16px; display:flex; align-items:center; gap:14px;
@@ -90,9 +101,61 @@
   .time-period{ font-family:var(--mono); font-size:11px; color:var(--brass); }
   .time-moves{ font-family:var(--mono); font-size:13px; color:var(--brass); letter-spacing:2px; }
 
+  /* ---- fighter card modal ---- */
+  .clickable-name{ cursor:pointer; text-decoration:underline; text-decoration-color:transparent; transition:text-decoration-color .12s ease; }
+  .clickable-name:hover{ text-decoration-color:var(--brass); color:var(--brass); }
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(10,8,6,0.78); display:flex; align-items:flex-start; justify-content:center;
+    padding:40px 16px; z-index:1000; overflow-y:auto;
+  }
+  .modal-card{ background:var(--bg-panel); border:1px solid var(--brass-dim); max-width:520px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.55); }
+  .modal-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .modal-title{ font-family:var(--display); font-size:20px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .modal-close{ background:transparent; border:1px solid var(--line); color:var(--muted); width:30px; height:30px; cursor:pointer; font-family:var(--mono); font-size:14px; }
+  .modal-close:hover{ border-color:var(--ink-red); color:var(--ink-red); }
+  .modal-body{ padding:20px; }
+  .mf-head{ display:flex; gap:14px; align-items:center; margin-bottom:18px; }
+  .mf-avatar{ width:50px; height:70px; flex-shrink:0; display:flex; align-items:flex-end; }
+  .mf-avatar svg{ width:100%; height:100%; }
+  .mf-name{ font-family:var(--display); font-size:20px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .mf-meta{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:3px; }
+  .mf-disc{ font-family:var(--label); font-size:11.5px; color:var(--brass); text-transform:uppercase; margin-top:3px; }
+  .mf-stats-grid{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:18px; }
+  .mf-stat{ background:var(--bg-raised); border:1px solid var(--line); text-align:center; padding:8px 4px; }
+  .mf-stat .msv{ font-family:var(--mono); font-size:15px; font-weight:700; color:var(--brass); }
+  .mf-stat .msl{ font-family:var(--label); font-size:8.5px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-top:2px; }
+  .mf-section-title{
+    font-family:var(--label); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--brass);
+    margin:14px 0 8px; padding-top:12px; border-top:1px solid var(--line);
+  }
+  .mf-quotes{ display:flex; flex-direction:column; gap:6px; }
+  .mf-quote{ font-family:var(--body); font-size:12px; color:var(--bone-dim); line-height:1.5; font-style:italic; }
+  .mf-quote-name{ font-family:var(--label); font-style:normal; font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); margin-right:4px; }
+  .mf-growth-bar{ height:7px; background:var(--bg-base); border:1px solid var(--line); position:relative; overflow:hidden; }
+  .mf-growth-fill{ position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, var(--brass-dim), var(--brass)); }
+  .mf-growth-text{ font-family:var(--body); font-size:12px; color:var(--bone-dim); margin-top:6px; line-height:1.5; }
+  .mf-empty{ text-align:center; padding:24px 10px; color:var(--muted); font-family:var(--body); font-size:13px; }
+  .mf-tier-tabs{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+  .mf-tier-tab{ font-family:var(--label); font-size:10.5px; letter-spacing:.5px; text-transform:uppercase; padding:7px 11px; border:1px solid var(--line); background:var(--bg-raised); color:var(--muted); cursor:pointer; }
+  .mf-tier-tab.active{ background:var(--ink-red); border-color:var(--ink-red); color:var(--bone); }
+  .mf-history-row{ display:grid; grid-template-columns:70px 1fr auto; gap:10px; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-family:var(--body); font-size:12.5px; }
+  .mf-history-row:last-child{ border-bottom:none; }
+  .mfh-date{ font-family:var(--mono); font-size:10px; color:var(--muted); }
+  .mfh-opp{ color:var(--bone-dim); }
+  .mfh-opp b{ color:var(--bone); }
+  .mfh-loc{ font-family:var(--mono); font-size:10px; color:var(--muted); display:block; margin-top:1px; }
+  .mfh-result{ font-family:var(--mono); font-size:11.5px; font-weight:700; }
+  .mfh-result.win{ color:var(--good); }
+  .mfh-result.loss{ color:var(--ink-red); }
+
   /* newspaper */
   .newspaper{
     background:#EDE4CC; color:#221D14; padding:22px 20px 30px; margin:-32px; border:1px solid #43392D;
+    border-top:7px solid var(--np-accent, #221D14);
+  }
+  .np-edition-tag{
+    font-family:'Special Elite',monospace; font-size:9.5px; text-transform:uppercase; letter-spacing:1.5px;
+    color:#5A5138; text-align:center; margin-bottom:2px;
   }
   .np-masthead{ text-align:center; border-bottom:4px double #221D14; padding-bottom:10px; margin-bottom:12px; }
   .np-title{ font-family:'Playfair Display',serif; font-weight:900; font-size:38px; letter-spacing:1px; line-height:1; }
@@ -212,6 +275,7 @@
 </head>
 <body>
 <div class="app" id="app"></div>
+<div id="modal-root"></div>
 
 <script>
 /* ============================ SHARED DATA ============================ */
@@ -329,13 +393,452 @@ const HAIR_COLORS = ['#0E0C0A','#3B2417','#6B4226','#A85C2A','#C9A23C','#D9D2C5'
 
 function calcOVR(stats){ return Math.round((stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5); }
 
-const AGE_BAND_TYPICAL      = { 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35 };
-const AGE_BAND_PRODIGY      = { 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35 };
-const AGE_BAND_GENERATIONAL = { 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88 };
+const AGE_BAND_TYPICAL      = { 11:13, 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35, 19:36, 20:37 };
+const AGE_BAND_PRODIGY      = { 11:17, 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35, 19:36, 20:37 };
+const AGE_BAND_GENERATIONAL = { 11:22, 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88, 19:90, 20:92 };
 function bandCeiling(age, tier){
   const table = tier==='generational' ? AGE_BAND_GENERATIONAL : tier==='prodigy' ? AGE_BAND_PRODIGY : AGE_BAND_TYPICAL;
-  return table[clamp(age, 12, 18)];
+  return table[clamp(age, 11, 20)];
 }
+function rollTalentTier(rawAvg01){
+  const generationalChance = 0.005 + rawAvg01 * 0.02;
+  const prodigyChance = 0.08 + rawAvg01 * 0.28;
+  const r = Math.random();
+  if(r < generationalChance) return 'generational';
+  if(r < generationalChance + prodigyChance) return 'prodigy';
+  return 'normal';
+}
+function compressStat(rawValue, age, tier){
+  const ceiling = bandCeiling(age, tier);
+  const pct = clamp(rawValue, 1, 99) / 99;
+  return clamp(Math.round(1 + pct * (ceiling - 1)), 1, ceiling);
+}
+
+/* ============================ SETTLEMENTS_SHORT & finalizeOpponent (ported from Fight Pit) ============================ */
+const SETTLEMENTS_SHORT = {
+  alexandretta: ['Williamsburg','St. Anne','Nattingham','Wolverbridge','Blackford','Port Oxford','Blackchapel','Mosshead','Whitechapel','Cowborough','Munchen'],
+  kolsati: ['Kolsati','St. Johnson','Iron Wharf','Dunmore','Pell\'s Crossing','Marrow Hill','Castellan Heights','Briggston','Lincoln','Richmond','Cutter\'s End','Wickson','Venice','Dorado','Coco Ridge','North Bender','Slate Row'],
+  sherwood: ['Frontenac City','Kahuna','Millbrook Heights','Caldwell Junction','Petsworth','Harrow\'s Bend','Oak Siding','North Lawrenceville','Greeley Flats','Lawrenceville','Brakken','Devil\'s Point','Starsanne','Cambridge','Thistledown','Shorneville','Dennapolis','Sheffield'],
+  gazon: ['Gazon Main','Northern Gazon','Cangate','Gazon South'],
+  ditiero: ['Di Tiero','Alibar','Marsh Landing','Bayou Verte','Port Maray','South Bender','Saint Roque','Cane Hollow','Bellechasse','Lantern Cay','Buradam','Driftwood Key','Bantha','Suli\' Ba','Crayfish Bend','Bakii'],
+  carpathia: ['Bukovene','Corsuva','Ravenshade','Sorrow\'s Pass','Greywatch','Bargo Pass','Drovna','Hollowmere','Castle Reach','Kessel Vorn','Vyrholm','White Sands','Mikini','South Port','Ludus','Pice','Balchik','Thornfall','Purovest','Wraithwood','Varna','Slanik'],
+  northeast: ['Santorino','Ineawood','Mizukoshi','Renkawa','Hoshimura','Kanesato','Tsubaki Bay','Sodegaura','Yorimasa','Takamine','Fubuki','Barsastro','Usuzumi','Iwagakure'],
+  bay: ['Charleston','Iron City','Pinecrest Hollow','Bayport','Maple Junction','Briarwood','Dell\'s Corner','Hickory Bend','Sunfish Cove','Treasure Beach','Acorn Flats','Quail Hollow'],
+};
+
+function finalizeOpponent(stats, avgOvrForFlavor, weightClass, pitProvince){
+  const weightLb = weightClass === 'Light' ? rand(80,98) : weightClass === 'Middle' ? rand(99,117) : rand(118,135);
+  const heightIn = rand(56,66);
+  const settlements = SETTLEMENTS_SHORT[pitProvince.id] || ['a nearby town'];
+  const hometown = pick(settlements);
+  const recWins = clamp(Math.round(avgOvrForFlavor / 5) + rand(-1,1), 0, 9);
+  const recLosses = clamp(rand(0,4), 0, 9);
+  return {
+    id: 'rival_' + Date.now() + '_' + rand(0,9999),
+    name: pickName(pitProvince.id, hometown),
+    primaryDisc: pickWeightedDiscipline(pitProvince),
+    stats, weightLb, heightIn,
+    hometown,
+    record: { wins: recWins, losses: recLosses },
+    appearance: { skin: pick(SKIN_TONES), hair: pick(HAIR_COLORS), build: pick(['lean','athletic','stocky']) },
+  };
+}
+/* ============================ GAME CLOCK ============================ */
+/*
+  One shared, island-wide clock (localStorage, not per-fighter) so "today" and the
+  Juvenile background simulation stay consistent across every file that reads it
+  (this file, the newspaper in Free Roam, etc). Day 1 = Monday, March 3, 1958 — chosen
+  to match Free Roam's existing flavor epoch so both calendars agree.
+*/
+const CLOCK_KEY = 'iifl_clock_v1';
+const GAME_EPOCH = new Date(1958, 2, 3); // Monday, March 3 1958 = Day 1
+const WEEKDAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const JUVENILE_SEASON_WEEKS = 16;
+const JUVENILE_SEASON_START_DAY = 1;
+const JUVENILE_SEASON_END_DAY = JUVENILE_SEASON_START_DAY + JUVENILE_SEASON_WEEKS*7 - 1;
+
+function loadClock(){
+  try{ const raw = localStorage.getItem(CLOCK_KEY); return raw ? JSON.parse(raw) : { day: 1 }; }
+  catch(err){ return { day: 1 }; }
+}
+function saveClock(c){ try{ localStorage.setItem(CLOCK_KEY, JSON.stringify(c)); }catch(err){} }
+function getCurrentDay(){ return loadClock().day; }
+function advanceClockByDays(n){ const c = loadClock(); c.day = Math.max(1, c.day + n); saveClock(c); return c.day; }
+function dateForDay(day){ const d = new Date(GAME_EPOCH); d.setDate(d.getDate() + (day-1)); return d; }
+function formatCalendarDate(day){ return dateForDay(day).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); }
+function formatCalendarDateShort(day){ return dateForDay(day).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }); }
+function weekdayNameForDay(day){ return WEEKDAY_NAMES[((day-1)%7+7)%7]; }
+function eventNameForDay(day){
+  const w = weekdayNameForDay(day);
+  if(w==='Monday') return 'Juvenile League Fight Night';
+  if(w==='Tuesday') return 'Juvenile Local Tournament';
+  if(w==='Wednesday') return 'Juvenile Fiesta Fights';
+  if(w==='Thursday') return 'Junior League Night';
+  if(w==='Friday') return 'Amateur Fight Night';
+  if(w==='Saturday') return 'Pro League Night';
+  return 'Off Night — no scheduled cards';
+}
+
+/* ============================ FIELD FIGHTER POOL (persistent Amateur registry) ============================ */
+/*
+  Instead of inventing a brand-new stranger every fight, both Amateur AND Juvenile
+  competition draw from a real, persistent pool of registered fighters per province —
+  generated once, then remembered. Records update as the player fights them, so
+  "who's out there" is an actual answerable question instead of a random generator.
+
+  Pool sizes aren't arbitrary — they're reverse-engineered from the Pro draft math:
+  16 teams × 10 men's roster spots, ~20% annual churn (32 vacancies), a 3-round/48-pick
+  draft wants a 60-100-deep pool of draft-eligible 18/19yos, which (using the existing
+  Novice/Developing/Contender/Elite split as the "draft-caliber" filter at ~33%) implies
+  needing ~240 active 18yo fighters, which (assuming ~30% retention from age 12 given
+  dropout/injury/never-good-enough over 6 years) implies ~800 registered 12-year-olds
+  entering the Juvenile ranks island-wide per year. That 800 is distributed by each
+  province's actual population (from the settlement data), with light flavor bumps —
+  Kolsati/Sherwood up (GDD: "lots of fighting opportunities"), Gazon down ("underdeveloped"),
+  Carpathia down for cultural isolation despite decent raw population. The browsable
+  standing pool below is a representative, UI-practical sample sized proportionally —
+  not the literal 800, which would be unusable as a list.
+*/
+const FIELD_KEY = 'iifl_field_fighters_v2';
+const AMATEUR_POOL_COMPOSITION = { Novice:8, Developing:8, Contender:5, Elite:3 }; // 24 per province
+
+// Standing Juvenile pool size per province (ages 11-18), population-weighted.
+// Bumped up from the original sample size now that this pool is a real, persistent,
+// simulated cast (newspaper + opponents) rather than a one-off flavor list — plus new
+// 11-year-olds keep entering every simulated Monday as the season goes (see intake below).
+const JUVENILE_POOL_SIZES = {
+  kolsati:140, sherwood:88, ditiero:80, northeast:48,
+  alexandretta:45, carpathia:43, bay:43, gazon:30,
+};
+// Relative share of each juvenile age in a standing population with realistic dropout —
+// younger cohorts are always more numerous than older ones since attrition is cumulative.
+// Ages 14-17 are also the Junior League draft window (14th birth-year earliest, 17 latest);
+// 18-year-olds who never got drafted age out of Juvenile entirely into the Amateur ranks.
+const JUVENILE_AGE_WEIGHTS = { 11:0.20, 12:0.19, 13:0.16, 14:0.13, 15:0.11, 16:0.09, 17:0.07, 18:0.05 };
+
+function loadFieldPools(){
+  try{
+    const raw = localStorage.getItem(FIELD_KEY);
+    return raw ? JSON.parse(raw) : { amateur:{}, juvenile:{} };
+  }catch(err){ console.error('IIFL field pool load failed:', err); return { amateur:{}, juvenile:{} }; }
+}
+function saveFieldPools(pools){
+  try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
+  catch(err){ console.error('IIFL field pool save failed:', err); return false; }
+}
+
+function generateAmateurFieldFighter(division, weightClass, province, leagueId){
+  const range = AMATEUR_DIVISIONS[division];
+  const targetOVR = rand(range[0], range[1]);
+  const stats = {};
+  ['speed','quickness','toughness','power','agility'].forEach(k=>{
+    stats[k] = clamp(targetOVR + rand(-4,4), 1, 35);
+  });
+  const opp = finalizeOpponent(stats, targetOVR, weightClass, province);
+  opp.division = division;
+  opp.weightClass = weightClass;
+  opp.provinceId = province.id;
+  opp.leagueId = leagueId;
+  // Amateur is the 18+ adult money league — Junior League (not Amateur) is what drafts
+  // out of the 14-17 Juvenile window now. Amateur rosters are grown men: some are Junior
+  // grads who took the Amateur payday instead of staying in the dev pipeline, most are
+  // 18-year-olds who aged out of Juvenile undrafted and never made it to Pro or Junior.
+  // Skews toward the younger end of "adult" since career length here is short and rough.
+  opp.age = Math.random() < 0.6 ? rand(18,21) : rand(22,30);
+  return opp;
+}
+
+function generateJuvenileFieldFighter(weightClass, province){
+  const age = parseInt(weightedPick(JUVENILE_AGE_WEIGHTS), 10);
+  const tier = rollTalentTier(0.46);
+  const rawCenter = rand(10,90);
+  const stats = {};
+  ['speed','quickness','toughness','power','agility'].forEach(k=>{
+    const raw = clamp(rawCenter + rand(-15,15), 1, 99);
+    stats[k] = compressStat(raw, age, tier);
+  });
+  const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
+  const opp = finalizeOpponent(stats, avgOvr, weightClass, province);
+  opp.age = age;
+  opp.talentTier = tier;
+  opp.weightClass = weightClass;
+  opp.provinceId = province.id;
+  return opp;
+}
+
+function ensureAmateurFieldPoolForLeague(leagueId){
+  const pools = loadFieldPools();
+  if(!pools.amateur) pools.amateur = {};
+  if(pools.amateur[leagueId] && pools.amateur[leagueId].length) return pools;
+  const league = getLeague(leagueId);
+  if(!league) return pools;
+  const province = PROVINCES.find(p=>p.id===league.provinceId);
+  const weightClasses = ['Light','Middle','Heavy'];
+  const pool = [];
+  const composition = league.atRisk
+    ? { Novice:4, Developing:3, Contender:2, Elite:1 } // small at-risk leagues have thinner pools
+    : (LEAGUE_STRENGTH_COMPOSITION[league.strength] || AMATEUR_POOL_COMPOSITION);
+  Object.entries(composition).forEach(([division, count])=>{
+    for(let i=0;i<count;i++){
+      pool.push(generateAmateurFieldFighter(division, pick(weightClasses), province, leagueId));
+    }
+  });
+  pools.amateur[leagueId] = pool;
+  saveFieldPools(pools);
+  return pools;
+}
+
+function seedJuvenilePoolInPlace(pools, provinceId){
+  if(!pools.juvenile) pools.juvenile = {};
+  if(pools.juvenile[provinceId] && pools.juvenile[provinceId].length) return;
+  const province = PROVINCES.find(p=>p.id===provinceId);
+  if(!province) return;
+  const weightClasses = ['Light','Middle','Heavy'];
+  const size = JUVENILE_POOL_SIZES[provinceId] || 25;
+  const pool = [];
+  for(let i=0;i<size;i++){
+    const f = generateJuvenileFieldFighter(pick(weightClasses), province);
+    f.entryDay = JUVENILE_SEASON_START_DAY;
+    pool.push(f);
+  }
+  pools.juvenile[provinceId] = pool;
+}
+
+function ensureJuvenileFieldPoolForProvince(provinceId){
+  const pools = loadFieldPools();
+  seedJuvenilePoolInPlace(pools, provinceId);
+  saveFieldPools(pools);
+  return pools;
+}
+
+function getFieldFighterById(id){
+  const pools = loadFieldPools();
+  for(const key of Object.keys(pools.amateur || {})){
+    const f = pools.amateur[key].find(x=>x.id===id);
+    if(f) return f;
+  }
+  for(const key of Object.keys(pools.juvenile || {})){
+    const f = pools.juvenile[key].find(x=>x.id===id);
+    if(f) return f;
+  }
+  return null;
+}
+
+// A hard cutoff (e.g. "only trust this filter if it has >=3 matches") can still
+// permanently lock a division's weight-matched subset in if that subset happens to sit
+// right at the threshold. Instead: probabilistically prefer weight-matched fighters, but
+// always leave a real, non-vanishing chance of drawing anyone else in the bucket too —
+// this guarantees full eventual coverage of the pool with no one permanently excluded.
+function weightedFighterDraw(pool, division, weightClass){
+  const divisionPool = pool.filter(f=> f.division===division);
+  const narrowPool = divisionPool.filter(f=> f.weightClass===weightClass);
+  const useNarrow = narrowPool.length > 0 && Math.random() < 0.55;
+  const candidates = useNarrow ? narrowPool : (divisionPool.length ? divisionPool : pool);
+  return pick(candidates);
+}
+
+function drawFromFieldPool(leagueId, weightClass, divisionWeights){
+  const pools = ensureAmateurFieldPoolForLeague(leagueId);
+  const pool = pools.amateur[leagueId] || [];
+  const division = weightedPick(divisionWeights);
+  return weightedFighterDraw(pool, division, weightClass);
+}
+
+function drawFromCombinedFieldPools(weightClass, divisionWeights){
+  // National tournament stage pulls from the whole island, not just one league or province.
+  activeLeagues().forEach(l=> ensureAmateurFieldPoolForLeague(l.id));
+  const pools = loadFieldPools();
+  const division = weightedPick(divisionWeights);
+  let combined = [];
+  Object.values(pools.amateur).forEach(list=>{ combined = combined.concat(list); });
+  return weightedFighterDraw(combined, division, weightClass);
+}
+
+function drawFromProvinceLeaguePools(provinceId, weightClass, divisionWeights){
+  // Province stage: pooled "city champions" from every league within the same province.
+  const leagues = leaguesInProvince(provinceId).filter(l=> isLeagueActive(l.id));
+  if(!leagues.length) return drawFromCombinedFieldPools(weightClass, divisionWeights);
+  leagues.forEach(l=> ensureAmateurFieldPoolForLeague(l.id));
+  const pools = loadFieldPools();
+  const division = weightedPick(divisionWeights);
+  let combined = [];
+  leagues.forEach(l=>{ combined = combined.concat(pools.amateur[l.id] || []); });
+  if(!combined.length) return drawFromCombinedFieldPools(weightClass, divisionWeights);
+  return weightedFighterDraw(combined, division, weightClass);
+}
+
+function drawJuvenileFromFieldPool(provinceId, weightClass, playerAge){
+  const pools = ensureJuvenileFieldPoolForProvince(provinceId);
+  const pool = pools.juvenile[provinceId];
+  const closeAge = pool.filter(f=> Math.abs(f.age-playerAge)<=1);
+  const narrowPool = closeAge.filter(f=> f.weightClass===weightClass);
+  const useNarrow = narrowPool.length > 0 && Math.random() < 0.55;
+  const candidates = useNarrow ? narrowPool : (closeAge.length ? closeAge : pool);
+  return pick(candidates);
+}
+
+function updateFieldFighterRecord(fighterId, poolKey, won, isJuvenile){
+  const pools = loadFieldPools();
+  const bucket = isJuvenile ? pools.juvenile : pools.amateur;
+  const pool = bucket ? bucket[poolKey] : null;
+  if(!pool) return;
+  const f = pool.find(x=>x.id===fighterId);
+  if(!f) return;
+  if(won) f.record.wins += 1; else f.record.losses += 1;
+  saveFieldPools(pools);
+}
+
+/* ============================ JUVENILE LEAGUE SIMULATION ============================ */
+/*
+  Background sim for every "other" Juvenile fighter in the standing pool — the exact same
+  pool the player draws opponents from and that Free Roam's newspaper reports on. Runs on
+  the real Mon/Tue/Wed cadence off the shared game clock: Monday = League Fight Night
+  (paired bouts within a settlement), Tuesday = Local Tournament (single-elim within a
+  settlement, 8 or 16 deep), Wednesday = Fiesta Fights (wider, sometimes cross-province,
+  matchups). Records and stats accumulate for real as days pass, and new 11-year-olds
+  keep entering most Mondays — this is what makes "who's out there" and what the paper
+  prints an actual, consistent, growing cast instead of invented-per-render flavor.
+*/
+
+function quickSimBout(fA, fB){
+  const ovrA = calcOVR(fA.stats), ovrB = calcOVR(fB.stats);
+  const effA = ovrA + matchupBonus(fA.primaryDisc, fB.primaryDisc);
+  const effB = ovrB + matchupBonus(fB.primaryDisc, fA.primaryDisc);
+  const winnerIsA = Math.random() < winProbability(effA, effB);
+  return { winner: winnerIsA ? fA : fB, loser: winnerIsA ? fB : fA };
+}
+
+function applyNpcGrowthTick(f){
+  if(!f || !f.age || !f.stats) return;
+  const ceiling = bandCeiling(f.age, f.talentTier||'normal');
+  const statKeys = ['speed','quickness','toughness','power','agility'];
+  const key = pick(statKeys);
+  if(f.stats[key] < ceiling && Math.random() < 0.5){
+    f.stats[key] = clamp(f.stats[key]+1, 1, ceiling);
+  }
+}
+
+function groupFightersBySettlement(list){
+  const map = {};
+  list.forEach(f=>{ const k = f.hometown || 'unknown'; (map[k] = map[k]||[]).push(f); });
+  return map;
+}
+
+function runJuvenileLeagueNight(pools, provinceId){
+  const pool = pools.juvenile[provinceId];
+  if(!pool || pool.length < 2) return;
+  Object.values(groupFightersBySettlement(pool)).forEach(group=>{
+    // Not everybody fights every week — roughly 40% of a settlement's roster is on any
+    // given week's card, paired off within it.
+    const participants = group.filter(()=> Math.random() < 0.4);
+    for(let i=0;i+1<participants.length;i+=2){
+      const { winner, loser } = quickSimBout(participants[i], participants[i+1]);
+      winner.record.wins += 1; loser.record.losses += 1;
+      applyNpcGrowthTick(winner);
+      if(Math.random() < 0.5) applyNpcGrowthTick(loser);
+    }
+  });
+}
+
+function runJuvenileTournamentDay(pools, provinceId){
+  const pool = pools.juvenile[provinceId];
+  if(!pool || pool.length < 8) return;
+  Object.values(groupFightersBySettlement(pool)).forEach(group=>{
+    if(group.length < 8) return;
+    const size = group.length >= 16 ? 16 : 8;
+    let field = [...group].sort(()=>Math.random()-0.5).slice(0, size);
+    while(field.length > 1){
+      const nextRound = [];
+      for(let i=0;i+1<field.length;i+=2){
+        const { winner, loser } = quickSimBout(field[i], field[i+1]);
+        winner.record.wins += 1; loser.record.losses += 1;
+        nextRound.push(winner);
+      }
+      field = nextRound;
+    }
+    if(field[0]){ applyNpcGrowthTick(field[0]); applyNpcGrowthTick(field[0]); } // tournament win = an extra growth tick
+  });
+}
+
+function runJuvenileFiestaDay(pools, provinceId){
+  const pool = pools.juvenile[provinceId];
+  if(!pool || pool.length < 2) return;
+  const participants = [...pool].sort(()=>Math.random()-0.5).filter(()=> Math.random() < 0.3);
+  for(let i=0;i<participants.length;i++){
+    const fA = participants[i];
+    let fB = null;
+    // sometimes fiesta night draws a visiting fighter from another province
+    if(Math.random() < 0.25){
+      const otherIds = Object.keys(pools.juvenile).filter(id=> id!==provinceId && pools.juvenile[id].length);
+      if(otherIds.length) fB = pick(pools.juvenile[pick(otherIds)]);
+    }
+    if(!fB){
+      i += 1;
+      fB = participants[i];
+    }
+    if(!fB || fB.id === fA.id) continue;
+    const { winner, loser } = quickSimBout(fA, fB);
+    winner.record.wins += 1; loser.record.losses += 1;
+    applyNpcGrowthTick(winner);
+  }
+}
+
+// Roughly population-scaled chance of 1-2 new 11-year-olds registering on a given Monday.
+const JUVENILE_INTAKE_CHANCE = {
+  kolsati:0.9, sherwood:0.7, ditiero:0.65, northeast:0.55,
+  alexandretta:0.5, carpathia:0.45, bay:0.45, gazon:0.35,
+};
+function runJuvenileIntake(pools, provinceId, day){
+  const chance = JUVENILE_INTAKE_CHANCE[provinceId] || 0.5;
+  if(Math.random() > chance) return;
+  const province = PROVINCES.find(p=>p.id===provinceId);
+  if(!province) return;
+  const weightClasses = ['Light','Middle','Heavy'];
+  const count = rand(1,2);
+  for(let i=0;i<count;i++){
+    const tier = rollTalentTier(0.46);
+    const age = 11;
+    const rawCenter = rand(10,90);
+    const stats = {};
+    ['speed','quickness','toughness','power','agility'].forEach(k=>{
+      const raw = clamp(rawCenter + rand(-15,15), 1, 99);
+      stats[k] = compressStat(raw, age, tier);
+    });
+    const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
+    const weightClass = pick(weightClasses);
+    const f = finalizeOpponent(stats, avgOvr, weightClass, province);
+    f.age = age;
+    f.talentTier = tier;
+    f.weightClass = weightClass;
+    f.provinceId = province.id;
+    f.record = { wins:0, losses:0 }; // brand new — no starting flavor record
+    f.entryDay = day;
+    pools.juvenile[provinceId].push(f);
+  }
+}
+
+function catchUpJuvenileSimulation(){
+  const pools = loadFieldPools();
+  if(!pools.juvenile) pools.juvenile = {};
+  PROVINCES.forEach(p=> seedJuvenilePoolInPlace(pools, p.id));
+  const today = getCurrentDay();
+  const lastSim = pools.juvenileLastSimDay || 0;
+  if(lastSim >= today){ saveFieldPools(pools); return pools; }
+  const MAX_CATCHUP_DAYS = 500; // safety cap so a long-idle save can't spin forever
+  const startDay = Math.max(lastSim+1, today-MAX_CATCHUP_DAYS+1);
+  for(let d=startDay; d<=today; d++){
+    const weekday = weekdayNameForDay(d);
+    PROVINCES.forEach(p=>{
+      if(weekday==='Monday'){ runJuvenileLeagueNight(pools, p.id); runJuvenileIntake(pools, p.id, d); }
+      else if(weekday==='Tuesday'){ runJuvenileTournamentDay(pools, p.id); }
+      else if(weekday==='Wednesday'){ runJuvenileFiestaDay(pools, p.id); }
+    });
+  }
+  pools.juvenileLastSimDay = today;
+  saveFieldPools(pools);
+  return pools;
+}
+
 // Same earned-growth pattern as the rest of the game: win, finish, and beating someone
 // tougher than you are the levers. Returns which stats actually changed for display.
 // Applies a one-fight-only stat boost from the potion event, without permanently
@@ -904,6 +1407,7 @@ const state = {
   isBlackMarket: false,
   randomEventPending: null, // event type awaiting resolution on the current screen
   standingsTier: 'pro',
+  newspaperProvinceId: null, // which province's paper is currently open; null = player's own
 };
 
 const PERIODS = ['Morning','Afternoon','Night'];
@@ -983,6 +1487,7 @@ function render(){
   else if(state.screen==='loc-npc'){ body = renderLocNpc(); title='STREET TALK'; }
   else if(state.screen==='loc-minigames'){ body = renderLocMinigames(); title='???'; }
   else if(state.screen==='random-event'){ body = renderRandomEvent(); title='ON THE STREET'; }
+  else if(state.screen==='newspaper-picker'){ body = renderNewspaperPicker(); title='NEWSSTAND'; sub='PICK A PAPER'; }
   else if(state.screen==='newspaper'){ body = renderNewspaper(); title=''; sub=''; }
   else if(state.screen==='black-market'){ body = renderBlackMarket(); title='BLACK MARKET'; }
   else if(state.screen==='league-standings'){ body = renderLeagueStandings(); title='STANDINGS'; }
@@ -1016,7 +1521,7 @@ function renderSelect(){
       <div class="fighter-row" style="--fr-color:${prov?prov.color:'#C9A23C'}">
         <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
         <div style="flex:1;">
-          <div class="fr-name">${f.name}</div>
+          <div class="fr-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
           <div class="fr-meta">Age ${f.age} · ${DISCIPLINE_NAMES[f.primaryDisc]||''} · ${f.settlement||''} · $${f.wallet}</div>
         </div>
         <div class="fr-status">${status}</div>
@@ -1067,6 +1572,7 @@ function renderCityWalk(){
     </div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
       <span class="wallet-badge">$${f.wallet}</span>
+      <span class="clickable-name" data-open-fighter="${f.id}" style="font-family:var(--label); font-size:11px; text-transform:uppercase; letter-spacing:1px;">${f.name} — Fighter Card</span>
       <span class="wallet-badge" style="color:var(--bone-dim);">Fame: ${f.fame}</span>
     </div>
     <div class="block-grid" style="--gcols:${grid.size};">${cellsHtml.join('')}</div>
@@ -1179,9 +1685,200 @@ function ensureLeagueStandings(day){
   return data;
 }
 
-/* ============================ NEWSPAPER ============================ */
+/* ============================ FIGHTER CARD MODAL ============================ */
+/*
+  Same modal as Fight Pit / Character Creator / Fight Engine — opens for the player's
+  own fighter (from the shared roster) OR any "other" fighter from the Juvenile
+  registry (newspaper leaders, new faces, etc). Ported here because Free Roam didn't
+  have a Fighter Card at all before this session.
+*/
+const TIERS = ['All','Juvenile','Amateur','Semi-Pro','Pro','Exhibition'];
+let modalFighterId = null;
+let modalActiveTier = 'All';
+function openFighterCard(id){ modalFighterId = id; modalActiveTier = 'All'; renderModal(); }
+function closeFighterCard(){ modalFighterId = null; renderModal(); }
 
-const NEWSPAPER_NAMES = ['Herald','Gazette','Times','Tribune','Chronicle','Bulletin','Courier','Ledger'];
+const COMMENTATOR_NAMES = ['Duke Callahan', 'Jamie Voss', 'Lena Marsh'];
+const DISCIPLINE_TAKES = {
+  boxer: ["Clean hands, doesn't waste motion.", "That jab could carry a whole career.", "Old-school boxing IQ for someone this age."],
+  brawler: ["Pure chaos in there — hard to game-plan for.", "Wild, but wild works when it lands.", "No fear whatsoever. Might be a problem down the road, might be the whole appeal."],
+  wrestler: ["Relentless on the mat. Wears people down.", "Control game is already ahead of schedule.", "Grinds you into dust, round after round."],
+  sambo: ["Throws for days — that's a Carpathian style if I've ever seen one.", "Underrated skill set. People sleep on Sambo until it's too late.", "Sneaky finishes. Blink and it's over."],
+  mma: ["Complete game, no real holes yet.", "Doesn't have one bad matchup on paper.", "The kind of fighter that makes booking a card difficult — nobody wants that smoke."],
+  karate: ["Point-fighter speed with real pop on it.", "In and out before you know what hit you.", "That karate background shows up in the footwork."],
+  judo: ["One bad grip and it's over for the other guy.", "Throws with real bad intentions.", "Judo background is criminally underused on this island — this one could change that."],
+  catch: ["Sneaky mat game, comes out of nowhere.", "Old carny tricks — and I mean that as a compliment.", "Scrambles are where this one lives and dies."],
+};
+function generateCommentatorTakes(f){
+  const names = [...COMMENTATOR_NAMES];
+  for(let i=names.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [names[i],names[j]]=[names[j],names[i]]; }
+  const statEntries = Object.entries(f.stats);
+  statEntries.sort((a,b)=> b[1]-a[1]);
+  const bottomStat = statEntries[statEntries.length-1][0];
+  const takes = [];
+  takes.push({ name: names[0], quote: pick(DISCIPLINE_TAKES[f.primaryDisc] || DISCIPLINE_TAKES.mma) });
+  let potentialLine;
+  if(f.talentTier === 'generational') potentialLine = "This isn't hype — once-a-generation type talent. Circle this name.";
+  else if(f.talentTier === 'prodigy') potentialLine = "Ahead of schedule for the age. Worth keeping an eye on.";
+  else if(f.potential !== undefined && f.potential >= 70) potentialLine = "Real ceiling here if the work gets put in.";
+  else if(f.potential !== undefined && f.potential <= 30) potentialLine = "What you see now might be close to what you get — but plenty of careers get built on exactly that.";
+  else potentialLine = "Solid, unspectacular — the kind of fighter leagues are actually built on.";
+  takes.push({ name: names[1], quote: potentialLine });
+  takes.push({ name: names[2], quote: `Needs to tighten up the ${bottomStat} before somebody tougher finds it.` });
+  return takes;
+}
+
+const MATURITY_PCT_BY_AGE = { 11:0.74, 12:0.79, 13:0.84, 14:0.89, 15:0.93, 16:0.96, 17:0.98, 18:1.0 };
+function projectAdultSize(heightIn, weightLb, age, build){
+  const pct = MATURITY_PCT_BY_AGE[clamp(age||18, 11, 18)] || 1.0;
+  const buildMult = { lean:0.92, athletic:1.0, stocky:1.12 }[build] || 1.0;
+  return {
+    adultHeightIn: Math.round((heightIn||64) / pct),
+    adultWeightLb: Math.round(((weightLb||120) / pct) * buildMult),
+    isGrown: pct >= 1.0,
+  };
+}
+function growthOutlook(f){
+  const isAmateurTier = !!f.amateurLeagueId || !f.juvenileHomeProvinceId;
+  const ceiling = isAmateurTier ? bandCeiling(18, f.talentTier||'normal') : bandCeiling(f.age||11, f.talentTier||'normal');
+  const avgStat = (f.stats.speed+f.stats.quickness+f.stats.toughness+f.stats.power+f.stats.agility)/5;
+  const pctOfCeiling = clamp(avgStat/ceiling*100, 0, 100);
+  let outlook;
+  if(pctOfCeiling >= 90) outlook = 'Close to maxed out for where they are right now — future growth mostly comes from aging up.';
+  else if(pctOfCeiling >= 60) outlook = 'Solid development so far, real room left to keep climbing.';
+  else if(pctOfCeiling >= 30) outlook = 'Early in the development curve — plenty of runway left.';
+  else outlook = 'Very raw. Most of the growth curve is still ahead.';
+  return { ceiling, avgStat, pctOfCeiling, outlook };
+}
+
+function renderModal(){
+  const root = document.getElementById('modal-root');
+  if(!modalFighterId){ root.innerHTML = ''; return; }
+
+  const roster = getRoster();
+  let f = roster.find(r=> r.id === modalFighterId);
+  let isEphemeral = false;
+  if(!f){
+    const fieldFighter = getFieldFighterById(modalFighterId);
+    if(fieldFighter){ f = fieldFighter; isEphemeral = true; }
+  }
+  if(!f){ root.innerHTML = ''; return; }
+
+  const prov = PROVINCES.find(p=>p.id===f.provinceId);
+  const rec = f.record || { wins:0, losses:0 };
+
+  const commentaryHtml = f.stats ? generateCommentatorTakes(f).map(t=>`
+    <div class="mf-quote"><span class="mf-quote-name">${t.name}:</span> "${t.quote}"</div>
+  `).join('') : '';
+
+  let growthHtml = '';
+  if(f.stats){
+    const growth = growthOutlook(f);
+    const doc = projectAdultSize(f.heightIn, f.weightLb, f.age, f.appearance ? f.appearance.build : 'athletic');
+    growthHtml = `
+      <div class="mf-section-title">Growth Outlook</div>
+      <div class="mf-growth-bar"><div class="mf-growth-fill" style="width:${growth.pctOfCeiling}%"></div></div>
+      <p class="mf-growth-text">${Math.round(growth.pctOfCeiling)}% of current ceiling reached. ${growth.outlook}</p>
+      <div class="mf-section-title">Doctor's Review</div>
+      <p class="mf-growth-text">${doc.isGrown
+        ? `Fully grown — current size is expected to hold.`
+        : `Early projection, subject to change: expected adult height ~${heightLabel(doc.adultHeightIn)}, weight ~${doc.adultWeightLb} lb.`}</p>
+    `;
+  }
+
+  let bodyExtra;
+  if(isEphemeral && f.age && f.provinceId){
+    const prov2 = PROVINCES.find(p=>p.id===f.provinceId);
+    bodyExtra = `<div class="mf-empty">Registered Juvenile fighter, age ${f.age}${prov2?' — '+prov2.name:''}. Record updates as the background season plays out; detailed round-by-round history isn't tracked for field fighters yet.</div>`;
+  } else if(isEphemeral){
+    bodyExtra = `<div class="mf-empty">Procedural fighter — no persistent career record kept.</div>`;
+  } else {
+    const log = f.fightLog || [];
+    const filtered = modalActiveTier === 'All' ? log : log.filter(e=> e.tier === modalActiveTier);
+    const sorted = [...filtered].sort((a,b)=> new Date(b.date) - new Date(a.date));
+    const historyHtml = sorted.length ? sorted.map(e=>{
+      const dateStr = e.date ? new Date(e.date).toLocaleDateString() : '—';
+      return `
+        <div class="mf-history-row">
+          <div class="mfh-date">${dateStr}</div>
+          <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
+          <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
+        </div>
+      `;
+    }).join('') : `<div class="mf-empty">No fights on record${modalActiveTier==='All'?'':' at this level'} yet.</div>`;
+    const tabsHtml = TIERS.map(t=>{
+      const count = t==='All' ? log.length : log.filter(e=>e.tier===t).length;
+      return `<button class="mf-tier-tab ${modalActiveTier===t?'active':''}" data-mf-tab="${t}">${t} (${count})</button>`;
+    }).join('');
+    bodyExtra = `<div class="mf-tier-tabs">${tabsHtml}</div><div class="mf-history">${historyHtml}</div>`;
+  }
+
+  root.innerHTML = `
+    <div class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div class="modal-title">Fighter Card</div>
+          <button class="modal-close" data-modal-close>✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="mf-head">
+            <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
+            <div>
+              <div class="mf-name">${f.name}</div>
+              <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${f.heightIn?heightLabel(f.heightIn):''}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement || f.hometown || ''}${prov?', '+prov.name:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
+              <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Career ${rec.wins}-${rec.losses}</div>
+            </div>
+          </div>
+          ${f.stats ? `
+          <div class="mf-stats-grid">
+            <div class="mf-stat"><div class="msv">${f.stats.speed}</div><div class="msl">SPD</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.quickness}</div><div class="msl">QCK</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.toughness}</div><div class="msl">TGH</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.power}</div><div class="msl">PWR</div></div>
+            <div class="mf-stat"><div class="msv">${f.stats.agility}</div><div class="msl">AGL</div></div>
+          </div>` : ''}
+          ${f.stats ? `<div class="mf-section-title">On the Broadcast</div><div class="mf-quotes">${commentaryHtml}</div>` : ''}
+          ${growthHtml}
+          ${bodyExtra}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+document.addEventListener('click', (e)=>{
+  const openEl = e.target.closest('[data-open-fighter]');
+  if(openEl){ openFighterCard(openEl.dataset.openFighter); return; }
+  const closeEl = e.target.closest('[data-modal-close]');
+  if(closeEl){ closeFighterCard(); return; }
+  const overlayEl = e.target.closest('.modal-overlay');
+  if(overlayEl && e.target === overlayEl){ closeFighterCard(); return; }
+  const tabEl = e.target.closest('[data-mf-tab]');
+  if(tabEl){ modalActiveTier = tabEl.dataset.mfTab; renderModal(); return; }
+});
+
+/* ============================ NEWSPAPER ============================ */
+/*
+  TESTING_MODE: while true, the newspaper stand lets you open ANY province's paper
+  (plus the Island Edition) regardless of where your fighter actually is. Flip this to
+  false once travel/visited-province tracking exists, so only papers for provinces
+  you've actually been to are selectable — right now the free-roam model doesn't track
+  inter-province travel yet, so "visited" would just mean "your fighter's home province."
+*/
+const TESTING_MODE = true;
+
+const PROVINCE_PAPER_NAMES = {
+  alexandretta: 'The Alexandretta Standard',
+  kolsati: 'The Kolsati Examiner',
+  sherwood: 'The Sherwood Crier',
+  gazon: 'The Gazon Sentinel',
+  ditiero: 'The Di Tiero Picayune',
+  carpathia: 'The Carpathia Watch',
+  northeast: 'The Northeast Shimbun',
+  bay: 'The Bay Clarion',
+};
+const ISLAND_PAPER_NAME = 'The Iron Island Ledger';
+
 const JR_TEAMS_BY_PROVINCE = {
   kolsati: ['Kolsati Ironclads','St. Johnson Wolves','Bakii Foundry','Briggston Vipers'],
   ditiero: ['Di Tiero Tideburners','South Bender Grinders','Bellechasse Wardens'],
@@ -1211,35 +1908,65 @@ const TRAINER_TIP_LINES = [
   'Nobody serious trains for free. Bring money, or bring wins — preferably both.',
   'The old-timers say the best trainers find you, not the other way around. Keep winning and see who shows up.',
 ];
-const NEW_PROSPECT_LINES = [
-  'Keep an eye on {name} — word is this kid is turning heads in the juvenile ranks already.',
-  '{name} just started fighting and people are already talking.',
-  'Heard good things about a new kid going by {name}. Time will tell.',
-];
 
-function generateTopFighterList(provinceId, settlementName, n){
+// Real, persistent Juvenile leaders — same registry the player draws opponents from.
+function topJuvenileFightersFor(provinceId, n){
+  catchUpJuvenileSimulation();
+  const pools = loadFieldPools();
+  let pool;
+  if(provinceId === 'island'){
+    pool = [];
+    Object.values(pools.juvenile || {}).forEach(list=> pool = pool.concat(list));
+  } else {
+    pool = pools.juvenile[provinceId] || [];
+  }
+  const sorted = [...pool].sort((a,b)=>
+    (b.record.wins - b.record.losses) - (a.record.wins - a.record.losses) || b.record.wins - a.record.wins
+  );
+  return sorted.slice(0, n);
+}
+
+// Real new intake — fighters who registered in roughly the last two weeks, not the
+// original season-opening seed pool.
+function newJuvenileFacesFor(provinceId, day, n){
+  const pools = loadFieldPools();
+  let pool;
+  if(provinceId === 'island'){
+    pool = [];
+    Object.values(pools.juvenile || {}).forEach(list=> pool = pool.concat(list));
+  } else {
+    pool = pools.juvenile[provinceId] || [];
+  }
+  const recent = pool.filter(f=> f.entryDay && f.entryDay !== JUVENILE_SEASON_START_DAY && f.entryDay >= day-13);
+  recent.sort((a,b)=> b.entryDay - a.entryDay);
+  return recent.slice(0, n);
+}
+
+// Still-random flavor lists for Amateur/Junior/Pro — those tiers aren't wired to a real,
+// persistent registry yet the way Juvenile now is (banked for a future session).
+function generateFlavorFighterList(provinceId, settlementName, n){
   const list = [];
   for(let i=0;i<n;i++){ list.push({ name: pickName(provinceId, settlementName), wins: rand(5,20), losses: rand(0,6) }); }
   list.sort((a,b)=> (b.wins-b.losses)-(a.wins-a.losses));
   return list;
 }
 
-function ensureNewspaper(provinceId, settlementName, day){
+function ensureNewspaper(provinceId, day){
   const s = loadRoamState();
   if(!s.newspapers) s.newspapers = {};
-  const key = provinceId+'|'+settlementName+'|'+day;
+  const key = provinceId+'|'+day;
   if(s.newspapers[key]) return s.newspapers[key];
+  const isIsland = provinceId === 'island';
+  const flavorSettlement = isIsland ? 'the capital' : pick(SETTLEMENTS_SHORT[provinceId] || [provinceId]);
   const paper = {
-    paperName: pick(NEWSPAPER_NAMES),
+    paperName: isIsland ? ISLAND_PAPER_NAME : (PROVINCE_PAPER_NAMES[provinceId] || 'The Local Herald'),
     proTeamBlurb: pick(PRO_TEAM_BLURBS),
-    jrTeams: JR_TEAMS_BY_PROVINCE[provinceId] || [],
-    topFighters: {
-      Juvenile: generateTopFighterList(provinceId, settlementName, 3),
-      Amateur: generateTopFighterList(provinceId, settlementName, 3),
-      Junior: generateTopFighterList(provinceId, settlementName, 3),
+    jrTeams: isIsland ? [] : (JR_TEAMS_BY_PROVINCE[provinceId] || []),
+    flavorTopFighters: {
+      Amateur: generateFlavorFighterList(isIsland?'bay':provinceId, flavorSettlement, 3),
+      Junior: generateFlavorFighterList(isIsland?'bay':provinceId, flavorSettlement, 3),
     },
     rumors: [pick(RUMOR_LINES), pick(RUMOR_LINES)],
-    newProspects: [0,1].map(()=> fillTpl(pick(NEW_PROSPECT_LINES), { name: pickName(provinceId, settlementName) })),
     trainerTip: pick(TRAINER_TIP_LINES),
   };
   s.newspapers[key] = paper;
@@ -1247,27 +1974,68 @@ function ensureNewspaper(provinceId, settlementName, day){
   return paper;
 }
 
+function renderNewspaperPicker(){
+  const cards = PROVINCES.map(p=>`
+    <div class="pit-card" data-open-paper="${p.id}" style="--pc-color:${p.color}">
+      <div class="pit-name">${PROVINCE_PAPER_NAMES[p.id]}</div>
+      <div class="pit-meta">${p.name}</div>
+    </div>
+  `).join('');
+  return `
+    <div class="section-label">Pick a Paper — Testing Mode</div>
+    <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:18px;">
+      Every province gets its own paper. Once travel/visited-province tracking is built, this picker
+      will only offer papers for places you've actually been — for now, testing mode opens all of them.
+    </p>
+    <div class="pit-grid">${cards}</div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-primary" data-open-paper="island">📰 Island Edition — ${ISLAND_PAPER_NAME}</button>
+      <span></span>
+    </div>
+    <div class="btn-row" style="margin-top:16px;"><button class="btn" id="close-newspaper">← Back</button><span></span></div>
+  `;
+}
+
 function renderNewspaper(){
-  const paper = ensureNewspaper(state.provinceId, state.settlementName, state.day);
-  const topHtml = Object.entries(paper.topFighters).map(([tier,list])=>`
+  const provinceId = state.newspaperProvinceId || state.provinceId;
+  const isIsland = provinceId === 'island';
+  const province = isIsland ? null : PROVINCES.find(p=>p.id===provinceId);
+  const day = getCurrentDay();
+  const paper = ensureNewspaper(provinceId, day);
+
+  const juvList = topJuvenileFightersFor(provinceId, 5);
+  const juvHtml = juvList.length ? `
+    <div class="np-list-fighters">${juvList.map((f,i)=>
+      `<div>${i+1}. <span class="clickable-name" data-open-fighter="${f.id}">${f.name}</span> (${f.record.wins}-${f.record.losses})${isIsland && f.provinceId ? ` <i>— ${PROVINCES.find(p=>p.id===f.provinceId)?.name||''}</i>` : ''}</div>`
+    ).join('')}</div>
+  ` : `<p>No Juvenile fighters registered here yet.</p>`;
+
+  const otherTopHtml = Object.entries(paper.flavorTopFighters).map(([tier,list])=>`
     <div style="margin-bottom:10px;"><b>${tier} Division Leaders</b><br>
     ${list.map(f=>`${f.name} (${f.wins}-${f.losses})`).join(' · ')}</div>
   `).join('');
 
+  const newFaces = newJuvenileFacesFor(provinceId, day, 3);
+  const newFacesHtml = newFaces.length ? newFaces.map(f=>
+    `<p style="margin-bottom:8px;">Just registered: <span class="clickable-name" data-open-fighter="${f.id}">${f.name}</span>, age ${f.age}${f.hometown?', out of '+f.hometown:''}. Time will tell.</p>`
+  ).join('') : `<p>No new faces on file this fortnight.</p>`;
+
   return `
-    <div class="newspaper">
+    <div class="newspaper" style="--np-accent:${isIsland?'#8E7228':province.color}">
+      <div class="np-edition-tag">${isIsland ? 'Island Edition · Every Province' : province.name}</div>
       <div class="np-masthead">
-        <div class="np-title">THE ${state.settlementName.toUpperCase()} ${paper.paperName.toUpperCase()}</div>
+        <div class="np-title">${paper.paperName.toUpperCase()}</div>
         <div class="np-subtitle">★ Fight Edition ★ All The News That's Fit To Print, Ring Style ★</div>
       </div>
-      <div class="np-dateline"><span>${formatGameDate(state.day)}</span><span>TWO CENTS</span></div>
+      <div class="np-dateline"><span>${formatCalendarDate(day)}</span><span>TWO CENTS</span></div>
 
+      ${!isIsland ? `
       <div class="np-section">
         <div class="np-headline">Pro Club Notes</div>
         <div class="np-byline">From Our Sports Desk</div>
-        <div class="np-body">${fillTpl(paper.proTeamBlurb, {city: state.settlementName})}</div>
+        <div class="np-body">${fillTpl(paper.proTeamBlurb, {city: province.name})}</div>
       </div>
-      <hr class="np-divider">
+      <hr class="np-divider">` : ''}
 
       ${paper.jrTeams.length ? `
       <div class="np-section">
@@ -1277,8 +2045,16 @@ function renderNewspaper(){
       <hr class="np-divider">` : ''}
 
       <div class="np-section">
-        <div class="np-headline">Around The Circuit</div>
-        <div class="np-body">${topHtml}</div>
+        <div class="np-headline">${isIsland ? 'Juvenile Leaders — Island Wide' : 'Around The Circuit'}</div>
+        <div class="np-byline">Real records, updated as of today</div>
+        <div class="np-body">${juvHtml}</div>
+      </div>
+      <hr class="np-divider">
+
+      <div class="np-section">
+        <div class="np-headline">Other Divisions</div>
+        <div class="np-byline">Amateur &amp; Junior — not yet tied to a live registry</div>
+        <div class="np-body">${otherTopHtml}</div>
       </div>
       <hr class="np-divider">
 
@@ -1290,7 +2066,7 @@ function renderNewspaper(){
 
       <div class="np-section">
         <div class="np-headline">New Faces</div>
-        <div class="np-body">${paper.newProspects.map(p=>`<p style="margin-bottom:8px;">${p}</p>`).join('')}</div>
+        <div class="np-body">${newFacesHtml}</div>
       </div>
       <hr class="np-divider">
 
@@ -1311,7 +2087,10 @@ function renderNewspaper(){
         </div>
       </div>
     </div>
-    <div class="btn-row" style="margin-top:16px;"><button class="btn btn-primary" id="close-newspaper">Fold It Up →</button></div>
+    <div class="btn-row" style="margin-top:16px;">
+      ${TESTING_MODE ? `<button class="btn" id="pick-another-paper">← Pick Another Paper</button>` : '<span></span>'}
+      <button class="btn btn-primary" id="close-newspaper">Fold It Up →</button>
+    </div>
   `;
 }
 
@@ -1686,9 +2465,18 @@ function wireEvents(){
   if(findAFight) findAFight.onclick = ()=>{ state.screen='choose-pit-to-fight'; render(); };
 
   const readNewspaper = document.getElementById('read-newspaper');
-  if(readNewspaper) readNewspaper.onclick = ()=>{ state.screen='newspaper'; render(); };
+  if(readNewspaper) readNewspaper.onclick = ()=>{
+    if(TESTING_MODE){ state.screen='newspaper-picker'; }
+    else { state.newspaperProvinceId = state.provinceId; state.screen='newspaper'; }
+    render();
+  };
   const closeNewspaper = document.getElementById('close-newspaper');
-  if(closeNewspaper) closeNewspaper.onclick = ()=>{ state.screen='city-walk'; render(); };
+  if(closeNewspaper) closeNewspaper.onclick = ()=>{ state.newspaperProvinceId = null; state.screen='city-walk'; render(); };
+  const pickAnotherPaper = document.getElementById('pick-another-paper');
+  if(pickAnotherPaper) pickAnotherPaper.onclick = ()=>{ state.newspaperProvinceId = null; state.screen='newspaper-picker'; render(); };
+  document.querySelectorAll('[data-open-paper]').forEach(btn=>{
+    btn.onclick = ()=>{ state.newspaperProvinceId = btn.dataset.openPaper; state.screen='newspaper'; render(); };
+  });
 
   document.querySelectorAll('[data-view-standings]').forEach(btn=>{
     btn.onclick = ()=>{ state.standingsTier = btn.dataset.viewStandings; state.screen='league-standings'; render(); };
@@ -1873,6 +2661,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V5 · 2026-07-11</div>
+<div class="version-badge">FREE ROAM · V6 · 2026-07-12</div>
 </body>
 </html>
