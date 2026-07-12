@@ -396,14 +396,16 @@ function updateFighter(id, mutateFn){
 const FIELD_KEY = 'iifl_field_fighters_v2';
 const AMATEUR_POOL_COMPOSITION = { Novice:8, Developing:8, Contender:5, Elite:3 }; // 24 per province
 
-// Standing Juvenile pool size per province (ages 12-17), population-weighted.
+// Standing Juvenile pool size per province (ages 11-18), population-weighted.
 const JUVENILE_POOL_SIZES = {
   kolsati:86, sherwood:54, ditiero:50, northeast:30,
   alexandretta:28, carpathia:27, bay:27, gazon:18,
 };
 // Relative share of each juvenile age in a standing population with realistic dropout —
 // younger cohorts are always more numerous than older ones since attrition is cumulative.
-const JUVENILE_AGE_WEIGHTS = { 12:0.263, 13:0.214, 14:0.174, 15:0.141, 16:0.115, 17:0.093 };
+// Ages 14-17 are also the Junior League draft window (14th birth-year earliest, 17 latest);
+// 18-year-olds who never got drafted age out of Juvenile entirely into the Amateur ranks.
+const JUVENILE_AGE_WEIGHTS = { 11:0.20, 12:0.19, 13:0.16, 14:0.13, 15:0.11, 16:0.09, 17:0.07, 18:0.05 };
 
 function loadFieldPools(){
   try{
@@ -428,9 +430,12 @@ function generateAmateurFieldFighter(division, weightClass, province, leagueId){
   opp.weightClass = weightClass;
   opp.provinceId = province.id;
   opp.leagueId = leagueId;
-  // Draft-eligible-age skew: most amateurs are in the 14-17 window Jr Leagues scout,
-  // a minority are older veterans who went undrafted or declined and are still grinding.
-  opp.age = Math.random() < 0.65 ? rand(14,17) : rand(18,24);
+  // Amateur is the 18+ adult money league — Junior League (not Amateur) is what drafts
+  // out of the 14-17 Juvenile window now. Amateur rosters are grown men: some are Junior
+  // grads who took the Amateur payday instead of staying in the dev pipeline, most are
+  // 18-year-olds who aged out of Juvenile undrafted and never made it to Pro or Junior.
+  // Skews toward the younger end of "adult" since career length here is short and rough.
+  opp.age = Math.random() < 0.6 ? rand(18,21) : rand(22,30);
   return opp;
 }
 
@@ -732,13 +737,14 @@ const SETTLEMENTS_SHORT = {
 
 /* ============================ AGE BANDS & TALENT TIERS ============================ */
 /* Mirrors the Character Creator's system — see that file for full rationale. */
-const AGE_BAND_TYPICAL      = { 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35 };
-const AGE_BAND_PRODIGY      = { 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35 };
-const AGE_BAND_GENERATIONAL = { 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88 };
+const AGE_BAND_TYPICAL      = { 11:13, 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35, 19:36, 20:37 };
+const AGE_BAND_PRODIGY      = { 11:17, 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35, 19:36, 20:37 };
+const AGE_BAND_GENERATIONAL = { 11:22, 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88, 19:90, 20:92 };
+// 11-20 covers the full Juvenile (11-18) + Junior League (14-20) span.
 
 function bandCeiling(age, tier){
   const table = tier==='generational' ? AGE_BAND_GENERATIONAL : tier==='prodigy' ? AGE_BAND_PRODIGY : AGE_BAND_TYPICAL;
-  return table[clamp(age, 12, 18)];
+  return table[clamp(age, 11, 20)];
 }
 function rollTalentTier(rawAvg01){
   const generationalChance = 0.005 + rawAvg01 * 0.02;
