@@ -28,6 +28,12 @@
   .ticket-eyebrow{ font-family:var(--label); font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--brass); }
   .ticket-title{ font-family:var(--display); font-size:26px; letter-spacing:1px; color:var(--bone); text-transform:uppercase; }
   .ticket-sub{ font-family:var(--mono); font-size:11px; color:var(--muted); text-align:right; }
+  .calendar-banner{
+    background:var(--bg-raised); border:1px solid var(--line); border-top:none; padding:9px 24px;
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;
+    font-family:var(--mono); font-size:10.5px; color:var(--muted);
+  }
+  .calendar-banner b{ color:var(--brass); font-weight:600; }
   .panel{ background:var(--bg-panel); border:1px solid var(--line); border-top:none; padding:32px; min-height:420px; }
   .section-label{
     font-family:var(--label); font-size:12px; letter-spacing:2.5px; text-transform:uppercase; color:var(--brass);
@@ -373,6 +379,42 @@ function updateFighter(id, mutateFn){
   return f;
 }
 
+/* ============================ GAME CLOCK ============================ */
+/*
+  One shared, island-wide clock (localStorage, not per-fighter) so "today" and the
+  Juvenile background simulation stay consistent across every file that reads it
+  (this file, the newspaper in Free Roam, etc). Day 1 = Monday, March 3, 1958 — chosen
+  to match Free Roam's existing flavor epoch so both calendars agree.
+*/
+const CLOCK_KEY = 'iifl_clock_v1';
+const GAME_EPOCH = new Date(1958, 2, 3); // Monday, March 3 1958 = Day 1
+const WEEKDAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const JUVENILE_SEASON_WEEKS = 16;
+const JUVENILE_SEASON_START_DAY = 1;
+const JUVENILE_SEASON_END_DAY = JUVENILE_SEASON_START_DAY + JUVENILE_SEASON_WEEKS*7 - 1;
+
+function loadClock(){
+  try{ const raw = localStorage.getItem(CLOCK_KEY); return raw ? JSON.parse(raw) : { day: 1 }; }
+  catch(err){ return { day: 1 }; }
+}
+function saveClock(c){ try{ localStorage.setItem(CLOCK_KEY, JSON.stringify(c)); }catch(err){} }
+function getCurrentDay(){ return loadClock().day; }
+function advanceClockByDays(n){ const c = loadClock(); c.day = Math.max(1, c.day + n); saveClock(c); return c.day; }
+function dateForDay(day){ const d = new Date(GAME_EPOCH); d.setDate(d.getDate() + (day-1)); return d; }
+function formatCalendarDate(day){ return dateForDay(day).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); }
+function formatCalendarDateShort(day){ return dateForDay(day).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }); }
+function weekdayNameForDay(day){ return WEEKDAY_NAMES[((day-1)%7+7)%7]; }
+function eventNameForDay(day){
+  const w = weekdayNameForDay(day);
+  if(w==='Monday') return 'Juvenile League Fight Night';
+  if(w==='Tuesday') return 'Juvenile Local Tournament';
+  if(w==='Wednesday') return 'Juvenile Fiesta Fights';
+  if(w==='Thursday') return 'Junior League Night';
+  if(w==='Friday') return 'Amateur Fight Night';
+  if(w==='Saturday') return 'Pro League Night';
+  return 'Off Night — no scheduled cards';
+}
+
 /* ============================ FIELD FIGHTER POOL (persistent Amateur registry) ============================ */
 /*
   Instead of inventing a brand-new stranger every fight, both Amateur AND Juvenile
@@ -397,9 +439,12 @@ const FIELD_KEY = 'iifl_field_fighters_v2';
 const AMATEUR_POOL_COMPOSITION = { Novice:8, Developing:8, Contender:5, Elite:3 }; // 24 per province
 
 // Standing Juvenile pool size per province (ages 11-18), population-weighted.
+// Bumped up from the original sample size now that this pool is a real, persistent,
+// simulated cast (newspaper + opponents) rather than a one-off flavor list — plus new
+// 11-year-olds keep entering every simulated Monday as the season goes (see intake below).
 const JUVENILE_POOL_SIZES = {
-  kolsati:86, sherwood:54, ditiero:50, northeast:30,
-  alexandretta:28, carpathia:27, bay:27, gazon:18,
+  kolsati:140, sherwood:88, ditiero:80, northeast:48,
+  alexandretta:45, carpathia:43, bay:43, gazon:30,
 };
 // Relative share of each juvenile age in a standing population with realistic dropout —
 // younger cohorts are always more numerous than older ones since attrition is cumulative.
@@ -479,18 +524,25 @@ function ensureAmateurFieldPoolForLeague(leagueId){
   return pools;
 }
 
-function ensureJuvenileFieldPoolForProvince(provinceId){
-  const pools = loadFieldPools();
+function seedJuvenilePoolInPlace(pools, provinceId){
   if(!pools.juvenile) pools.juvenile = {};
-  if(pools.juvenile[provinceId] && pools.juvenile[provinceId].length) return pools;
+  if(pools.juvenile[provinceId] && pools.juvenile[provinceId].length) return;
   const province = PROVINCES.find(p=>p.id===provinceId);
+  if(!province) return;
   const weightClasses = ['Light','Middle','Heavy'];
   const size = JUVENILE_POOL_SIZES[provinceId] || 25;
   const pool = [];
   for(let i=0;i<size;i++){
-    pool.push(generateJuvenileFieldFighter(pick(weightClasses), province));
+    const f = generateJuvenileFieldFighter(pick(weightClasses), province);
+    f.entryDay = JUVENILE_SEASON_START_DAY;
+    pool.push(f);
   }
   pools.juvenile[provinceId] = pool;
+}
+
+function ensureJuvenileFieldPoolForProvince(provinceId){
+  const pools = loadFieldPools();
+  seedJuvenilePoolInPlace(pools, provinceId);
   saveFieldPools(pools);
   return pools;
 }
@@ -570,6 +622,157 @@ function updateFieldFighterRecord(fighterId, poolKey, won, isJuvenile){
   if(!f) return;
   if(won) f.record.wins += 1; else f.record.losses += 1;
   saveFieldPools(pools);
+}
+
+/* ============================ JUVENILE LEAGUE SIMULATION ============================ */
+/*
+  Background sim for every "other" Juvenile fighter in the standing pool — the exact same
+  pool the player draws opponents from and that Free Roam's newspaper reports on. Runs on
+  the real Mon/Tue/Wed cadence off the shared game clock: Monday = League Fight Night
+  (paired bouts within a settlement), Tuesday = Local Tournament (single-elim within a
+  settlement, 8 or 16 deep), Wednesday = Fiesta Fights (wider, sometimes cross-province,
+  matchups). Records and stats accumulate for real as days pass, and new 11-year-olds
+  keep entering most Mondays — this is what makes "who's out there" and what the paper
+  prints an actual, consistent, growing cast instead of invented-per-render flavor.
+*/
+
+function quickSimBout(fA, fB){
+  const ovrA = calcOVR(fA.stats), ovrB = calcOVR(fB.stats);
+  const effA = ovrA + matchupBonus(fA.primaryDisc, fB.primaryDisc);
+  const effB = ovrB + matchupBonus(fB.primaryDisc, fA.primaryDisc);
+  const winnerIsA = Math.random() < winProbability(effA, effB);
+  return { winner: winnerIsA ? fA : fB, loser: winnerIsA ? fB : fA };
+}
+
+function applyNpcGrowthTick(f){
+  if(!f || !f.age || !f.stats) return;
+  const ceiling = bandCeiling(f.age, f.talentTier||'normal');
+  const statKeys = ['speed','quickness','toughness','power','agility'];
+  const key = pick(statKeys);
+  if(f.stats[key] < ceiling && Math.random() < 0.5){
+    f.stats[key] = clamp(f.stats[key]+1, 1, ceiling);
+  }
+}
+
+function groupFightersBySettlement(list){
+  const map = {};
+  list.forEach(f=>{ const k = f.hometown || 'unknown'; (map[k] = map[k]||[]).push(f); });
+  return map;
+}
+
+function runJuvenileLeagueNight(pools, provinceId){
+  const pool = pools.juvenile[provinceId];
+  if(!pool || pool.length < 2) return;
+  Object.values(groupFightersBySettlement(pool)).forEach(group=>{
+    // Not everybody fights every week — roughly 40% of a settlement's roster is on any
+    // given week's card, paired off within it.
+    const participants = group.filter(()=> Math.random() < 0.4);
+    for(let i=0;i+1<participants.length;i+=2){
+      const { winner, loser } = quickSimBout(participants[i], participants[i+1]);
+      winner.record.wins += 1; loser.record.losses += 1;
+      applyNpcGrowthTick(winner);
+      if(Math.random() < 0.5) applyNpcGrowthTick(loser);
+    }
+  });
+}
+
+function runJuvenileTournamentDay(pools, provinceId){
+  const pool = pools.juvenile[provinceId];
+  if(!pool || pool.length < 8) return;
+  Object.values(groupFightersBySettlement(pool)).forEach(group=>{
+    if(group.length < 8) return;
+    const size = group.length >= 16 ? 16 : 8;
+    let field = [...group].sort(()=>Math.random()-0.5).slice(0, size);
+    while(field.length > 1){
+      const nextRound = [];
+      for(let i=0;i+1<field.length;i+=2){
+        const { winner, loser } = quickSimBout(field[i], field[i+1]);
+        winner.record.wins += 1; loser.record.losses += 1;
+        nextRound.push(winner);
+      }
+      field = nextRound;
+    }
+    if(field[0]){ applyNpcGrowthTick(field[0]); applyNpcGrowthTick(field[0]); } // tournament win = an extra growth tick
+  });
+}
+
+function runJuvenileFiestaDay(pools, provinceId){
+  const pool = pools.juvenile[provinceId];
+  if(!pool || pool.length < 2) return;
+  const participants = [...pool].sort(()=>Math.random()-0.5).filter(()=> Math.random() < 0.3);
+  for(let i=0;i<participants.length;i++){
+    const fA = participants[i];
+    let fB = null;
+    // sometimes fiesta night draws a visiting fighter from another province
+    if(Math.random() < 0.25){
+      const otherIds = Object.keys(pools.juvenile).filter(id=> id!==provinceId && pools.juvenile[id].length);
+      if(otherIds.length) fB = pick(pools.juvenile[pick(otherIds)]);
+    }
+    if(!fB){
+      i += 1;
+      fB = participants[i];
+    }
+    if(!fB || fB.id === fA.id) continue;
+    const { winner, loser } = quickSimBout(fA, fB);
+    winner.record.wins += 1; loser.record.losses += 1;
+    applyNpcGrowthTick(winner);
+  }
+}
+
+// Roughly population-scaled chance of 1-2 new 11-year-olds registering on a given Monday.
+const JUVENILE_INTAKE_CHANCE = {
+  kolsati:0.9, sherwood:0.7, ditiero:0.65, northeast:0.55,
+  alexandretta:0.5, carpathia:0.45, bay:0.45, gazon:0.35,
+};
+function runJuvenileIntake(pools, provinceId, day){
+  const chance = JUVENILE_INTAKE_CHANCE[provinceId] || 0.5;
+  if(Math.random() > chance) return;
+  const province = PROVINCES.find(p=>p.id===provinceId);
+  if(!province) return;
+  const weightClasses = ['Light','Middle','Heavy'];
+  const count = rand(1,2);
+  for(let i=0;i<count;i++){
+    const tier = rollTalentTier(0.46);
+    const age = 11;
+    const rawCenter = rand(10,90);
+    const stats = {};
+    ['speed','quickness','toughness','power','agility'].forEach(k=>{
+      const raw = clamp(rawCenter + rand(-15,15), 1, 99);
+      stats[k] = compressStat(raw, age, tier);
+    });
+    const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
+    const weightClass = pick(weightClasses);
+    const f = finalizeOpponent(stats, avgOvr, weightClass, province);
+    f.age = age;
+    f.talentTier = tier;
+    f.weightClass = weightClass;
+    f.provinceId = province.id;
+    f.record = { wins:0, losses:0 }; // brand new — no starting flavor record
+    f.entryDay = day;
+    pools.juvenile[provinceId].push(f);
+  }
+}
+
+function catchUpJuvenileSimulation(){
+  const pools = loadFieldPools();
+  if(!pools.juvenile) pools.juvenile = {};
+  PROVINCES.forEach(p=> seedJuvenilePoolInPlace(pools, p.id));
+  const today = getCurrentDay();
+  const lastSim = pools.juvenileLastSimDay || 0;
+  if(lastSim >= today){ saveFieldPools(pools); return pools; }
+  const MAX_CATCHUP_DAYS = 500; // safety cap so a long-idle save can't spin forever
+  const startDay = Math.max(lastSim+1, today-MAX_CATCHUP_DAYS+1);
+  for(let d=startDay; d<=today; d++){
+    const weekday = weekdayNameForDay(d);
+    PROVINCES.forEach(p=>{
+      if(weekday==='Monday'){ runJuvenileLeagueNight(pools, p.id); runJuvenileIntake(pools, p.id, d); }
+      else if(weekday==='Tuesday'){ runJuvenileTournamentDay(pools, p.id); }
+      else if(weekday==='Wednesday'){ runJuvenileFiestaDay(pools, p.id); }
+    });
+  }
+  pools.juvenileLastSimDay = today;
+  saveFieldPools(pools);
+  return pools;
 }
 
 /* ============================ FIGHT MATH ============================ */
@@ -1322,6 +1525,7 @@ const AMATEUR_HALF_SIZE = 12;
 const AMATEUR_QUALIFY_WIN_PCT = 0.70;
 
 function render(){
+  catchUpJuvenileSimulation();
   let title='FIGHTER SELECT', sub='FIGHT PIT', body='';
   if(state.screen==='select'){ body = renderSelect(); }
   else if(state.screen==='pit-select'){ body = renderPitSelect(); title='CHOOSE A PIT'; }
@@ -1340,6 +1544,10 @@ function render(){
     <div class="ticket-header">
       <div><div class="ticket-eyebrow">Iron Island · Fight League</div><div class="ticket-title">${title}</div></div>
       <div class="ticket-sub">${sub}</div>
+    </div>
+    <div class="calendar-banner">
+      <span>Juvenile Season: <b>${formatCalendarDateShort(JUVENILE_SEASON_START_DAY)}</b> – <b>${formatCalendarDateShort(JUVENILE_SEASON_END_DAY)}</b></span>
+      <span>Today: <b>${formatCalendarDate(getCurrentDay())}</b> · ${eventNameForDay(getCurrentDay())}</span>
     </div>
     <div class="panel">${body}</div>
   `;
@@ -2100,7 +2308,7 @@ function applyBoutResult(){
     if(isFinish) s.finishes += (playerWon ? 1 : 0);
     f.fightLog.push({
       tier: tierName, opponent: state.opponent.name, result: playerWon ? 'W':'L', method: r.method,
-      location: `${state.arena.name} — ${s.pitName}`, date: new Date().toISOString(),
+      location: `${state.arena.name} — ${s.pitName}`, date: dateForDay(getCurrentDay()).toISOString(),
     });
     growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), isAmateur);
     if(s.fightsPlayed >= total){
@@ -2119,6 +2327,11 @@ function applyBoutResult(){
   if(poolKey){
     updateFieldFighterRecord(state.opponent.id, poolKey, !playerWon, !isAmateur);
   }
+
+  // A fight night represents roughly a week of build-up/travel in-fiction — advance the
+  // shared island clock and let the Juvenile background sim catch the rest of the cast up.
+  advanceClockByDays(7);
+  catchUpJuvenileSimulation();
 
   const f = getFighterById(state.fighterId);
   const s = isAmateur ? f.amateurSeason : f.juvenileSeason;
@@ -2197,6 +2410,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V12 · 2026-07-11</div>
+<div class="version-badge">FIGHT PIT · V13 · 2026-07-12</div>
 </body>
 </html>
