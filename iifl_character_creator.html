@@ -1166,7 +1166,7 @@ const state = {
   screen: 'creator', // 'creator' | 'roster'
   step: 0, // 0 intro, 1 basics, 2..2+N sequencing, last reveal
   name: '',
-  age: 12, // GDD: every career starts at 12
+  age: rand(11, 13), // careers now start age 11-13 (Juvenile is 11-18); function rand() is hoisted below
   provinceId: null,
   settlement: '',
   heightIn: 60, // inches, ~5'0"
@@ -1202,13 +1202,17 @@ function rand(lo, hi){ return Math.floor(Math.random()*(hi-lo+1))+lo; }
   All tiers still cap out around the same ~35 "top amateur" mark UNLESS generational,
   which is allowed to reach toward pro-level numbers even while still an amateur.
 */
-const AGE_BAND_TYPICAL      = { 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35 };
-const AGE_BAND_PRODIGY      = { 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35 };
-const AGE_BAND_GENERATIONAL = { 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88 };
+const AGE_BAND_TYPICAL      = { 11:13, 12:15, 13:18, 14:21, 15:25, 16:28, 17:31, 18:35, 19:36, 20:37 };
+const AGE_BAND_PRODIGY      = { 11:17, 12:20, 13:23, 14:26, 15:29, 16:32, 17:34, 18:35, 19:36, 20:37 };
+const AGE_BAND_GENERATIONAL = { 11:22, 12:30, 13:40, 14:50, 15:60, 16:70, 17:80, 18:88, 19:90, 20:92 };
+// 19-20 only matter for older Junior League fighters (Junior is now 14-20); ceilings barely
+// move past 18 on purpose — physical peak is basically hit, growth from here is refinement,
+// not a new ceiling. Fighters age out of Junior draft eligibility at 17 (last Juvenile year
+// they can still be picked); 18+ fighters split into Amateur (individual bouts) or Pro instead.
 
 function bandCeiling(age, tier){
   const table = tier==='generational' ? AGE_BAND_GENERATIONAL : tier==='prodigy' ? AGE_BAND_PRODIGY : AGE_BAND_TYPICAL;
-  const a = clamp(age, 12, 18);
+  const a = clamp(age, 11, 20);
   return table[a];
 }
 
@@ -1280,7 +1284,7 @@ function computeFighter(){
   const rawAvg = (stats.speed + stats.quickness + stats.toughness + stats.power + stats.agility) / 5;
   const rawAvg01 = clamp(rawAvg / 99, 0, 1);
   const talentTier = rollTalentTier(rawAvg01);
-  const age = state.age || 12;
+  const age = state.age || 11;
 
   const compressedStats = {};
   Object.keys(stats).forEach(k=> compressedStats[k] = compressStat(stats[k], age, talentTier));
@@ -1752,7 +1756,8 @@ function renderIntro(){
     <div class="intro">
       <div class="island-mark">★ Eight Provinces · One Island · No Easy Roads ★</div>
       <h1>BEGIN YOUR<br><span>FIGHTER'S PATH</span></h1>
-      <p>Every champion on Iron Island started the same way — twelve years old, a name, a hometown, and whatever the Sequencing Event decides you're made of. Answer honest. It writes your card.</p>
+      <p>Every champion on Iron Island started the same way — eleven, twelve, maybe thirteen years old, a name, a hometown, and whatever the Sequencing Event decides you're made of. Answer honest. It writes your card.</p>
+      <p style="font-size:0.85em; opacity:0.75; font-style:italic; max-width:520px; margin:10px auto 0;">The papers have been buzzing all season about a first-ever <b>professional league</b> coming to the island — four teams, one per province to start, each one landing in a different big city. Nobody agrees yet on which cities. Juvenile's been around 25 years, Junior League 10 — Pro would be brand new.</p>
       <div class="btn-row" style="justify-content:center; gap:14px; margin-top:0;">
         <button class="btn btn-primary" id="start-btn">Start Intake →</button>
         <button class="btn" id="view-roster-btn">View Roster (${count})</button>
@@ -1809,7 +1814,7 @@ function renderBasics(){
       </select>
     </div>` : ''}
 
-    <div class="section-label" style="margin-top:8px;">Build (Age 12)</div>
+    <div class="section-label" style="margin-top:8px;">Build (Age ${state.age})</div>
     <div class="field-row">
       <div class="field">
         <label>Height — ${heightLabel(state.heightIn)}</label>
