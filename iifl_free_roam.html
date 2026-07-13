@@ -296,14 +296,14 @@ const ROSTER_KEY = 'iifl_roster_v1';
 const ROAM_STATE_KEY = 'iifl_free_roam_v1';
 
 const PROVINCES = [
-  { id:'alexandretta', name:'Alexandretta Province', color:'#5C7C5E', primary:['boxer','karate'], secondary:['wrestler'] },
-  { id:'kolsati', name:'Kolsati District', color:'#5E7A93', primary:['brawler','mma'], secondary:['boxer'] },
-  { id:'sherwood', name:'Sherwood Province', color:'#A0623B', primary:['wrestler','catch'], secondary:['brawler'] },
-  { id:'gazon', name:'Gazon Province', color:'#C8943F', primary:['boxer'], secondary:[] },
-  { id:'ditiero', name:'Di Tiero Province', color:'#7C5491', primary:['karate'], secondary:['brawler'] },
-  { id:'carpathia', name:'Targu Banshea Province', color:'#5B4070', primary:['sambo','judo'], secondary:['catch'] },
-  { id:'northeast', name:'Northeast Territory', color:'#9C4242', primary:['karate','judo'], secondary:['mma'] },
-  { id:'bay', name:'White Bay Province', color:'#6E8C9C', primary:['wrestler','catch'], secondary:[] },
+  { id:'alexandretta', name:'Alexandretta Province', color:'#5C7C5E', pit:'The Forge Pit', primary:['boxer','karate'], secondary:['wrestler'] },
+  { id:'kolsati', name:'Kolsati District', color:'#5E7A93', pit:'The Concrete Ring', primary:['brawler','mma'], secondary:['boxer'] },
+  { id:'sherwood', name:'Sherwood Province', color:'#A0623B', pit:'Frontenac Fight House', primary:['wrestler','catch'], secondary:['brawler'] },
+  { id:'gazon', name:'Gazon Province', color:'#C8943F', pit:'The Dust Circle', primary:['boxer'], secondary:[] },
+  { id:'ditiero', name:'Di Tiero Province', color:'#7C5491', pit:"Big Jim's Fightin' Pit", primary:['karate'], secondary:['brawler'] },
+  { id:'carpathia', name:'Targu Banshea Province', color:'#5B4070', pit:'The Hollow Ring', primary:['sambo','judo'], secondary:['catch'] },
+  { id:'northeast', name:'Northeast Territory', color:'#9C4242', pit:'Dojo Reach', primary:['karate','judo'], secondary:['mma'] },
+  { id:'bay', name:'White Bay Province', color:'#6E8C9C', pit:'The Fairground Ring', primary:['wrestler','catch'], secondary:[] },
 ];
 const DISCIPLINE_NAMES = {
   boxer:'Boxer', brawler:'Street Brawler', wrestler:'Wrestler', sambo:'Russian Sambo',
@@ -1292,6 +1292,7 @@ const PIT_NAMES = [
   'Fist City','The Butcher Block','Lowlife Arena','The Dust Bowl','Broken Jaw Alley','The Pit Below',
   'Salt Mine Arena','The Choke Point',"Widow's Ring",'The Concrete Jungle','Last Call Arena','The Graveyard Shift',
   'The Tin Roof','Drydock Pit','Foghorn Yard','The Anvil Room','Hollow Bell Hall','The Splinter Room','Cutthroat Court',
+  'Snake Pit',"Power's Pit",'Abrams Corner',
 ];
 const BOSS_TITLES = ["The Ledger","Two Fists","The Butcher","Iron","Snake Eyes","The Preacher","Cold Blood","The Banker","Old Scratch","The Undertaker","No Mercy","The Widow","One Punch","The Vulture","Straight Razor"];
 
@@ -1333,16 +1334,34 @@ function pitRosterSize(population, pitCount){
 function ensureCityPits(provinceId, settlementName){
   const s = loadRoamState();
   const key = provinceId + '|' + settlementName;
-  if(s.pits[key]) return s.pits[key];
   const entry = (SETTLEMENT_DATA[provinceId]||[]).find(e=>e.name===settlementName);
   const tier = entry ? entry.tier : 'Village';
+  if(s.pits[key]){
+    // Repair pass: saves generated before the flagship-pit fix won't have it yet —
+    // rename the free (index 0) pit to it rather than leaving it permanently missing.
+    const province = PROVINCES.find(p=>p.id===provinceId);
+    if(tier==='Capital' && province && province.pit && !s.pits[key].some(p=>p.name===province.pit)){
+      s.pits[key][0].name = province.pit;
+      saveRoamState(s);
+    }
+    return s.pits[key];
+  }
   const population = entry ? entry.population : 800;
   const pitCount = PIT_COUNT_BY_TIER[tier] || 1;
+  const province = PROVINCES.find(p=>p.id===provinceId);
   const usedNames = new Set();
   const pits = [];
   for(let i=0;i<pitCount;i++){
-    let pitName = pick(PIT_NAMES);
-    let guard=0; while(usedNames.has(pitName) && guard<30){ pitName = pick(PIT_NAMES); guard++; }
+    let pitName;
+    if(i===0 && tier==='Capital' && province && province.pit){
+      // Every province has one canonical, GDD-named flagship pit (Big Jim's in Di
+      // Tiero, The Forge Pit in Alexandretta, etc) — guarantee it actually shows up
+      // in that province's capital instead of only existing in flavor text/dialogue.
+      pitName = province.pit;
+    } else {
+      pitName = pick(PIT_NAMES);
+      let guard=0; while((usedNames.has(pitName) || (province && pitName===province.pit)) && guard<30){ pitName = pick(PIT_NAMES); guard++; }
+    }
     usedNames.add(pitName);
     const rosterSize = pitRosterSize(population, pitCount);
     const roster = [];
@@ -3567,6 +3586,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V13 · 2026-07-12</div>
+<div class="version-badge">FREE ROAM · V14 · 2026-07-12</div>
 </body>
 </html>
