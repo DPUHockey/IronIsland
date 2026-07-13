@@ -1605,8 +1605,8 @@ function renderModal(){
     <p class="mf-growth-text">${Math.round(growth.pctOfCeiling)}% of current ceiling reached. ${growth.outlook}</p>
     <div class="mf-section-title">Doctor's Review</div>
     <p class="mf-growth-text">${doc.isGrown
-      ? `Fully grown — current size is expected to hold.`
-      : `Early projection, subject to change: expected adult height ~${heightLabel(doc.adultHeightIn)}, weight ~${doc.adultWeightLb} lb.`}</p>
+      ? `Fully grown — current size is expected to hold. Fighting at <b>${weightClassOf(doc.adultWeightLb)}weight</b>.`
+      : `Early projection, subject to change: expected adult height ~${heightLabel(doc.adultHeightIn)}, weight ~${doc.adultWeightLb} lb — projects to <b>${weightClassOf(doc.adultWeightLb)}weight</b> as an adult.`}</p>
     ${draftWatchHtml(f)}
   `;
 
@@ -2581,6 +2581,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V14 · 2026-07-12</div>
+<div class="version-badge">FIGHT PIT · V15 · 2026-07-12</div>
 </body>
 </html>
