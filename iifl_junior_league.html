@@ -389,7 +389,16 @@ function ensureFighterDefaults(f){
   if(f.juniorLeagueId === undefined) f.juniorLeagueId = null;
   if(!f.juniorRightsHolders) f.juniorRightsHolders = []; // [{leagueId, teamIndex}] exclusive re-sign rights after a decline
   if(!f.juniorDraftHistory) f.juniorDraftHistory = [];
+  reconcileRecord(f);
   return f;
+}
+// Same fix as Fight Pit/Free Roam — the header record is always recomputed from the
+// fight log rather than tracked as a separate counter that could fall out of sync.
+function reconcileRecord(f){
+  if(!f.fightLog) return;
+  const wins = f.fightLog.filter(e=>e.result==='W').length;
+  const losses = f.fightLog.filter(e=>e.result==='L').length;
+  f.record = { wins, losses };
 }
 function getRoster(){ return loadRoster().map(ensureFighterDefaults); }
 function getFighterById(id){ return getRoster().find(f=> f.id === id); }
@@ -1118,7 +1127,7 @@ function renderFighterModal(root){
       return `
         <div class="mf-history-row">
           <div class="mfh-date">${dateStr}</div>
-          <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
+          <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponentId ? `<span class="clickable-name" data-open-fighter="${e.opponentId}">${e.opponent}</span>` : e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
           <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
         </div>`;
     }).join('') : `<div class="mf-empty">No fights on record${modalActiveTier==='All'?'':' at this level'} yet.</div>`;
@@ -1901,9 +1910,10 @@ function wireEvents(){
       if(playerResult){
         const playerWonBout = gd.isHome ? playerResult.homeWon : !playerResult.homeWon;
         const oppName = playerWonBout ? playerResult.loserName : playerResult.winnerName;
+        const oppId = playerWonBout ? playerResult.loserId : playerResult.winnerId;
         if(playerWonBout) ff.record.wins += 1; else ff.record.losses += 1;
         ff.fightLog.push({
-          tier: 'Junior', opponent: oppName, result: playerWonBout ? 'W':'L', method: playerResult.method,
+          tier: 'Junior', opponent: oppName, opponentId: oppId, result: playerWonBout ? 'W':'L', method: playerResult.method,
           location: `${jrTeamName(gd.leagueId, gd.awayIdx)} @ ${jrTeamName(gd.leagueId, gd.homeIdx)} — Week ${gd.week+1}`,
           date: new Date().toISOString(),
         });
@@ -1951,7 +1961,7 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V11 · 2026-07-12</div>
+<div class="version-badge">JUNIOR LEAGUE · V12 · 2026-07-12</div>
 </body>
 </html>
 
