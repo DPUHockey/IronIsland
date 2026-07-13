@@ -763,7 +763,7 @@ function logNpcBout(winner, loser, tier, location, day){
   const dateStr = dateForDay(day).toISOString();
   [[winner,loser,'W'],[loser,winner,'L']].forEach(([self, opp, result])=>{
     if(!self.fightLog) self.fightLog = [];
-    self.fightLog.push({ tier, opponent: opp.name, result, method: pick(['Decision','TKO','KO']), location, date: dateStr });
+    self.fightLog.push({ tier, opponent: opp.name, opponentId: opp.id, result, method: pick(['Decision','TKO','KO']), location, date: dateStr });
     if(self.fightLog.length > 10) self.fightLog = self.fightLog.slice(-10);
   });
 }
@@ -1228,7 +1228,16 @@ function ensureFighterDefaults(f){
   if(f.agentType === undefined) f.agentType = null;
   if(!f.blackMarketLog) f.blackMarketLog = [];
   if(f.tempBoost === undefined) f.tempBoost = null;
+  reconcileRecord(f);
   return f;
+}
+// Same fix as Fight Pit — the header record is now always recomputed from the fight
+// log rather than tracked as a separate counter that could fall out of sync with it.
+function reconcileRecord(f){
+  if(!f.fightLog) return;
+  const wins = f.fightLog.filter(e=>e.result==='W').length;
+  const losses = f.fightLog.filter(e=>e.result==='L').length;
+  f.record = { wins, losses };
 }
 function getRoster(){
   const roster = loadRoster().map(ensureFighterDefaults);
@@ -2232,7 +2241,7 @@ function renderModal(){
     return `
       <div class="mf-history-row">
         <div class="mfh-date">${dateStr}</div>
-        <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
+        <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponentId ? `<span class="clickable-name" data-open-fighter="${e.opponentId}">${e.opponent}</span>` : e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
         <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
       </div>
     `;
@@ -3442,7 +3451,7 @@ function wireEvents(){
       updateFighter(state.fighterId, ff=>{
         if(won) ff.record.wins += 1; else ff.record.losses += 1;
         ff.fightLog.push({
-          tier:'Juvenile', opponent: state.opponent.name, result: won?'W':'L', method:r.method,
+          tier:'Juvenile', opponent: state.opponent.name, opponentId: state.opponent.id, result: won?'W':'L', method:r.method,
           location: `${pit.name} — Tournament, ${state.settlementName}`, date: dateForDay(getCurrentDay()).toISOString(),
         });
         ff.wallet += prize;
@@ -3468,7 +3477,7 @@ function wireEvents(){
       recordPitResult(state.fighterId, cityKey, won);
       if(state.fiestaContext.isVisitor){
         updateFieldFighterRecord(state.opponent.id, state.fiestaContext.provinceId, !won, true, {
-          tier:'Juvenile', opponent: getFighterById(state.fighterId).name, result: won?'L':'W', method:r.method,
+          tier:'Juvenile', opponent: getFighterById(state.fighterId).name, opponentId: state.fighterId, result: won?'L':'W', method:r.method,
           location: `${pit.name} — Fiesta Night, ${state.settlementName}`, date: dateForDay(getCurrentDay()).toISOString(),
         });
       } else {
@@ -3477,7 +3486,7 @@ function wireEvents(){
       updateFighter(state.fighterId, ff=>{
         if(won) ff.record.wins += 1; else ff.record.losses += 1;
         ff.fightLog.push({
-          tier:'Juvenile', opponent: state.opponent.name, result: won?'W':'L', method:r.method,
+          tier:'Juvenile', opponent: state.opponent.name, opponentId: state.opponent.id, result: won?'W':'L', method:r.method,
           location: `${pit.name} — Fiesta Night${state.fiestaContext.isVisitor?' (visiting fighter)':''}, ${state.settlementName}`, date: dateForDay(getCurrentDay()).toISOString(),
         });
         ff.wallet += prize;
@@ -3500,7 +3509,7 @@ function wireEvents(){
       updateFighter(state.fighterId, ff=>{
         if(won) ff.record.wins += 1; else ff.record.losses += 1;
         ff.fightLog.push({
-          tier:'Juvenile', opponent: state.opponent.name, result: won?'W':'L', method:r.method,
+          tier:'Juvenile', opponent: state.opponent.name, opponentId: state.opponent.id, result: won?'W':'L', method:r.method,
           location: `${pit.name}, ${state.settlementName}`, date: dateForDay(getCurrentDay()).toISOString(),
         });
         ff.wallet += prize;
@@ -3558,6 +3567,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V12 · 2026-07-12</div>
+<div class="version-badge">FREE ROAM · V13 · 2026-07-12</div>
 </body>
 </html>
