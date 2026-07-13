@@ -1095,7 +1095,7 @@ function renderFighterModal(root){
     <div class="mf-growth-bar"><div class="mf-growth-fill" style="width:${growth.pctOfCeiling}%"></div></div>
     <p class="mf-growth-text">${Math.round(growth.pctOfCeiling)}% of current ceiling reached. ${growth.outlook}</p>
     <div class="mf-section-title">Doctor's Review</div>
-    <p class="mf-growth-text">${doc.isGrown ? `Fully grown — current size is expected to hold.` : `Early projection, subject to change: expected adult height ~${heightLabel(doc.adultHeightIn)}, weight ~${doc.adultWeightLb} lb.`}</p>
+    <p class="mf-growth-text">${doc.isGrown ? `Fully grown — current size is expected to hold. Fighting at <b>${weightClassOf(doc.adultWeightLb)}weight</b>.` : `Early projection, subject to change: expected adult height ~${heightLabel(doc.adultHeightIn)}, weight ~${doc.adultWeightLb} lb — projects to <b>${weightClassOf(doc.adultWeightLb)}weight</b> as an adult.`}</p>
   `;
 
   let bodyExtra;
@@ -1951,7 +1951,7 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V10 · 2026-07-12</div>
+<div class="version-badge">JUNIOR LEAGUE · V11 · 2026-07-12</div>
 </body>
 </html>
 
