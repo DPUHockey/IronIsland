@@ -1213,7 +1213,17 @@ function ensureFighterDefaults(f){
   if(!f.talentTier) f.talentTier = 'normal';
   if(f.wallet === undefined) f.wallet = 10; // starting bankroll
   if(f.fame === undefined) f.fame = 0;
-  if(f.freeRoamPitKey === undefined) f.freeRoamPitKey = null; // "provinceId|city|pitId" — signed home pit
+  if(f.freeRoamPitKey === undefined) f.freeRoamPitKey = null; // legacy single-pit field, kept for old saves
+  if(!f.pitMemberships){
+    // Migration: fighters signed under the old single-home-pit model get that pit
+    // carried over as their first membership. Going forward, a fighter can be
+    // registered at multiple pits at once — this array is the real source of truth.
+    f.pitMemberships = [];
+    if(f.freeRoamPitKey){
+      const [pid, city, pitId] = f.freeRoamPitKey.split('|');
+      f.pitMemberships.push({ key: f.freeRoamPitKey, pitId, pitName: null, settlementName: city, provinceId: pid, record: { wins:0, losses:0 } });
+    }
+  }
   if(f.freeRoamFightCount === undefined) f.freeRoamFightCount = 0;
   if(f.agentType === undefined) f.agentType = null;
   if(!f.blackMarketLog) f.blackMarketLog = [];
@@ -1231,6 +1241,28 @@ function updateFighter(id, mutateFn){
   const f = roster.find(r=> r.id === id);
   if(f){ mutateFn(f); saveRoster(roster); }
   return f;
+}
+
+/* ============================ MULTI-PIT MEMBERSHIP ============================ */
+/*
+  A fighter can be signed at more than one pit — the old single "home pit" model is
+  gone. Overall record (for standings/top-10) still lives on f.record; each membership
+  tracks its own separate win-loss for that specific pit's card.
+*/
+function isSignedAtPit(f, cityKey){ return f.pitMemberships.some(m=> m.key === cityKey); }
+function getMembership(f, cityKey){ return f.pitMemberships.find(m=> m.key === cityKey); }
+function signAtPit(fighterId, cityKey, pit, provinceId, settlementName){
+  updateFighter(fighterId, f=>{
+    if(isSignedAtPit(f, cityKey)) return;
+    f.pitMemberships.push({ key: cityKey, pitId: pit.id, pitName: pit.name, settlementName, provinceId, record: { wins:0, losses:0 } });
+  });
+}
+function recordPitResult(fighterId, cityKey, won){
+  updateFighter(fighterId, f=>{
+    const m = getMembership(f, cityKey);
+    if(!m) return;
+    if(won) m.record.wins += 1; else m.record.losses += 1;
+  });
 }
 
 function loadRoamState(){
@@ -1314,7 +1346,7 @@ function ensureCityPits(provinceId, settlementName){
       name: pitName,
       bossName: pickName(provinceId, settlementName),
       bossTitle: pick(BOSS_TITLES),
-      reputationRequired: i===0 ? 0 : Math.round(8 + i*11 + rand(-2,3)),
+      reputationRequired: i<2 ? 0 : Math.round(8 + (i-1)*11 + rand(-2,3)),
       roster,
     });
   }
@@ -1517,27 +1549,62 @@ const ADVICE_LINES_PIT = [
   "There's a fight pit not far from here — {pit} takes on new blood most nights.",
   "You want to fight? Ask around for {pit}. They're always looking for fresh faces.",
   "Heard {pit} is where the real action is. Boss there doesn't mess around.",
+  "If you're looking to get on somebody's card, {pit} is the friendliest to newcomers.",
+  "Word to the wise — show up early on fight nights at {pit}, the good slots go fast.",
 ];
 const ADVICE_LINES_TRAINING = [
   "Training? Nobody worth your time round here yet. Word is that's coming.",
   "You could use a trainer. Nothing set up in this city yet though — soon, they say.",
   "Big-name trainers exist, but they won't waste time on someone nobody's heard of. Yet.",
+  "Keep your stance tight and don't lead with your chin — free advice, worth every penny.",
+  "Whatever your discipline, drill the basics until you're sick of them. That's the whole secret.",
 ];
 const ADVICE_LINES_GAMES = [
   "There's talk of a card game running somewhere in the back rooms. Not open yet.",
   "Dice, cards, all that — coming soon, if the rumors are right. Nothing running now.",
   "You look like a betting type. Nothing to bet on around here yet, though.",
 ];
+const LOCAL_COLOR_LINES = [
+  "Been a fighter's town since before I was born. Still is.",
+  "Every family round here's got someone who fought at some point. Comes with living here.",
+  "Quiet town, mostly. Gets loud on fight nights though.",
+  "This province chews people up. The ones who make it, though — they really make it.",
+  "You get used to the sound of the crowd from three streets over on a fight night.",
+  "Half this town's got money riding on somebody every single week.",
+];
+const FIGHTER_NEWS_TEMPLATES = [
+  "You hear about {name}? {recordPhrase} Word's getting around.",
+  "{name}'s been putting on a show lately. {recordPhrase}",
+  "Keep an eye on {name} — {recordPhrase} Everybody's talking about it.",
+  "Ask anybody about {name} and they'll tell you the same thing: {recordPhrase}",
+  "{name} fights out of one of the local pits. {recordPhrase} Go see for yourself sometime.",
+];
 const NPC_ROLE_LINES = { pit: ADVICE_LINES_PIT, training: ADVICE_LINES_TRAINING, games: ADVICE_LINES_GAMES };
 
 function generateNpc(provinceId, settlementName, role, pits){
   const name = pickName(provinceId, settlementName);
-  const lineTemplate = pick(NPC_ROLE_LINES[role]);
+  if(role === 'fighter-news'){
+    const pool = pits.flatMap(p=>p.roster);
+    if(pool.length){
+      const subject = pick(pool);
+      const rec = subject.allTimeRecord;
+      const recordPhrase = rec.wins > rec.losses*2 ? `${rec.wins}-${rec.losses} and barely breaking a sweat.`
+        : rec.wins > rec.losses ? `${rec.wins}-${rec.losses}, solid.`
+        : rec.wins === rec.losses ? `${rec.wins}-${rec.losses} — could go either way with this one.`
+        : `${rec.wins}-${rec.losses} — rough stretch lately.`;
+      const line = fillTpl(pick(FIGHTER_NEWS_TEMPLATES), { name: subject.name, recordPhrase });
+      return { name, role, line, subjectFighterId: subject.id };
+    }
+  }
+  if(role === 'local-color'){
+    return { name, role, line: pick(LOCAL_COLOR_LINES) };
+  }
+  const lineTemplate = pick(NPC_ROLE_LINES[role] || ADVICE_LINES_PIT);
   const line = lineTemplate.replace('{pit}', pits.length ? pick(pits).name : 'one of the local pits');
   return { name, role, line };
 }
 
-const GRID_SIZE_BY_TIER = { Capital:5, City:4, Town:3, Village:2 };
+const GRID_SIZE_BY_TIER = { Capital:7, City:6, Town:5, Village:4 };
 
 function ensureCityGrid(provinceId, settlementName){
   const s = loadRoamState();
@@ -1557,7 +1624,7 @@ function ensureCityGrid(provinceId, settlementName){
   }
   const entry = (SETTLEMENT_DATA[provinceId]||[]).find(e=>e.name===settlementName);
   const tier = entry ? entry.tier : 'Village';
-  const size = GRID_SIZE_BY_TIER[tier] || 2;
+  const size = GRID_SIZE_BY_TIER[tier] || 4;
   const pits = ensureCityPits(provinceId, settlementName);
 
   const cells = [];
@@ -1572,8 +1639,9 @@ function ensureCityGrid(provinceId, settlementName){
   pits.forEach((pit,i)=>{
     if(idx < available.length){ locations.push({ ...available[idx], type:'pit', pitId: pit.id }); idx++; }
   });
-  const npcCount = clamp(Math.round(size), 2, 5);
-  const npcRoles = ['pit','training','games'];
+  if(idx < available.length){ locations.push({ ...available[idx], type:'travel' }); idx++; }
+  const npcCount = clamp(Math.round(size*0.9), 2, 6);
+  const npcRoles = ['pit','training','games','fighter-news','local-color','fighter-news'];
   for(let i=0;i<npcCount && idx<available.length;i++){
     locations.push({ ...available[idx], type:'npc', npc: generateNpc(provinceId, settlementName, npcRoles[i%npcRoles.length], pits) });
     idx++;
@@ -1709,6 +1777,7 @@ function render(){
   else if(state.screen==='city-walk'){ body = renderCityWalk(); title='WALKING'; sub=state.settlementName; }
   else if(state.screen==='loc-npc'){ body = renderLocNpc(); title='STREET TALK'; }
   else if(state.screen==='loc-minigames'){ body = renderLocMinigames(); title='???'; }
+  else if(state.screen==='loc-travel'){ body = renderLocTravel(); title='THE ROAD OUT'; sub=state.settlementName; }
   else if(state.screen==='random-event'){ body = renderRandomEvent(); title='ON THE STREET'; }
   else if(state.screen==='newspaper-picker'){ body = renderNewspaperPicker(); title='NEWSSTAND'; sub='PICK A PAPER'; }
   else if(state.screen==='book-slot'){ body = renderBookSlot(); title='BOOK YOUR FIGHT'; sub='PICK AN OPPONENT'; }
@@ -1741,7 +1810,7 @@ function renderSelect(){
   }
   const rows = roster.map(f=>{
     const prov = PROVINCES.find(p=>p.id===f.provinceId);
-    const status = f.freeRoamPitKey ? `Signed — ${f.freeRoamPitKey.split('|')[2]||'a pit'}` : 'Not yet signed';
+    const status = f.pitMemberships.length ? `Signed at ${f.pitMemberships.length} pit${f.pitMemberships.length===1?'':'s'}` : 'Not yet signed';
     return `
       <div class="fighter-row" style="--fr-color:${prov?prov.color:'#C9A23C'}">
         <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
@@ -1778,6 +1847,7 @@ function renderCityWalk(){
         if(loc.type==='pit'){ icon='🥊'; label = pits.find(p=>p.id===loc.pitId).name; }
         else if(loc.type==='npc'){ icon='🗣️'; label = 'Local'; }
         else if(loc.type==='minigames'){ icon='🎲'; label = '???'; }
+        else if(loc.type==='travel'){ icon='🛣️'; label = 'Road Out'; }
       } else if(roaming){ icon='❓'; label = '???'; }
       const cls = isYou ? 'you' : (loc||roaming ? '' : 'empty');
       cellsHtml.push(`<div class="block-cell ${cls}" data-walk-cell="${r}|${c}">
@@ -1806,8 +1876,28 @@ function renderCityWalk(){
       <button class="btn" id="back-to-select-from-walk">← Fighter Select</button>
       <button class="btn" id="read-newspaper">📰 Newspaper</button>
       <button class="btn" id="view-black-market">🕶️ Black Market (${(f.blackMarketLog||[]).length})</button>
-      ${f.freeRoamPitKey && eligiblePits.length ? `<button class="btn btn-primary" id="find-a-fight">Find a Fight →</button>` : ''}
+      ${pits.some(p=> isSignedAtPit(f, state.provinceId+'|'+state.settlementName+'|'+p.id)) && eligiblePits.length ? `<button class="btn btn-primary" id="find-a-fight">Find a Fight →</button>` : ''}
     </div>
+  `;
+}
+
+function renderLocTravel(){
+  const all = SETTLEMENT_DATA[state.provinceId] || [];
+  const others = all.filter(e=> e.name !== state.settlementName);
+  const cards = others.map(e=>`
+    <div class="pit-card" data-travel-to="${e.name}">
+      <div class="pit-name">${e.name}</div>
+      <div class="pit-meta">${e.tier} · Pop. ${e.population.toLocaleString()}</div>
+    </div>
+  `).join('');
+  return `
+    <div class="section-label">Roads Out of ${state.settlementName}</div>
+    <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:16px;">
+      This is the only way to reach the rest of the province — every other city, every other pit, all
+      down these roads. Takes the rest of the day to get there; you'll arrive fresh the next morning.
+    </p>
+    <div class="pit-grid">${cards || '<div class="empty-note">Nowhere else in this province to go.</div>'}</div>
+    <div class="btn-row" style="margin-top:16px;"><button class="btn" id="back-to-walk">← Stay in Town</button><span></span></div>
   `;
 }
 
@@ -1818,6 +1908,7 @@ function renderLocNpc(){
       "${npc.line}"
       <span class="npc-name">— ${npc.name}</span>
     </div>
+    ${npc.subjectFighterId ? `<div class="btn-row"><span></span><button class="clickable-name" data-open-fighter="${npc.subjectFighterId}" style="background:none; border:1px solid var(--line); padding:8px 14px; font-family:var(--label); font-size:11px; text-transform:uppercase; letter-spacing:1px; cursor:pointer;">View Their Fighter Card →</button></div>` : ''}
     <div class="btn-row"><span></span><button class="btn btn-primary" id="back-to-walk">Keep Walking →</button></div>
   `;
 }
@@ -2179,6 +2270,18 @@ function renderModal(){
             <div class="mf-stat"><div class="msv">${f.stats.power}</div><div class="msl">PWR</div></div>
             <div class="mf-stat"><div class="msv">${f.stats.agility}</div><div class="msl">AGL</div></div>
           </div>` : ''}
+          ${!isEphemeral && f.pitMemberships && f.pitMemberships.length ? `
+          <div class="mf-section-title">Pit Memberships</div>
+          <div class="mf-history">
+            ${f.pitMemberships.map(m=>`
+              <div class="mf-history-row">
+                <div class="mfh-date">${m.settlementName}</div>
+                <div class="mfh-opp"><b>${m.pitName || 'Registered Pit'}</b></div>
+                <div class="mfh-result">${m.record.wins}-${m.record.losses}</div>
+              </div>
+            `).join('')}
+          </div>
+          ` : ''}
           ${f.stats ? `<div class="mf-section-title">On the Broadcast</div><div class="mf-quotes">${commentaryHtml}</div>` : ''}
           ${projectedPathHtml}
           ${growthHtml}
@@ -2580,8 +2683,8 @@ function renderLocPit(){
   const f = getFighterById(state.fighterId);
   const pit = currentPits().find(p=>p.id===state.visitingLocation.pitId);
   const cityKey = state.provinceId+'|'+state.settlementName+'|'+pit.id;
-  const isSignedHere = f.freeRoamPitKey === cityKey;
-  const isSignedElsewhere = f.freeRoamPitKey && !isSignedHere;
+  const isSignedHere = isSignedAtPit(f, cityKey);
+  const isSignedElsewhere = f.pitMemberships.length > 0 && !isSignedHere;
   const locked = f.fame < pit.reputationRequired;
   const day = getCurrentDay();
   const weekday = weekdayNameForDay(day);
@@ -2665,8 +2768,8 @@ function renderLocPit(){
   let actionHtml;
   if(locked){
     actionHtml = `<p style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center;">This pit doesn't know your name yet. Build some fame first (needs ${pit.reputationRequired}, you have ${f.fame}).</p>`;
-  } else if(!f.freeRoamPitKey){
-    actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="sign-here" data-pit-id="${pit.id}">Sign Here — Start Your Career</button></div>`;
+  } else if(!isSignedHere){
+    actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="sign-here" data-pit-id="${pit.id}">${f.pitMemberships.length ? 'Sign Here — Add This Pit →' : 'Sign Here — Start Your Career'}</button></div>`;
   } else {
     actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="register-fight" data-pit-id="${pit.id}">Register to Fight →</button></div>`;
   }
@@ -2674,7 +2777,7 @@ function renderLocPit(){
   return `
     <div class="loc-head">
       <div class="loc-name">${pit.name}</div>
-      <div class="loc-meta">${isSignedHere?'Your home pit':isSignedElsewhere?'Not your pit':'Unsigned'} · Reputation needed: ${pit.reputationRequired}</div>
+      <div class="loc-meta">${isSignedHere?'Signed here':isSignedElsewhere?'Signed elsewhere, not here':'Unsigned'} · Reputation needed: ${pit.reputationRequired}</div>
     </div>
     <div class="pit-boss-card">
       <div class="pit-boss-avatar">${buildSilhouetteSM({skin:pick(SKIN_TONES), hair:pick(HAIR_COLORS)})}</div>
@@ -2696,7 +2799,7 @@ function renderTournamentNight(){
   const pit = currentPits().find(p=>p.id===state.visitingLocation.pitId);
   const day = getCurrentDay();
   const cityKey = state.provinceId+'|'+state.settlementName+'|'+pit.id;
-  const isSignedHere = f.freeRoamPitKey === cityKey;
+  const isSignedHere = isSignedAtPit(f, cityKey);
   let tourney = getPitTournament(pit, day);
 
   if(!tourney && pit.roster.length < 8){
@@ -2831,6 +2934,7 @@ function renderChooseAgent(){
 
 function renderChoosePitToFight(){
   const f = getFighterById(state.fighterId);
+  const pits = currentPits();
   const rows = pits.map(p=>`
     <div class="pick-row">
       <span>${p.name} <span style="color:var(--muted); font-family:var(--mono); font-size:10.5px;">(${p.roster.length} fighters)</span></span>
@@ -3006,9 +3110,9 @@ function wireEvents(){
     btn.onclick = ()=>{
       const f = getFighterById(btn.dataset.selectFighter);
       state.fighterId = f.id;
-      if(f.freeRoamPitKey){
-        const [pid, city] = f.freeRoamPitKey.split('|');
-        state.provinceId = pid; state.settlementName = city;
+      if(f.pitMemberships.length){
+        const first = f.pitMemberships[0];
+        state.provinceId = first.provinceId; state.settlementName = first.settlementName;
       } else {
         state.provinceId = f.provinceId; state.settlementName = f.settlement;
       }
@@ -3038,6 +3142,7 @@ function wireEvents(){
         if(loc.type==='pit') state.screen = 'loc-pit';
         else if(loc.type==='npc') state.screen = 'loc-npc';
         else if(loc.type==='minigames') state.screen = 'loc-minigames';
+        else if(loc.type==='travel') state.screen = 'loc-travel';
       } else if(roaming){
         triggerRandomEvent();
       }
@@ -3047,6 +3152,17 @@ function wireEvents(){
 
   const backToWalk = document.getElementById('back-to-walk');
   if(backToWalk) backToWalk.onclick = ()=>{ state.screen='city-walk'; render(); };
+
+  document.querySelectorAll('[data-travel-to]').forEach(card=>{
+    card.onclick = ()=>{
+      state.settlementName = card.dataset.travelTo;
+      const grid = ensureCityGrid(state.provinceId, state.settlementName);
+      state.position = { ...grid.startCell };
+      advanceDay(); // the road takes the rest of the day — arrive fresh next morning
+      state.screen = 'city-walk';
+      render();
+    };
+  });
 
   const findAFight = document.getElementById('find-a-fight');
   if(findAFight) findAFight.onclick = ()=>{ state.screen='choose-pit-to-fight'; render(); };
@@ -3099,7 +3215,7 @@ function wireEvents(){
   if(signHere) signHere.onclick = ()=>{
     const pit = currentPits().find(p=>p.id===state.visitingLocation.pitId);
     const cityKey = state.provinceId+'|'+state.settlementName+'|'+pit.id;
-    updateFighter(state.fighterId, f=>{ f.freeRoamPitKey = cityKey; });
+    signAtPit(state.fighterId, cityKey, pit, state.provinceId, state.settlementName);
     const f = getFighterById(state.fighterId);
     if(!f.agentType){ state.screen = 'choose-agent'; render(); return; }
     state.screen = 'city-walk';
@@ -3318,9 +3434,11 @@ function wireEvents(){
     } else if(state.tournamentContext){
       const tc = state.tournamentContext;
       const pit = currentPits().find(p=>p.id===tc.pitId);
+      const cityKey = state.provinceId+'|'+state.settlementName+'|'+pit.id;
       prize = won ? rand(8,16) : rand(2,5);
       fameGain = won ? rand(3,6) : (Math.random()<0.3 ? 1 : 0);
       updateOpponentRecord(state.provinceId, state.settlementName, pit.id, state.opponent.id, !won);
+      recordPitResult(state.fighterId, cityKey, won);
       updateFighter(state.fighterId, ff=>{
         if(won) ff.record.wins += 1; else ff.record.losses += 1;
         ff.fightLog.push({
@@ -3343,9 +3461,11 @@ function wireEvents(){
       flash = won ? "You're moving on in the bracket." : "That's the tournament for you this week — the rest of the bracket plays out on its own.";
     } else if(state.fiestaContext){
       const pit = currentPits().find(p=>p.id===state.fightPitId);
+      const cityKey = state.provinceId+'|'+state.settlementName+'|'+pit.id;
       const entryFee = 2 + Math.round(pit.reputationRequired/5);
       prize = won ? entryFee*3 + rand(2,8) : Math.round(entryFee*0.5);
       fameGain = won ? (r.method==='Decision' ? rand(2,3) : rand(3,5)) : (Math.random()<0.25 ? 1 : 0);
+      recordPitResult(state.fighterId, cityKey, won);
       if(state.fiestaContext.isVisitor){
         updateFieldFighterRecord(state.opponent.id, state.fiestaContext.provinceId, !won, true, {
           tier:'Juvenile', opponent: getFighterById(state.fighterId).name, result: won?'L':'W', method:r.method,
@@ -3369,12 +3489,14 @@ function wireEvents(){
       flash = state.fiestaContext.isVisitor ? "Word travels fast — that one might make the papers in another province." : null;
     } else {
       const pit = currentPits().find(p=>p.id===state.fightPitId);
+      const cityKey = state.provinceId+'|'+state.settlementName+'|'+pit.id;
       const entryFee = 2 + Math.round(pit.reputationRequired/5);
       prize = won ? entryFee*3 + rand(0,5) : Math.round(entryFee*0.5);
       fameGain = won ? (r.method==='Decision' ? rand(1,2) : rand(2,4)) : (Math.random()<0.2 ? 1 : 0);
       // The opponent's record needs to persist back to the pit roster, or they'd stay
       // frozen at whatever record they were generated with forever.
       updateOpponentRecord(state.provinceId, state.settlementName, pit.id, state.opponent.id, !won);
+      recordPitResult(state.fighterId, cityKey, won);
       updateFighter(state.fighterId, ff=>{
         if(won) ff.record.wins += 1; else ff.record.losses += 1;
         ff.fightLog.push({
@@ -3436,6 +3558,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V10 · 2026-07-12</div>
+<div class="version-badge">FREE ROAM · V12 · 2026-07-12</div>
 </body>
 </html>
