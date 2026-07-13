@@ -1598,7 +1598,7 @@ function renderModal(){
     return `
       <div class="mf-history-row">
         <div class="mfh-date">${dateStr}</div>
-        <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
+        <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponentId ? `<span class="clickable-name" data-open-fighter="${e.opponentId}">${e.opponent}</span>` : e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
         <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
       </div>
     `;
@@ -2496,6 +2496,6 @@ function updateNextBasicsDisabled(){
 
 render();
 </script>
-<div class="version-badge">CHARACTER CREATOR · V12 · 2026-07-12</div>
+<div class="version-badge">CHARACTER CREATOR · V13 · 2026-07-12</div>
 </body>
 </html>
