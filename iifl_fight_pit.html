@@ -364,7 +364,19 @@ function ensureFighterDefaults(f){
   if(!f.pendingAmateurOffers) f.pendingAmateurOffers = [];
   if(f.lastGrowthAge === undefined) f.lastGrowthAge = 12; // every career starts at 12 — safe retroactive catch-up point
   applyPendingGrowth(f);
+  reconcileRecord(f);
   return f;
+}
+// The header "Career X-Y" record and the fight-by-fight log underneath it were able to
+// drift apart (a record increment somewhere without a matching log entry, or vice
+// versa). The log is the real source of truth — every official fight the fighter has
+// been in should be a line in it — so the record is now always recomputed from it
+// rather than tracked as a separate counter that can fall out of sync.
+function reconcileRecord(f){
+  if(!f.fightLog) return;
+  const wins = f.fightLog.filter(e=>e.result==='W').length;
+  const losses = f.fightLog.filter(e=>e.result==='L').length;
+  f.record = { wins, losses };
 }
 function getRoster(){
   const roster = loadRoster().map(ensureFighterDefaults);
@@ -670,7 +682,7 @@ function logNpcBout(winner, loser, tier, location, day){
   const dateStr = dateForDay(day).toISOString();
   [[winner,loser,'W'],[loser,winner,'L']].forEach(([self, opp, result])=>{
     if(!self.fightLog) self.fightLog = [];
-    self.fightLog.push({ tier, opponent: opp.name, result, method: pick(['Decision','TKO','KO']), location, date: dateStr });
+    self.fightLog.push({ tier, opponent: opp.name, opponentId: opp.id, result, method: pick(['Decision','TKO','KO']), location, date: dateStr });
     if(self.fightLog.length > 10) self.fightLog = self.fightLog.slice(-10); // flavor history, not a full ledger
   });
 }
@@ -1621,7 +1633,7 @@ function renderModal(){
     return `
       <div class="mf-history-row">
         <div class="mfh-date">${dateStr}</div>
-        <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
+        <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponentId ? `<span class="clickable-name" data-open-fighter="${e.opponentId}">${e.opponent}</span>` : e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
         <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
       </div>
     `;
@@ -2470,7 +2482,7 @@ function applyBoutResult(){
     }
     if(isFinish) s.finishes += (playerWon ? 1 : 0);
     f.fightLog.push({
-      tier: tierName, opponent: state.opponent.name, result: playerWon ? 'W':'L', method: r.method,
+      tier: tierName, opponent: state.opponent.name, opponentId: state.opponent.id, result: playerWon ? 'W':'L', method: r.method,
       location: `${state.arena.name} — ${s.pitName}`, date: dateForDay(getCurrentDay()).toISOString(),
     });
     growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), isAmateur);
@@ -2490,7 +2502,7 @@ function applyBoutResult(){
   if(poolKey){
     const playerName = getFighterById(state.fighterId).name;
     updateFieldFighterRecord(state.opponent.id, poolKey, !playerWon, !isAmateur, {
-      tier: tierName, opponent: playerName, result: playerWon ? 'L' : 'W', method: r.method,
+      tier: tierName, opponent: playerName, opponentId: state.fighterId, result: playerWon ? 'L' : 'W', method: r.method,
       location: `${state.arena.name} — ${s.pitName}`, date: dateForDay(getCurrentDay()).toISOString(),
     });
   }
@@ -2530,7 +2542,7 @@ function applyTournamentBoutResult(){
   updateFighter(state.fighterId, (f)=>{
     if(playerWon) f.record.wins += 1; else f.record.losses += 1;
     f.fightLog.push({
-      tier: 'Amateur', opponent: state.opponent.name, result: playerWon ? 'W':'L', method: r.method,
+      tier: 'Amateur', opponent: state.opponent.name, opponentId: state.opponent.id, result: playerWon ? 'W':'L', method: r.method,
       location: `${state.arena.name} — ${stage} ${roundName}`, date: dateForDay(getCurrentDay()).toISOString(),
     });
     growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), true);
@@ -2539,7 +2551,7 @@ function applyTournamentBoutResult(){
   if(state.opponent.leagueId){
     const playerName = getFighterById(state.fighterId).name;
     updateFieldFighterRecord(state.opponent.id, state.opponent.leagueId, !playerWon, false, {
-      tier: 'Amateur', opponent: playerName, result: playerWon ? 'L' : 'W', method: r.method,
+      tier: 'Amateur', opponent: playerName, opponentId: state.fighterId, result: playerWon ? 'L' : 'W', method: r.method,
       location: `${state.arena.name} — ${stage} ${roundName}`, date: dateForDay(getCurrentDay()).toISOString(),
     });
   }
@@ -2581,6 +2593,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V15 · 2026-07-12</div>
+<div class="version-badge">FIGHT PIT · V16 · 2026-07-12</div>
 </body>
 </html>
