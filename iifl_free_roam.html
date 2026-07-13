@@ -428,7 +428,7 @@ function compressStat(rawValue, age, tier){
 
 /* ============================ SETTLEMENTS_SHORT & finalizeOpponent (ported from Fight Pit) ============================ */
 const SETTLEMENTS_SHORT = {
-  alexandretta: ['Williamsburg','St. Anne','Nattingham','Wolverbridge','Blackford','Port Oxford','Blackchapel','Mosshead','Whitechapel','Cowborough','Munchen'],
+  alexandretta: ['Williamsburg','St. Anne','Nattingham','Wolverbridge','Blackford','Port Oxford','Blackchapel','Mosshead','Cowborough','Munchen'],
   kolsati: ['Kolsati','St. Johnson','Iron Wharf','Dunmore','Pell\'s Crossing','Marrow Hill','Castellan Heights','Briggston','Lincoln','Richmond','Cutter\'s End','Wickson','Venice','Dorado','Coco Ridge','North Bender','Slate Row'],
   sherwood: ['Frontenac City','Kahuna','Millbrook Heights','Caldwell Junction','Petsworth','Harrow\'s Bend','Oak Siding','North Lawrenceville','Greeley Flats','Lawrenceville','Brakken','Devil\'s Point','Starsanne','Cambridge','Thistledown','Shorneville','Dennapolis','Sheffield'],
   gazon: ['Gazon Main','Northern Gazon','Cangate','Gazon South'],
@@ -860,10 +860,28 @@ function runJuvenileIntake(pools, provinceId, day){
   }
 }
 
+// Fixes fighters whose hometown points to a settlement that's since been removed
+// from SETTLEMENTS_SHORT (e.g. old Whitechapel data) — without this they'd be
+// permanently unreachable in the walkable city list.
+function repairOrphanedHometowns(pools){
+  let changed = false;
+  Object.entries(pools.juvenile || {}).forEach(([provinceId, list])=>{
+    const valid = SETTLEMENTS_SHORT[provinceId] || [];
+    list.forEach(f=>{
+      if(valid.length && !valid.includes(f.hometown)){
+        f.hometown = pick(valid);
+        changed = true;
+      }
+    });
+  });
+  if(changed) saveFieldPools(pools);
+}
+
 function catchUpJuvenileSimulation(){
   const pools = loadFieldPools();
   if(!pools.juvenile) pools.juvenile = {};
   PROVINCES.forEach(p=> seedJuvenilePoolInPlace(pools, p.id));
+  repairOrphanedHometowns(pools);
   const today = getCurrentDay();
   const lastSim = pools.juvenileLastSimDay || 0;
   if(lastSim >= today){ saveFieldPools(pools); return pools; }
@@ -1331,26 +1349,51 @@ function pitRosterSize(population, pitCount){
   return clamp(Math.round(perPit/2200) + rand(-2,3), 5, 24);
 }
 
+// Stable, cheap string hash — used to deterministically (not randomly, so it's the
+// same every time you check) sort real registry fighters into a settlement's pits.
+function hashId(str){
+  let h = 0;
+  for(let i=0;i<str.length;i++){ h = (h*31 + str.charCodeAt(i)) >>> 0; }
+  return h;
+}
+
+// Pit rosters are a LIVE view into the real, shared Juvenile registry (pools.juvenile)
+// — the same population the newspaper and standings read from — filtered to fighters
+// whose hometown is this settlement, then deterministically bucketed across however
+// many pits this settlement has. Nothing here is a frozen snapshot: new intake shows
+// up automatically, and records/growth are always current because this is computed
+// fresh every time, not stored.
+function attachLiveRosters(metas, provinceId, settlementName){
+  catchUpJuvenileSimulation();
+  const pools = loadFieldPools();
+  const pool = (pools.juvenile[provinceId] || []).filter(f=> f.hometown === settlementName);
+  const buckets = metas.map(()=>[]);
+  pool.forEach(f=>{
+    const idx = hashId(f.id) % metas.length;
+    buckets[idx].push(f);
+  });
+  return metas.map((m,i)=> Object.assign({}, m, { roster: buckets[i] }));
+}
+
 function ensureCityPits(provinceId, settlementName){
   const s = loadRoamState();
   const key = provinceId + '|' + settlementName;
   const entry = (SETTLEMENT_DATA[provinceId]||[]).find(e=>e.name===settlementName);
   const tier = entry ? entry.tier : 'Village';
-  if(s.pits[key]){
+  const province = PROVINCES.find(p=>p.id===provinceId);
+  let metas = s.pits[key];
+  if(metas){
     // Repair pass: saves generated before the flagship-pit fix won't have it yet —
     // rename the free (index 0) pit to it rather than leaving it permanently missing.
-    const province = PROVINCES.find(p=>p.id===provinceId);
-    if(tier==='Capital' && province && province.pit && !s.pits[key].some(p=>p.name===province.pit)){
-      s.pits[key][0].name = province.pit;
+    if(tier==='Capital' && province && province.pit && !metas.some(p=>p.name===province.pit)){
+      metas[0].name = province.pit;
       saveRoamState(s);
     }
-    return s.pits[key];
+    return attachLiveRosters(metas, provinceId, settlementName);
   }
-  const population = entry ? entry.population : 800;
   const pitCount = PIT_COUNT_BY_TIER[tier] || 1;
-  const province = PROVINCES.find(p=>p.id===provinceId);
   const usedNames = new Set();
-  const pits = [];
+  metas = [];
   for(let i=0;i<pitCount;i++){
     let pitName;
     if(i===0 && tier==='Capital' && province && province.pit){
@@ -1363,24 +1406,17 @@ function ensureCityPits(provinceId, settlementName){
       let guard=0; while((usedNames.has(pitName) || (province && pitName===province.pit)) && guard<30){ pitName = pick(PIT_NAMES); guard++; }
     }
     usedNames.add(pitName);
-    const rosterSize = pitRosterSize(population, pitCount);
-    const roster = [];
-    for(let j=0;j<rosterSize;j++){
-      const wc = pick(['Light','Middle','Heavy']);
-      roster.push(generatePitFighter(provinceId, settlementName, wc));
-    }
-    pits.push({
+    metas.push({
       id: 'pit_' + key.replace(/\s+/g,'_') + '_' + i,
       name: pitName,
       bossName: pickName(provinceId, settlementName),
       bossTitle: pick(BOSS_TITLES),
       reputationRequired: i<2 ? 0 : Math.round(8 + (i-1)*11 + rand(-2,3)),
-      roster,
     });
   }
-  s.pits[key] = pits;
+  s.pits[key] = metas;
   saveRoamState(s);
-  return pits;
+  return attachLiveRosters(metas, provinceId, settlementName);
 }
 
 /* ============================ FIGHT NIGHT SCHEDULE ============================ */
@@ -1420,7 +1456,7 @@ function ensurePitSchedule(pit, day){
   const matches = [];
   for(let i=0;i+1<toPair.length;i+=2){
     const a = toPair[i], b = toPair[i+1];
-    const quality = (a.allTimeRecord.wins-a.allTimeRecord.losses) + (b.allTimeRecord.wins-b.allTimeRecord.losses) + calcOVR(a.stats) + calcOVR(b.stats);
+    const quality = (a.record.wins-a.record.losses) + (b.record.wins-b.record.losses) + calcOVR(a.stats) + calcOVR(b.stats);
     matches.push({ aId: a.id, bId: b.id, quality });
   }
   matches.sort((a,b)=> a.quality-b.quality); // worst first — best matchups land last (headliners)
@@ -1560,17 +1596,13 @@ function drawFiestaOpponent(pit){
 
 // Persists a win/loss back onto a specific pit-roster fighter — without this, every
 // registered fighter would stay frozen at their generated starting record forever.
-function updateOpponentRecord(provinceId, settlementName, pitId, opponentId, opponentWon){
-  const s = loadRoamState();
-  const key = provinceId + '|' + settlementName;
-  const pits = s.pits[key];
-  if(!pits) return;
-  const pit = pits.find(p=>p.id===pitId);
-  if(!pit) return;
-  const opp = pit.roster.find(r=>r.id===opponentId);
-  if(!opp) return;
-  if(opponentWon) opp.allTimeRecord.wins += 1; else opp.allTimeRecord.losses += 1;
-  saveRoamState(s);
+function updateOpponentRecord(provinceId, opponentId, opponentWon, logEntry){
+  // Pit rosters are now a live view into the real Juvenile registry (the same
+  // fighters the newspaper and standings show) — recording a result here means
+  // writing straight to that registry, not a separate frozen snapshot that never
+  // shows up anywhere else. This is what makes "who's in this pit" and "who's #1 in
+  // the province" the same population instead of two disconnected casts.
+  updateFieldFighterRecord(opponentId, provinceId, opponentWon, true, logEntry);
 }
 
 const ADVICE_LINES_PIT = [
@@ -1615,7 +1647,7 @@ function generateNpc(provinceId, settlementName, role, pits){
     const pool = pits.flatMap(p=>p.roster);
     if(pool.length){
       const subject = pick(pool);
-      const rec = subject.allTimeRecord;
+      const rec = subject.record;
       const recordPhrase = rec.wins > rec.losses*2 ? `${rec.wins}-${rec.losses} and barely breaking a sweat.`
         : rec.wins > rec.losses ? `${rec.wins}-${rec.losses}, solid.`
         : rec.wins === rec.losses ? `${rec.wins}-${rec.losses} — could go either way with this one.`
@@ -2194,14 +2226,9 @@ function draftWatchHtml(f){
 }
 
 function getPitFighterById(id){
-  const s = loadRoamState();
-  if(!s.pits) return null;
-  for(const key of Object.keys(s.pits)){
-    for(const pit of s.pits[key]){
-      const f = pit.roster.find(r=> r.id === id);
-      if(f) return f;
-    }
-  }
+  // Pit rosters are a live view into the Juvenile registry now (not stored here
+  // anymore), so this is redundant with getFieldFighterById — kept as a safe no-op
+  // fallback rather than removed outright, in case anything still calls it.
   return null;
 }
 
@@ -2720,9 +2747,9 @@ function renderLocPit(){
   const byClass = { Light:[], Middle:[], Heavy:[] };
   pit.roster.forEach(r=> byClass[r.weightClass].push(r));
   if(isSignedHere){
-    byClass[weightClassOf(f.weightLb)].push({ id:f.id, name:f.name, age:f.age, allTimeRecord:f.record, isPlayer:true });
+    byClass[weightClassOf(f.weightLb)].push({ id:f.id, name:f.name, age:f.age, record:f.record, isPlayer:true });
   }
-  Object.values(byClass).forEach(list=> list.sort((a,b)=> b.age-a.age || (b.allTimeRecord.wins-b.allTimeRecord.losses)-(a.allTimeRecord.wins-a.allTimeRecord.losses)));
+  Object.values(byClass).forEach(list=> list.sort((a,b)=> b.age-a.age || (b.record.wins-b.record.losses)-(a.record.wins-a.record.losses)));
 
   const rosterHtml = ['Light','Middle','Heavy'].map(wc=>{
     if(!byClass[wc].length) return '';
@@ -2730,7 +2757,7 @@ function renderLocPit(){
       <div class="roster-fighter-row">
         <span class="rfr-name clickable-name" data-open-fighter="${r.id}">${r.isPlayer?'⭐ ':''}${r.name}${r.isPlayer?' (you)':''}</span>
         <span class="rfr-age">Age ${r.age}</span>
-        <span class="rfr-record">${r.allTimeRecord.wins}-${r.allTimeRecord.losses}</span>
+        <span class="rfr-record">${r.record.wins}-${r.record.losses}</span>
       </div>
     `).join('');
     return `<div class="weight-class-block"><div class="wc-label">${wc}weight</div>${rows}</div>`;
@@ -2924,7 +2951,7 @@ function renderBookSlot(){
         <div class="tape-name">${opp.name}</div>
         <div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div>
         <div class="tape-ovr">${ovr}</div>
-        <div class="tape-record">${opp.allTimeRecord.wins}-${opp.allTimeRecord.losses} all-time</div>
+        <div class="tape-record">${opp.record.wins}-${opp.record.losses} all-time</div>
         <button class="btn btn-primary" data-book-opponent="${opp.id}" style="margin-top:10px; width:100%; padding:9px;">Book This Fight</button>
       </div>
     `;
@@ -2990,7 +3017,7 @@ function renderChooseOpponent(){
         <div class="tape-name">${opp.name}</div>
         <div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div>
         <div class="tape-ovr">${ovr}</div>
-        <div class="tape-record">${opp.allTimeRecord.wins}-${opp.allTimeRecord.losses} all-time</div>
+        <div class="tape-record">${opp.record.wins}-${opp.record.losses} all-time</div>
         <button class="fr-btn" data-scout="${i}" style="margin-top:8px; width:100%;">🔍 Scout Report</button>
         ${report ? `<p style="font-family:var(--body); font-size:11.5px; color:var(--bone-dim); margin-top:8px; text-align:left; line-height:1.5;"><span style="color:var(--brass); font-family:var(--label); font-size:9.5px; letter-spacing:1px; text-transform:uppercase;">${agent.label} says:</span><br>"${report}"</p>` : ''}
         <button class="btn btn-primary" data-pick-opponent="${i}" style="margin-top:10px; width:100%; padding:9px;">Fight Him</button>
@@ -3272,6 +3299,12 @@ function wireEvents(){
     const myWc = weightClassOf(f.weightLb);
     let candidates = pit.roster.filter(r=>r.weightClass===myWc);
     if(candidates.length < 3) candidates = candidates.concat(pit.roster.filter(r=>r.weightClass!==myWc));
+    if(!candidates.length){
+      state.flashMessage = "Nobody free to fight at this pit right now — try another pit, or check back after Monday's card.";
+      state.screen = 'city-walk';
+      render();
+      return;
+    }
     const n = Math.min(opponentChoiceCount(f.freeRoamFightCount), candidates.length || 1);
     const chosen = [];
     const pool = [...candidates];
@@ -3465,7 +3498,11 @@ function wireEvents(){
       const cityKey = state.provinceId+'|'+state.settlementName+'|'+pit.id;
       prize = won ? rand(8,16) : rand(2,5);
       fameGain = won ? rand(3,6) : (Math.random()<0.3 ? 1 : 0);
-      updateOpponentRecord(state.provinceId, state.settlementName, pit.id, state.opponent.id, !won);
+      const playerNameT = getFighterById(state.fighterId).name;
+      updateOpponentRecord(state.provinceId, state.opponent.id, !won, {
+        tier:'Juvenile', opponent: playerNameT, opponentId: state.fighterId, result: won?'L':'W', method:r.method,
+        location: `${pit.name} — Tournament, ${state.settlementName}`, date: dateForDay(getCurrentDay()).toISOString(),
+      });
       recordPitResult(state.fighterId, cityKey, won);
       updateFighter(state.fighterId, ff=>{
         if(won) ff.record.wins += 1; else ff.record.losses += 1;
@@ -3500,7 +3537,10 @@ function wireEvents(){
           location: `${pit.name} — Fiesta Night, ${state.settlementName}`, date: dateForDay(getCurrentDay()).toISOString(),
         });
       } else {
-        updateOpponentRecord(state.provinceId, state.settlementName, pit.id, state.opponent.id, !won);
+        updateOpponentRecord(state.provinceId, state.opponent.id, !won, {
+          tier:'Juvenile', opponent: getFighterById(state.fighterId).name, opponentId: state.fighterId, result: won?'L':'W', method:r.method,
+          location: `${pit.name} — Fiesta Night, ${state.settlementName}`, date: dateForDay(getCurrentDay()).toISOString(),
+        });
       }
       updateFighter(state.fighterId, ff=>{
         if(won) ff.record.wins += 1; else ff.record.losses += 1;
@@ -3523,7 +3563,11 @@ function wireEvents(){
       fameGain = won ? (r.method==='Decision' ? rand(1,2) : rand(2,4)) : (Math.random()<0.2 ? 1 : 0);
       // The opponent's record needs to persist back to the pit roster, or they'd stay
       // frozen at whatever record they were generated with forever.
-      updateOpponentRecord(state.provinceId, state.settlementName, pit.id, state.opponent.id, !won);
+      const playerNameD = getFighterById(state.fighterId).name;
+      updateOpponentRecord(state.provinceId, state.opponent.id, !won, {
+        tier:'Juvenile', opponent: playerNameD, opponentId: state.fighterId, result: won?'L':'W', method:r.method,
+        location: `${pit.name}, ${state.settlementName}`, date: dateForDay(getCurrentDay()).toISOString(),
+      });
       recordPitResult(state.fighterId, cityKey, won);
       updateFighter(state.fighterId, ff=>{
         if(won) ff.record.wins += 1; else ff.record.losses += 1;
@@ -3586,6 +3630,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V14 · 2026-07-12</div>
+<div class="version-badge">FREE ROAM · V15 · 2026-07-13</div>
 </body>
 </html>
