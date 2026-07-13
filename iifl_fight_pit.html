@@ -783,10 +783,28 @@ function runJuvenileIntake(pools, provinceId, day){
   }
 }
 
+// Fixes fighters whose hometown points to a settlement that's since been removed
+// from SETTLEMENTS_SHORT (e.g. old Whitechapel data) — without this they'd be
+// permanently unreachable in Free Roam's walkable city list.
+function repairOrphanedHometowns(pools){
+  let changed = false;
+  Object.entries(pools.juvenile || {}).forEach(([provinceId, list])=>{
+    const valid = SETTLEMENTS_SHORT[provinceId] || [];
+    list.forEach(f=>{
+      if(valid.length && !valid.includes(f.hometown)){
+        f.hometown = pick(valid);
+        changed = true;
+      }
+    });
+  });
+  if(changed) saveFieldPools(pools);
+}
+
 function catchUpJuvenileSimulation(){
   const pools = loadFieldPools();
   if(!pools.juvenile) pools.juvenile = {};
   PROVINCES.forEach(p=> seedJuvenilePoolInPlace(pools, p.id));
+  repairOrphanedHometowns(pools);
   const today = getCurrentDay();
   const lastSim = pools.juvenileLastSimDay || 0;
   if(lastSim >= today){ saveFieldPools(pools); return pools; }
@@ -960,7 +978,7 @@ function petitionApprovalChance(f){
 }
 
 const SETTLEMENTS_SHORT = {
-  alexandretta: ['Williamsburg','St. Anne','Nattingham','Wolverbridge','Blackford','Port Oxford','Blackchapel','Mosshead','Whitechapel','Cowborough','Munchen'],
+  alexandretta: ['Williamsburg','St. Anne','Nattingham','Wolverbridge','Blackford','Port Oxford','Blackchapel','Mosshead','Cowborough','Munchen'],
   kolsati: ['Kolsati','St. Johnson','Iron Wharf','Dunmore','Pell\'s Crossing','Marrow Hill','Castellan Heights','Briggston','Lincoln','Richmond','Cutter\'s End','Wickson','Venice','Dorado','Coco Ridge','North Bender','Slate Row'],
   sherwood: ['Frontenac City','Kahuna','Millbrook Heights','Caldwell Junction','Petsworth','Harrow\'s Bend','Oak Siding','North Lawrenceville','Greeley Flats','Lawrenceville','Brakken','Devil\'s Point','Starsanne','Cambridge','Thistledown','Shorneville','Dennapolis','Sheffield'],
   gazon: ['Gazon Main','Northern Gazon','Cangate','Gazon South'],
@@ -2593,6 +2611,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V16 · 2026-07-12</div>
+<div class="version-badge">FIGHT PIT · V17 · 2026-07-13</div>
 </body>
 </html>
