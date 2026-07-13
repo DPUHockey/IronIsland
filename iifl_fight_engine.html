@@ -300,7 +300,16 @@ function saveRoster(list){
 function ensureRecord(f){
   if(!f.record) f.record = { wins:0, losses:0 };
   if(!f.fightLog) f.fightLog = [];
+  reconcileRecord(f);
   return f;
+}
+// Same fix as the other files — the header record is always recomputed from the fight
+// log rather than tracked as a separate counter that could fall out of sync.
+function reconcileRecord(f){
+  if(!f.fightLog) return;
+  const wins = f.fightLog.filter(e=>e.result==='W').length;
+  const losses = f.fightLog.filter(e=>e.result==='L').length;
+  f.record = { wins, losses };
 }
 
 /* ============================ FIGHT MATH ============================ */
@@ -714,7 +723,7 @@ function renderModal(){
     return `
       <div class="mf-history-row">
         <div class="mfh-date">${dateStr}</div>
-        <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
+        <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponentId ? `<span class="clickable-name" data-open-fighter="${e.opponentId}">${e.opponent}</span>` : e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
         <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
       </div>
     `;
@@ -1038,17 +1047,17 @@ function applyResultToRoster(){
   const location = `${state.arena.name} (Exhibition)`;
   if(winner){
     winner.record.wins += 1;
-    winner.fightLog.push({ tier:'Exhibition', opponent: loser ? loser.name : '—', result:'W', method: state.result.method, location, date: new Date().toISOString() });
+    winner.fightLog.push({ tier:'Exhibition', opponent: loser ? loser.name : '—', opponentId: loser ? loser.id : null, result:'W', method: state.result.method, location, date: dateForDay(getCurrentDay()).toISOString() });
   }
   if(loser){
     loser.record.losses += 1;
-    loser.fightLog.push({ tier:'Exhibition', opponent: winner ? winner.name : '—', result:'L', method: state.result.method, location, date: new Date().toISOString() });
+    loser.fightLog.push({ tier:'Exhibition', opponent: winner ? winner.name : '—', opponentId: winner ? winner.id : null, result:'L', method: state.result.method, location, date: dateForDay(getCurrentDay()).toISOString() });
   }
   saveRoster(roster);
 }
 
 render();
 </script>
-<div class="version-badge">FIGHT ENGINE · V6 · 2026-07-12</div>
+<div class="version-badge">FIGHT ENGINE · V7 · 2026-07-12</div>
 </body>
 </html>
