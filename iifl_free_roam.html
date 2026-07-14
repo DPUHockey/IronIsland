@@ -2377,6 +2377,11 @@ function realJuvenileStandings(n){
   Object.entries(pools.juvenile || {}).forEach(([provinceId, list])=>{
     list.forEach(f=> all.push(Object.assign({}, f, { provinceId })));
   });
+  // Same fix as the newspaper leaderboard — a registered player fighter is a real
+  // Juvenile competitor and belongs in real standings, not just the NPC field pool.
+  getRoster().filter(f=> f.juvenileHomeProvinceId).forEach(f=>{
+    all.push(Object.assign({}, f, { provinceId: f.juvenileHomeProvinceId }));
+  });
   all.sort((a,b)=> (b.record.wins-b.record.losses)-(a.record.wins-a.record.losses) || b.record.wins-a.record.wins);
   return all.slice(0, n);
 }
@@ -2729,6 +2734,14 @@ function topJuvenileFightersFor(provinceId, n){
   } else {
     pool = pools.juvenile[provinceId] || [];
   }
+  // The NPC field pool isn't the whole registry — a player's own created fighter is a
+  // real, registered Juvenile competitor too, and belongs in "real records" standings
+  // right alongside them, not left out because they live in a separate save slot.
+  const roster = getRoster().filter(f=>
+    (f.juvenileHomeProvinceId) &&
+    (provinceId === 'island' || f.juvenileHomeProvinceId === provinceId)
+  );
+  pool = pool.concat(roster);
   const sorted = [...pool].sort((a,b)=>
     (b.record.wins - b.record.losses) - (a.record.wins - a.record.losses) || b.record.wins - a.record.wins
   );
@@ -3939,6 +3952,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V21 · 2026-07-14</div>
+<div class="version-badge">FREE ROAM · V22 · 2026-07-14</div>
 </body>
 </html>
