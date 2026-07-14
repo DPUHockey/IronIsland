@@ -950,26 +950,29 @@ function runJuvenileTournamentDay(pools, provinceId, day){
 
 function runJuvenileFiestaDay(pools, provinceId, day, poolOverride){
   const pool = poolOverride || pools.juvenile[provinceId];
-  if(!pool || pool.length < 2) return;
-  const participants = [...pool].sort(()=>Math.random()-0.5).filter(()=> Math.random() < 0.3);
-  for(let i=0;i<participants.length;i++){
-    const fA = participants[i];
-    let fB = null;
-    // sometimes fiesta night draws a visiting fighter from another province
-    if(Math.random() < 0.25){
-      const otherIds = Object.keys(pools.juvenile).filter(id=> id!==provinceId && pools.juvenile[id].length);
-      if(otherIds.length) fB = pick(pools.juvenile[pick(otherIds)]);
-    }
-    if(!fB){
-      i += 1;
-      fB = participants[i];
-    }
-    if(!fB || fB.id === fA.id) continue;
-    const { winner, loser } = quickSimBout(fA, fB);
-    winner.record.wins += 1; loser.record.losses += 1;
-    logNpcBout(winner, loser, 'Juvenile', 'Fiesta Fights', day);
-    applyNpcGrowthTick(winner);
-  }
+  if(!pool || pool.length < 4) return;
+  Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
+    ['Light','Middle','Heavy'].forEach(wc=>{
+      const classGroup = group.filter(f=> f.weightClass===wc);
+      let size;
+      if(classGroup.length >= 16) size = 16;
+      else if(classGroup.length >= 8) size = 8;
+      else if(classGroup.length >= 4) size = 4;
+      else return; // not enough for a bracket this week in this class
+      let field = [...classGroup].sort(()=>Math.random()-0.5).slice(0, size);
+      while(field.length > 1){
+        const nextRound = [];
+        for(let i=0;i+1<field.length;i+=2){
+          const { winner, loser } = quickSimBout(field[i], field[i+1]);
+          winner.record.wins += 1; loser.record.losses += 1;
+          logNpcBout(winner, loser, 'Juvenile', `${settlement} — Fiesta Fights (${wc}weight)`, day);
+          nextRound.push(winner);
+        }
+        field = nextRound;
+      }
+      if(field[0]) applyNpcGrowthTick(field[0]); // tournament win = a growth tick, same as Tuesday
+    });
+  });
 }
 
 // Records a 1st/2nd/3rd finish on a fighter's own history — first-round-and-out losses
@@ -3251,6 +3254,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V25 · 2026-07-14</div>
+<div class="version-badge">FIGHT PIT · V26 · 2026-07-14</div>
 </body>
 </html>
