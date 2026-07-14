@@ -947,25 +947,29 @@ function runJuvenileTournamentDay(pools, provinceId, day){
 
 function runJuvenileFiestaDay(pools, provinceId, day, poolOverride){
   const pool = poolOverride || pools.juvenile[provinceId];
-  if(!pool || pool.length < 2) return;
-  const participants = [...pool].sort(()=>Math.random()-0.5).filter(()=> Math.random() < 0.3);
-  for(let i=0;i<participants.length;i++){
-    const fA = participants[i];
-    let fB = null;
-    if(Math.random() < 0.25){
-      const otherIds = Object.keys(pools.juvenile).filter(id=> id!==provinceId && pools.juvenile[id].length);
-      if(otherIds.length) fB = pick(pools.juvenile[pick(otherIds)]);
-    }
-    if(!fB){
-      i += 1;
-      fB = participants[i];
-    }
-    if(!fB || fB.id === fA.id) continue;
-    const { winner, loser } = quickSimBout(fA, fB);
-    winner.record.wins += 1; loser.record.losses += 1;
-    logNpcBout(winner, loser, 'Juvenile', 'Fiesta Fights', day);
-    applyNpcGrowthTick(winner);
-  }
+  if(!pool || pool.length < 4) return;
+  Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
+    ['Light','Middle','Heavy'].forEach(wc=>{
+      const classGroup = group.filter(f=> f.weightClass===wc);
+      let size;
+      if(classGroup.length >= 16) size = 16;
+      else if(classGroup.length >= 8) size = 8;
+      else if(classGroup.length >= 4) size = 4;
+      else return; // not enough for a bracket this week in this class
+      let field = [...classGroup].sort(()=>Math.random()-0.5).slice(0, size);
+      while(field.length > 1){
+        const nextRound = [];
+        for(let i=0;i+1<field.length;i+=2){
+          const { winner, loser } = quickSimBout(field[i], field[i+1]);
+          winner.record.wins += 1; loser.record.losses += 1;
+          logNpcBout(winner, loser, 'Juvenile', `${settlement} — Fiesta Fights (${wc}weight)`, day);
+          nextRound.push(winner);
+        }
+        field = nextRound;
+      }
+      if(field[0]) applyNpcGrowthTick(field[0]); // tournament win = a growth tick, same as Tuesday
+    });
+  });
 }
 
 // Records a 1st/2nd/3rd finish on a fighter's own history — first-round-and-out losses
@@ -1899,21 +1903,22 @@ function bookScheduleSlot(pit, day, slotIndex, opponentId){
 */
 function bracketRoundsNeeded(size){ return Math.round(Math.log2(size)); }
 
-function getPitTournament(pit, day){
+function getPitTournament(pit, day, weightClass){
   const s = loadRoamState();
   if(!s.pitTournaments) return null;
-  return s.pitTournaments[pit.id + '|' + day] || null;
+  return s.pitTournaments[pit.id + '|' + day + '|' + weightClass] || null;
 }
 
-function createPitTournament(pit, day, includePlayer){
+function createPitTournament(pit, day, includePlayer, weightClass, kind){
   const s = loadRoamState();
   if(!s.pitTournaments) s.pitTournaments = {};
-  const key = pit.id + '|' + day;
+  const key = pit.id + '|' + day + '|' + weightClass;
   if(s.pitTournaments[key]) return s.pitTournaments[key];
 
-  const pool = [...pit.roster].sort(()=>Math.random()-0.5);
-  const size = pool.length >= 16 ? 16 : (pool.length >= 8 ? 8 : 0);
-  if(size === 0) return null; // not enough registered fighters for a card tonight
+  const classPool = pit.roster.filter(r=> r.weightClass === weightClass);
+  const pool = [...classPool].sort(()=>Math.random()-0.5);
+  const size = pool.length >= 16 ? 16 : (pool.length >= 8 ? 8 : (pool.length >= 4 ? 4 : 0));
+  if(size === 0) return null; // not enough registered fighters in this weight class for a card tonight
 
   const fieldIds = pool.slice(0, size).map(x=>x.id);
   if(includePlayer) fieldIds[Math.floor(Math.random()*fieldIds.length)] = 'player';
@@ -1922,7 +1927,7 @@ function createPitTournament(pit, day, includePlayer){
   for(let i=0;i<fieldIds.length;i+=2){
     round1.push({ aId: fieldIds[i], bId: fieldIds[i+1], winnerId: null });
   }
-  const tourney = { day, pitId: pit.id, size, rounds:[round1], complete:false, championId:null };
+  const tourney = { day, pitId: pit.id, weightClass, kind: kind || 'local', size, rounds:[round1], complete:false, championId:null };
   s.pitTournaments[key] = tourney;
   saveRoamState(s);
   return tourney;
@@ -1935,7 +1940,7 @@ function tournamentFighterById(pit, playerFighter, id){
 
 function progressTournament(pit, playerFighter, tourney){
   const s = loadRoamState();
-  const key = pit.id + '|' + tourney.day;
+  const key = pit.id + '|' + tourney.day + '|' + tourney.weightClass;
   let changed = false;
   const round = tourney.rounds[tourney.rounds.length-1];
   round.forEach(m=>{
@@ -2156,7 +2161,7 @@ const state = {
   standingsTier: 'pro',
   newspaperProvinceId: null, // which province's paper is currently open; null = player's own
   pendingScheduleSlot: null, // index of the fight-night slot being booked
-  tournamentContext: null, // { pitId, day, roundIndex, matchIndex } while fighting a Tuesday bracket match
+  tournamentContext: null, // { pitId, day, weightClass, roundIndex, matchIndex } while fighting a Tuesday/Wednesday bracket match
   fiestaContext: null, // { isVisitor, provinceId } while fighting a Wednesday fiesta match
 };
 
@@ -3153,6 +3158,7 @@ function renderLocPit(){
   const locked = f.fame < pit.reputationRequired;
   const day = getCurrentDay();
   const weekday = weekdayNameForDay(day);
+  const myWc = weightClassOf(f.weightLb);
 
   const byClass = { Light:[], Middle:[], Heavy:[] };
   pit.roster.forEach(r=> byClass[r.weightClass].push(r));
@@ -3206,36 +3212,50 @@ function renderLocPit(){
       ${alreadyBookedTonight ? `<p style="font-family:var(--mono); font-size:10.5px; color:var(--brass); margin-top:8px;">You're already on tonight's card.</p>` : ''}
     `;
   } else if(weekday === 'Tuesday'){
-    const tourney = getPitTournament(pit, day);
-    const isSignedHereForTourney = isSignedHere;
+    const tourney = getPitTournament(pit, day, myWc);
+    const classCount = pit.roster.filter(r=> r.weightClass===myWc).length;
+    const sizeGuess = classCount>=16?16:classCount>=8?8:classCount>=4?4:0;
     scheduleHtml = `
       <div class="section-label" style="margin-top:18px;">Tonight — Local Tournament</div>
       <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:10px;">
-        The promoter sets the bracket for tournament nights — 8 fighters, single elimination.
-        ${tourney ? (tourney.complete ? 'Tonight\'s bracket is finished.' : 'Bracket\'s locked in and underway.') : (isSignedHereForTourney ? 'You can still buy in before it locks.' : 'Sign here to be eligible to buy in.')}
+        The promoter sets the ${myWc.toLowerCase()}weight bracket for tournament nights — ${sizeGuess || 'not enough fighters for a'} ${sizeGuess?'fighters, single elimination.':'bracket tonight.'}
+        ${tourney ? (tourney.complete ? 'Tonight\'s bracket is finished.' : 'Bracket\'s locked in and underway.') : (isSignedHere ? 'You can still buy in before it locks.' : 'Sign here to be eligible to buy in.')}
       </p>
       <div class="btn-row"><span></span><button class="btn btn-primary" data-view-tournament="1">${tourney ? 'View Bracket →' : 'See Tonight\'s Bracket →'}</button></div>
     `;
   } else if(weekday === 'Wednesday'){
-    const entryFee = 2 + Math.round(pit.reputationRequired/5);
-    const canFiesta = isSignedHere && !locked;
+    const tourney = getPitTournament(pit, day, myWc);
+    const classCount = pit.roster.filter(r=> r.weightClass===myWc).length;
+    const sizeGuess = classCount>=16?16:classCount>=8?8:classCount>=4?4:0;
     scheduleHtml = `
       <div class="section-label" style="margin-top:18px;">Tonight — Fiesta Fights</div>
       <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:10px;">
         The island's biggest names are off fighting a sponsored invite card at one of the marquee pits tonight —
-        here it's the usual looser scene instead: local fighters, other pits around town, and sometimes somebody's
-        come in from another province entirely. No set schedule, just show up and find someone.
+        here it's still a real bracket, just a looser local one: ${sizeGuess || 'not enough fighters for a'} ${sizeGuess?(myWc.toLowerCase()+'weights, single elimination.'):'card tonight in your weight class.'}
+        ${tourney ? (tourney.complete ? 'Tonight\'s bracket is finished.' : 'Bracket\'s locked in and underway.') : (isSignedHere ? 'You can still buy in before it locks.' : 'Sign here to be eligible to buy in.')}
       </p>
-      ${canFiesta ? `<div class="btn-row"><span></span><button class="btn btn-primary" id="fiesta-fight" data-pit-id="${pit.id}">Find a Fiesta Opponent — $${entryFee} →</button></div>` : ''}
-      ${!isSignedHere && !locked ? `<p style="font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:8px;">Sign here to jump into a fiesta card.</p>` : ''}
+      <div class="btn-row"><span></span><button class="btn btn-primary" data-view-tournament="1">${tourney ? 'View Bracket →' : 'See Tonight\'s Bracket →'}</button></div>
     `;
   }
+
+  const JUVENILE_FIGHT_NIGHTS = ['Monday','Tuesday','Wednesday'];
+  const isFightNight = JUVENILE_FIGHT_NIGHTS.includes(weekday);
+  const OTHER_TIER_NIGHT_NAMES = { Thursday:'the Junior League', Friday:'the Amateur circuit', Saturday:'the Pro league', Sunday:'a night off island-wide' };
 
   let actionHtml;
   if(locked){
     actionHtml = `<p style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center;">This pit doesn't know your name yet. Build some fame first (needs ${pit.reputationRequired}, you have ${f.fame}).</p>`;
   } else if(!isSignedHere){
     actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="sign-here" data-pit-id="${pit.id}">${f.pitMemberships.length ? 'Sign Here — Add This Pit →' : 'Sign Here — Start Your Career'}</button></div>`;
+  } else if(!isFightNight){
+    const dayIdx = WEEKDAY_NAMES.indexOf(weekday);
+    const daysToMonday = 7 - dayIdx;
+    actionHtml = `
+      <p style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center; margin-bottom:10px;">
+        No Juvenile card here tonight — ${weekday} belongs to ${OTHER_TIER_NIGHT_NAMES[weekday] || 'another tier'}. Juvenile fight nights run Monday through Wednesday.
+      </p>
+      <div class="btn-row"><span></span><button class="btn btn-primary" id="sim-to-fight-night" data-days="${daysToMonday}">Sim Ahead to Monday →</button></div>
+    `;
   } else {
     actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="register-fight" data-pit-id="${pit.id}">Register to Fight →</button></div>`;
   }
@@ -3264,15 +3284,20 @@ function renderTournamentNight(){
   const f = getFighterById(state.fighterId);
   const pit = currentPits().find(p=>p.id===state.visitingLocation.pitId);
   const day = getCurrentDay();
+  const weekday = weekdayNameForDay(day);
+  const kind = weekday === 'Wednesday' ? 'fiesta' : 'local';
+  const label = kind === 'fiesta' ? 'Fiesta Fights' : 'Tournament Night';
+  const myWc = weightClassOf(f.weightLb);
   const cityKey = state.provinceId+'|'+state.settlementName+'|'+pit.id;
   const isSignedHere = isSignedAtPit(f, cityKey);
-  let tourney = getPitTournament(pit, day);
+  let tourney = getPitTournament(pit, day, myWc);
 
-  if(!tourney && pit.roster.length < 8){
+  const classCount = pit.roster.filter(r=> r.weightClass===myWc).length;
+  if(!tourney && classCount < 4){
     return `
-      <div class="loc-head"><div class="loc-name">${pit.name} — Tournament Night</div></div>
+      <div class="loc-head"><div class="loc-name">${pit.name} — ${label}</div></div>
       <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:16px;">
-        Not enough registered fighters at this pit for a tournament card tonight — needs at least 8. Try a bigger pit, or catch League Fight Night Monday instead.
+        Not enough registered ${myWc.toLowerCase()}weights at this pit for a bracket tonight — needs at least 4. Try a bigger pit, or catch ${kind==='fiesta'?'a marquee invite card':'League Fight Night Monday'} instead.
       </p>
       <div class="btn-row">
         <button class="btn" id="back-to-pit">← Back</button>
@@ -3282,10 +3307,11 @@ function renderTournamentNight(){
   }
 
   if(!tourney){
+    const sizeGuess = classCount>=16?16:classCount>=8?8:4;
     return `
-      <div class="loc-head"><div class="loc-name">${pit.name} — Tournament Night</div></div>
+      <div class="loc-head"><div class="loc-name">${pit.name} — ${label}</div></div>
       <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:16px;">
-        The promoter's about to lock the bracket — 8 fighters, single elimination.
+        The promoter's about to lock the ${myWc.toLowerCase()}weight bracket — ${sizeGuess} fighters, single elimination.
         ${isSignedHere ? "Buy in now or just watch it play out." : "You'd need to sign at this pit first to buy in — you can still watch."}
       </p>
       <div class="btn-row">
@@ -3326,15 +3352,15 @@ function renderTournamentNight(){
   let actionHtml = '';
   if(tourney.complete){
     const championName = tourney.championId==='player' ? f.name : (tournamentFighterById(pit,f,tourney.championId)?.name||'???');
-    actionHtml = `<p style="font-family:var(--label); font-size:13px; letter-spacing:1px; text-transform:uppercase; color:var(--brass); text-align:center; margin-top:14px;">🏆 ${championName} takes the title tonight.</p>`;
+    actionHtml = `<p style="font-family:var(--label); font-size:13px; letter-spacing:1px; text-transform:uppercase; color:var(--brass); text-align:center; margin-top:14px;">🏆 ${championName} takes the ${myWc.toLowerCase()}weight title tonight.</p>`;
   } else if(playerMatch){
     actionHtml = `<div class="btn-row" style="margin-top:10px;"><span></span><button class="btn btn-primary" id="fight-tournament-round">Fight Your Round →</button></div>`;
   } else if(eliminated){
-    actionHtml = `<p style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center; margin-top:8px;">You're out — the rest of the bracket plays out on its own. Come back next Tuesday.</p>`;
+    actionHtml = `<p style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center; margin-top:8px;">You're out — the rest of the bracket plays out on its own. Come back next ${kind==='fiesta'?'Wednesday':'Tuesday'}.</p>`;
   }
 
   return `
-    <div class="loc-head"><div class="loc-name">${pit.name} — Tournament Night</div></div>
+    <div class="loc-head"><div class="loc-name">${pit.name} — ${label} (${myWc}weight)</div></div>
     ${roundsHtml}
     ${actionHtml}
     <div class="btn-row" style="margin-top:14px;">
@@ -3698,6 +3724,13 @@ function wireEvents(){
 
   function beginFightRegistration(pitId){
     state.scoutedIndex = null;
+    const weekday = weekdayNameForDay(getCurrentDay());
+    if(!['Monday','Tuesday','Wednesday'].includes(weekday)){
+      state.flashMessage = `No Juvenile card tonight — ${weekday} belongs to another tier. Fight nights run Monday through Wednesday.`;
+      state.screen = 'city-walk';
+      render();
+      return;
+    }
     const f = getFighterById(state.fighterId);
     const pit = currentPits().find(p=>p.id===pitId);
     const entryFee = 2 + Math.round(pit.reputationRequired/5);
@@ -3747,16 +3780,31 @@ function wireEvents(){
     btn.onclick = ()=>{ state.screen = 'tournament-night'; render(); };
   });
 
+  const simToFightNight = document.getElementById('sim-to-fight-night');
+  if(simToFightNight) simToFightNight.onclick = ()=>{
+    const days = parseInt(simToFightNight.dataset.days, 10) || 1;
+    for(let i=0;i<days;i++) advanceDay();
+    state.flashMessage = null;
+    state.screen = 'city-walk';
+    render();
+  };
+
   const joinTournament = document.getElementById('join-tournament');
   if(joinTournament) joinTournament.onclick = ()=>{
     const pit = currentPits().find(p=>p.id===state.visitingLocation.pitId);
-    createPitTournament(pit, getCurrentDay(), true);
+    const f = getFighterById(state.fighterId);
+    const day = getCurrentDay();
+    const kind = weekdayNameForDay(day) === 'Wednesday' ? 'fiesta' : 'local';
+    createPitTournament(pit, day, true, weightClassOf(f.weightLb), kind);
     render();
   };
   const watchTournament = document.getElementById('watch-tournament');
   if(watchTournament) watchTournament.onclick = ()=>{
     const pit = currentPits().find(p=>p.id===state.visitingLocation.pitId);
-    createPitTournament(pit, getCurrentDay(), false);
+    const f = getFighterById(state.fighterId);
+    const day = getCurrentDay();
+    const kind = weekdayNameForDay(day) === 'Wednesday' ? 'fiesta' : 'local';
+    createPitTournament(pit, day, false, weightClassOf(f.weightLb), kind);
     render();
   };
   const fightTournamentRound = document.getElementById('fight-tournament-round');
@@ -3764,7 +3812,7 @@ function wireEvents(){
     const f = getFighterById(state.fighterId);
     const pit = currentPits().find(p=>p.id===state.visitingLocation.pitId);
     const day = getCurrentDay();
-    const tourney = getPitTournament(pit, day);
+    const tourney = getPitTournament(pit, day, weightClassOf(f.weightLb));
     const round = tourney.rounds[tourney.rounds.length-1];
     const matchIndex = round.findIndex(m=> (m.aId==='player'||m.bId==='player') && !m.winnerId);
     const match = round[matchIndex];
@@ -3773,43 +3821,11 @@ function wireEvents(){
     if(!opp) return;
     state.fightPitId = pit.id;
     state.opponent = opp;
-    state.arena = { name: pit.name + ' — Tournament' };
+    state.arena = { name: pit.name + (tourney.kind==='fiesta' ? ' — Fiesta Fights' : ' — Tournament') };
     state.isBlackMarket = false;
-    state.tournamentContext = { pitId: pit.id, day, roundIndex: tourney.rounds.length-1, matchIndex };
+    state.tournamentContext = { pitId: pit.id, day, weightClass: tourney.weightClass, roundIndex: tourney.rounds.length-1, matchIndex };
     const fighterForBout = f.tempBoost ? { ...f, stats: addTempBoost(f.stats, f.tempBoost.amount) } : f;
     state.boutResult = simulateBout(fighterForBout, opp, { arena:{floor:'dirt'}, hometownPit:true });
-    state.revealedCount = 0;
-    state.screen = 'preview';
-    render();
-  };
-
-  const fiestaFight = document.getElementById('fiesta-fight');
-  if(fiestaFight) fiestaFight.onclick = ()=>{
-    const f = getFighterById(state.fighterId);
-    const pit = currentPits().find(p=>p.id===fiestaFight.dataset.pitId);
-    const entryFee = 2 + Math.round(pit.reputationRequired/5);
-    if(f.wallet < entryFee){
-      state.flashMessage = `Can't afford the $${entryFee} entry fee — go win some money first.`;
-      state.screen = 'city-walk';
-      render();
-      return;
-    }
-    const draw = drawFiestaOpponent(pit);
-    if(!draw){
-      state.flashMessage = "Nobody free to fight tonight.";
-      state.screen = 'city-walk';
-      render();
-      return;
-    }
-    updateFighter(state.fighterId, ff=>{ ff.wallet -= entryFee; });
-    state.fightPitId = pit.id;
-    state.opponent = draw.opp;
-    state.fiestaContext = { isVisitor: draw.isVisitor, provinceId: draw.provinceId };
-    state.arena = { name: pit.name + ' — Fiesta Night' };
-    state.isBlackMarket = false;
-    const freshF = getFighterById(state.fighterId);
-    const fighterForBout = freshF.tempBoost ? { ...freshF, stats: addTempBoost(freshF.stats, freshF.tempBoost.amount) } : freshF;
-    state.boutResult = simulateBout(fighterForBout, draw.opp, { arena:{floor:'dirt'}, hometownPit: !draw.isVisitor });
     state.revealedCount = 0;
     state.screen = 'preview';
     render();
@@ -3927,7 +3943,7 @@ function wireEvents(){
         deltas = growFighterStats(ff, won, r.method, oppOVR);
       });
       const s2 = loadRoamState();
-      const key2 = tc.pitId + '|' + tc.day;
+      const key2 = tc.pitId + '|' + tc.day + '|' + tc.weightClass;
       const tourney = s2.pitTournaments ? s2.pitTournaments[key2] : null;
       if(tourney){
         tourney.rounds[tc.roundIndex][tc.matchIndex].winnerId = won ? 'player' : state.opponent.id;
@@ -4041,6 +4057,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V24 · 2026-07-14</div>
+<div class="version-badge">FREE ROAM · V25 · 2026-07-14</div>
 </body>
 </html>
