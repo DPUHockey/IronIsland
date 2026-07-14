@@ -941,7 +941,8 @@ function growJuniorStats(f, playerWon, method, oppOVR){
 // is the older 18+ money league that sits between Junior and Pro. An amateurLeagueId
 // check is intentionally NOT required here anymore.)
 function isDraftEligible(f){
-  return !!f.juvenileHomeProvinceId && f.age >= 14 && f.age <= 17 && !f.juniorTeamId;
+  const petitionedEarly = f.juvenilePetitionStatus === 'approved-pending-draft';
+  return !!f.juvenileHomeProvinceId && (petitionedEarly || (f.age >= 14 && f.age <= 17)) && !f.juniorTeamId;
 }
 
 function getFighterScouting(f){
@@ -1375,10 +1376,13 @@ function renderOffers(){
 
 function renderNoOffers(){
   const f = getFighterById(state.fighterId);
+  const wasPetition = f.juvenilePetitionStatus === 'approved-undrafted';
   return `
     <div class="stub-screen">
       <h2>No Offers This Cycle</h2>
-      <p>${f.name} went undrafted across all three Junior Leagues this time around. Keep building the record in Amateur — reputation, wins, and finishes all help make the next draft board.</p>
+      <p>${wasPetition
+        ? `${f.name}'s early-entry petition got them a look, but no team pulled the trigger. Locked out of Juvenile fighting now until age 14 — from there it's the normal draft process, same as anyone else.`
+        : `${f.name} went undrafted across all three Junior Leagues this time around. Keep building the record in Amateur — reputation, wins, and finishes all help make the next draft board.`}</p>
       <button class="btn btn-primary" id="back-to-select-from-none">Back to Fighter Select</button>
     </div>
   `;
@@ -1700,6 +1704,12 @@ function wireEvents(){
       state.pendingOffers = offers;
       state.screen = 'offers';
     } else {
+      updateFighter(state.fighterId, (f)=>{
+        if(f.juvenilePetitionStatus === 'approved-pending-draft'){
+          f.juvenilePetitionStatus = 'approved-undrafted';
+          f.juvenileLockoutStartDay = getCurrentDay();
+        }
+      });
       state.screen = 'no-offers';
     }
     render();
@@ -1961,7 +1971,7 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V13 · 2026-07-13</div>
+<div class="version-badge">JUNIOR LEAGUE · V14 · 2026-07-15</div>
 </body>
 </html>
 
