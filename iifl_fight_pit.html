@@ -3384,9 +3384,11 @@ function applyBoutResult(){
   const isAmateur = state.seasonType === 'amateur';
   const total = isAmateur ? AMATEUR_TOTAL_FIGHTS : JUVENILE_TOTAL_FIGHTS;
   const tierName = isAmateur ? 'Amateur' : 'Juvenile';
+  let pitNameForLog = ''; // captured inside the closure below, since that 's' is local to it
 
   updateFighter(state.fighterId, (f)=>{
     const s = isAmateur ? f.amateurSeason : f.juvenileSeason;
+    pitNameForLog = s.pitName;
     s.fightsPlayed += 1;
     if(playerWon){
       s.wins += 1; f.record.wins += 1;
@@ -3419,7 +3421,7 @@ function applyBoutResult(){
     const playerName = getFighterById(state.fighterId).name;
     updateFieldFighterRecord(state.opponent.id, poolKey, !playerWon, !isAmateur, {
       tier: tierName, opponent: playerName, opponentId: state.fighterId, result: playerWon ? 'L' : 'W', method: r.method,
-      location: `${state.arena.name} — ${s.pitName}`, date: dateForDay(getCurrentDay()).toISOString(),
+      location: `${state.arena.name} — ${pitNameForLog}`, date: dateForDay(getCurrentDay()).toISOString(),
     });
   }
 
@@ -3596,6 +3598,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V33 · 2026-07-15</div>
+<div class="version-badge">FIGHT PIT · V34 · 2026-07-15</div>
 </body>
 </html>
