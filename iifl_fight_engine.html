@@ -698,7 +698,7 @@ function heightLabel(inches){ if(!inches) return ''; const ft=Math.floor(inches/
 
 /* ============================ FIGHTER CARD MODAL ============================ */
 
-const TIERS = ['All','Juvenile','Amateur','Semi-Pro','Pro','Exhibition'];
+const TIERS = ['All','Juvenile','Junior','Amateur','Pro','Exhibition']; // order matches career ladder; Junior drafts out of Juvenile, sits below Amateur
 let modalFighterId = null;
 let modalActiveTier = 'All';
 
@@ -1058,6 +1058,6 @@ function applyResultToRoster(){
 
 render();
 </script>
-<div class="version-badge">FIGHT ENGINE · V7 · 2026-07-12</div>
+<div class="version-badge">FIGHT ENGINE · V8 · 2026-07-13</div>
 </body>
 </html>
