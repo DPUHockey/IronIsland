@@ -664,8 +664,21 @@ function loadFieldPools(){
 }
 function saveFieldPools(pools){
   try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
-  catch(err){ console.error('IIFL field pool save failed:', err); return false; }
+  catch(err){
+    console.error('IIFL field pool save failed, attempting cleanup:', err);
+    if(typeof PROVINCES !== 'undefined' && typeof enforceProvincePoolCap === 'function'){
+      PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 150));
+      try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
+      catch(err2){
+        PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 40));
+        try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
+        catch(err3){ console.error('IIFL field pool save still failing after aggressive cleanup:', err3); return false; }
+      }
+    }
+    return false;
+  }
 }
+function saveFieldPoolsSafely(pools){ return saveFieldPools(pools); }
 
 function generateAmateurFieldFighter(division, weightClass, province, leagueId){
   const range = AMATEUR_DIVISIONS[division];
@@ -1173,18 +1186,6 @@ function enforceProvincePoolCap(pools, provinceId, capOverride){
   const sorted = [...pool].sort((a,b)=> (a.entryDay-b.entryDay) || (calcOVR(a.stats)-calcOVR(b.stats)));
   const removeIds = new Set(sorted.slice(0, pool.length-cap).map(f=>f.id));
   pools.juvenile[provinceId] = pool.filter(f=> !removeIds.has(f.id));
-}
-
-// Tries a normal save first; if localStorage is still over quota (an already-bloated
-// save from before the population cap existed), prunes hard and tries again rather than
-// silently failing forever — a permanently-failing save is worse than losing some of the
-// least-relevant standing-pool fighters.
-function saveFieldPoolsSafely(pools){
-  if(saveFieldPools(pools)) return true;
-  PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 150));
-  if(saveFieldPools(pools)) return true;
-  PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 40));
-  return saveFieldPools(pools);
 }
 
 function runJuvenileIntake(pools, provinceId, day){
@@ -3250,6 +3251,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V24 · 2026-07-14</div>
+<div class="version-badge">FIGHT PIT · V25 · 2026-07-14</div>
 </body>
 </html>
