@@ -744,22 +744,34 @@ function ensureAmateurFieldPoolForLeague(leagueId){
 
 function seedJuvenilePoolInPlace(pools, provinceId){
   if(!pools.juvenile) pools.juvenile = {};
-  if(pools.juvenile[provinceId] && pools.juvenile[provinceId].length) return;
+  if(!pools.juvenile[provinceId]) pools.juvenile[provinceId] = [];
   const province = PROVINCES.find(p=>p.id===provinceId);
   if(!province) return;
   const weightClasses = ['Light','Middle','Heavy'];
-  const pool = [];
+  const pool = pools.juvenile[provinceId];
+  // Tops up shortfalls instead of only ever seeding once from empty — this is what lets
+  // a province actually recover after the emergency population cap trims it for storage
+  // reasons, instead of being stuck rebuilding at intake's much slower weekly pace for
+  // years. Tracked by TOTAL headcount per location, not exact-per-weight-class — actual
+  // weight class is derived from real BMI-based weight after generation, not the class a
+  // fighter was aimed at, so it naturally drifts from any per-class target and would
+  // never converge (and would silently keep regenerating fighters forever) if checked
+  // that precisely.
+  const totalsByHometown = {};
+  pool.forEach(f=>{ totalsByHometown[f.hometown] = (totalsByHometown[f.hometown]||0) + 1; });
   pitLocationsForProvince(provinceId).forEach(loc=>{
-    weightClasses.forEach(wc=>{
-      for(let i=0;i<loc.perClass;i++){
-        const hometown = pick(loc.hometownPool);
-        const f = generateJuvenileFieldFighter(wc, province, hometown);
-        f.entryDay = JUVENILE_SEASON_START_DAY;
-        pool.push(f);
-      }
-    });
+    const target = loc.perClass * 3;
+    const have = loc.hometownPool.reduce((s,h)=> s + (totalsByHometown[h]||0), 0);
+    const need = target - have;
+    for(let i=0;i<need;i++){
+      const wc = pick(weightClasses);
+      const hometown = pick(loc.hometownPool);
+      const f = generateJuvenileFieldFighter(wc, province, hometown);
+      f.entryDay = JUVENILE_SEASON_START_DAY;
+      pool.push(f);
+      totalsByHometown[hometown] = (totalsByHometown[hometown]||0) + 1;
+    }
   });
-  pools.juvenile[provinceId] = pool;
 }
 
 function ensureJuvenileFieldPoolForProvince(provinceId){
@@ -3254,6 +3266,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V26 · 2026-07-14</div>
+<div class="version-badge">FIGHT PIT · V27 · 2026-07-14</div>
 </body>
 </html>
