@@ -153,7 +153,7 @@
   }
   .bracket-round-title::after{ content:""; flex:1; height:1px; background:var(--line); }
   .bracket-match{
-    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px;
     background:var(--bg-raised); border:1px solid var(--line); padding:8px 12px; margin-bottom:6px;
     font-family:var(--body); font-size:12.5px;
   }
@@ -162,6 +162,7 @@
   .bracket-side.winner{ color:var(--good); font-weight:600; }
   .bracket-side.you{ color:var(--brass); font-weight:700; }
   .bracket-vs{ color:var(--muted); font-family:var(--mono); font-size:10px; flex-shrink:0; }
+  .bracket-method{ flex-basis:100%; text-align:center; color:var(--muted); font-family:var(--mono); font-size:9.5px; letter-spacing:0.5px; text-transform:uppercase; margin-top:2px; }
   .bracket-arrow{ color:var(--muted); font-family:var(--mono); font-size:11px; flex-shrink:0; }
 
   /* tale of the tape */
@@ -1026,7 +1027,7 @@ function pickInviteWildcard(pool, reason, hostProvinceId){
 // fighters are spliced out in place, so repeated calls across multiple host pits in the
 // same week work against a shrinking list instead of re-filtering the full population
 // (thousands of fighters) from scratch every time.
-function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, eventLabel, weightClass, day){
+function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, eventLabel, weightClass, ageBand, day){
   const size = classListAvailable.length >= 8 ? 8 : (classListAvailable.length >= 4 ? 4 : 0);
   if(!size) return;
   const wildcardCount = size >= 8 ? 2 : 1;
@@ -1052,7 +1053,7 @@ function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, even
     for(let i=0;i+1<remaining.length;i+=2){
       const { winner, loser } = quickSimBout(remaining[i], remaining[i+1]);
       winner.record.wins += 1; loser.record.losses += 1;
-      logNpcBout(winner, loser, 'Juvenile', `${hostKey} — ${eventLabel} (${weightClass}weight)`, day);
+      logNpcBout(winner, loser, 'Juvenile', `${hostKey} — ${eventLabel} (${weightClass}weight, ${ageBand})`, day);
       applyNpcGrowthTick(winner);
       if(isFinal) recordInvitePlacement(loser, eventLabel, weightClass, day, 2);
       else if(isSemifinal) recordInvitePlacement(loser, eventLabel, weightClass, day, 3);
@@ -1075,6 +1076,18 @@ const WEDNESDAY_SURPRISE_HOST_CHANCE = 0.02; // any other pit can occasionally t
 // books each one's event edition, runs the actual brackets, checks whether the player's
 // own roster fighters are good enough to get pulled in themselves (queued for a popup
 // rather than auto-resolved), and sends everyone left over to ordinary Fiesta Fights.
+// Age matters more than weight class for Juvenile — an 11-year-old and a 17-year-old
+// can share a weight class but shouldn't share a bracket just because of that. Three
+// bands loosely tracking real physical/skill maturity gaps, used to group invite
+// brackets and eligibility checks (League Night/Tournament/Fiesta already sort by raw
+// age within weight class before pairing, which handles it well enough there).
+const JUVENILE_AGE_BANDS = ['Young','Mid','Old'];
+function ageBandOf(age){
+  if(age <= 13) return 'Young';
+  if(age <= 15) return 'Mid';
+  return 'Old';
+}
+
 function runWednesdayEvents(pools, day){
   const topPits = topPitsIslandWide(WEDNESDAY_TOP_PIT_COUNT);
   const topKeys = new Set(topPits.map(p=>p.key));
@@ -1096,15 +1109,19 @@ function runWednesdayEvents(pools, day){
     return;
   }
 
-  // Build each weight class's full island-wide roster ONCE, sorted by OVR — reused
-  // below by every host pit's bracket AND the player-eligibility check, instead of
-  // rescanning the entire population (thousands of fighters) over and over. This one
-  // change is the difference between catching up a season in milliseconds vs seconds.
-  const byClass = { Light: [], Middle: [], Heavy: [] };
+  // Build each (weight class × age band) island-wide roster ONCE, sorted by OVR —
+  // reused below by every host pit's bracket AND the player-eligibility check. Age band
+  // matters more than weight class for Juvenile: an 11-year-old and a 17-year-old can
+  // share a weight class but shouldn't share a bracket just because of that.
+  const byClassBand = {};
+  ['Light','Middle','Heavy'].forEach(wc=>{ byClassBand[wc] = { Young:[], Mid:[], Old:[] }; });
   Object.values(pools.juvenile).forEach(list=>{
-    list.forEach(f=>{ if(byClass[f.weightClass]) byClass[f.weightClass].push(f); });
+    list.forEach(f=>{
+      const bucket = byClassBand[f.weightClass];
+      if(bucket) bucket[ageBandOf(f.age)].push(f);
+    });
   });
-  Object.keys(byClass).forEach(wc=> byClass[wc].sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats)));
+  Object.values(byClassBand).forEach(bands=> Object.values(bands).forEach(arr=> arr.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats))));
 
   const claimedFighterIds = new Set();
 
@@ -1119,15 +1136,16 @@ function runWednesdayEvents(pools, day){
   let roster = [];
   try{ roster = loadRoster(); }catch(err){ roster = []; }
   let rosterChanged = false;
-  const reservedSlots = []; // { hostKey, eventLabel, weightClass } claimed by a player invite this week
+  const reservedSlots = []; // { hostKey, eventLabel, weightClass, ageBand } claimed by a player invite this week
 
   roster.forEach(f=>{
     if(!f.juvenileSeason || f.juvenileSeason.complete) return;
     if(f.pendingJuvenileInvite) return; // already sitting on an invite from a prior week
     const wClass = weightClassOf(f.weightLb);
+    const band = ageBandOf(f.age);
     const fOvr = calcOVR(f.stats);
-    const classList = byClass[wClass] || [];
-    const bar = classList[7] ? calcOVR(classList[7].stats) : 0; // 8th-best OVR island-wide in this class
+    const classList = (byClassBand[wClass] && byClassBand[wClass][band]) || [];
+    const bar = classList[7] ? calcOVR(classList[7].stats) : 0; // 8th-best OVR within this weight class + age band
     let reason = 'Top Contender';
     if(fOvr < bar){
       // Not top-8 on paper — still a small independent shot at a wildcard slot,
@@ -1139,8 +1157,8 @@ function runWednesdayEvents(pools, day){
     if(!host) return;
     if(reason === 'Local Favorite' && host.provinceId !== f.provinceId) reason = 'Political Appointment';
     const label = eventLabelByHost[host.key];
-    f.pendingJuvenileInvite = { day, hostKey: host.key, eventLabel: label, weightClass: wClass, reason };
-    reservedSlots.push({ hostKey: host.key, eventLabel: label, weightClass: wClass });
+    f.pendingJuvenileInvite = { day, hostKey: host.key, eventLabel: label, weightClass: wClass, ageBand: band, reason };
+    reservedSlots.push({ hostKey: host.key, eventLabel: label, weightClass: wClass, ageBand: band });
     rosterChanged = true;
   });
   if(rosterChanged){ try{ saveRoster(roster); }catch(err){} }
@@ -1148,10 +1166,12 @@ function runWednesdayEvents(pools, day){
   hostingThisWeek.forEach(host=>{
     const label = eventLabelByHost[host.key];
     ['Light','Middle','Heavy'].forEach(wc=>{
-      const isReserved = reservedSlots.some(r=> r.hostKey===host.key && r.weightClass===wc);
-      if(isReserved) return; // this bracket is waiting on the player's accept/decline instead
-      const field = runInviteClassBracket(byClass[wc], host.key, host.provinceId, label, wc, day);
-      (field||[]).forEach(f=> claimedFighterIds.add(f.id));
+      JUVENILE_AGE_BANDS.forEach(band=>{
+        const isReserved = reservedSlots.some(r=> r.hostKey===host.key && r.weightClass===wc && r.ageBand===band);
+        if(isReserved) return; // this bracket is waiting on the player's accept/decline instead
+        const field = runInviteClassBracket(byClassBand[wc][band], host.key, host.provinceId, label, wc, band, day);
+        (field||[]).forEach(f=> claimedFighterIds.add(f.id));
+      });
     });
   });
 
@@ -1300,7 +1320,7 @@ function calcOVR(stats){ return Math.round((stats.speed+stats.quickness+stats.to
   A fighter's ceiling is their age-band (Juvenile) — Amateur-tier fighters are already
   age-agnostic and capped by the flat Amateur ceiling (35) regardless of exact age.
 */
-function growFighterStats(f, playerWon, method, oppOVR, isAmateurContext){
+function growFighterStats(f, playerWon, method, oppOVR, oppAge, isAmateurContext){
   const tier = f.talentTier || 'normal';
   // Amateur competition is age-agnostic (adult ranks) — use the age-18 ceiling
   // regardless of literal age, which naturally keeps normal/prodigy capped at 35
@@ -1308,14 +1328,29 @@ function growFighterStats(f, playerWon, method, oppOVR, isAmateurContext){
   const ceiling = isAmateurContext ? bandCeiling(18, tier) : bandCeiling(f.age || 12, tier);
   const potentialFactor = clamp((f.potential || 50) / 99, 0, 1);
   const ownOVR = calcOVR(f.stats);
+  const ownAge = f.age || 12;
+
+  // How much older/stronger the opponent actually was — this is what makes a fight a
+  // real developmental test either way, win or lose. Age gap is Juvenile-only (adult
+  // ranks don't have this kind of steep age-driven ceiling gap to speak of). Every 3
+  // years older or ~12 OVR stronger counts as one "step," capped at 3 combined so one
+  // absurd mismatch doesn't dwarf everything else.
+  const ageGap = (!isAmateurContext && oppAge) ? Math.max(0, oppAge - ownAge) : 0;
+  const ovrGap = Math.max(0, oppOVR - ownOVR);
+  const toughnessSteps = Math.min(3, Math.floor(ageGap/3) + Math.floor(ovrGap/12));
 
   let growthTicks = 0;
   if(playerWon){
     growthTicks += 1;
     if(method !== 'Decision') growthTicks += 1;
     if(oppOVR > ownOVR) growthTicks += 1; // beat someone tougher — real development moment
-  } else if(Math.random() < 0.3){
-    growthTicks += 1; // you can still learn something from a loss
+    growthTicks += toughnessSteps; // the bigger the upset, the bigger the reward
+  } else {
+    // Losing to someone clearly older/stronger is still a real learning experience —
+    // better odds of learning something AND more to learn when it does land, scaled by
+    // the same steps a win would use.
+    const lossChance = 0.3 + toughnessSteps * 0.15;
+    if(Math.random() < lossChance) growthTicks += 1 + Math.floor(toughnessSteps/2);
   }
 
   growthTicks = Math.round(growthTicks * (0.4 + potentialFactor * 0.9));
@@ -1635,14 +1670,16 @@ function buildBracket(field, playerId){
     const next = [];
     for(let i=0;i<current.length;i+=2){
       const a = current[i], b = current[i+1];
+      const outSlot = { fighter:null, pending:true };
       if(a.pending || b.pending){
-        matches.push({ a, b, winner:null, live:true });
-        next.push({ fighter:null, pending:true });
+        matches.push({ a, b, winner:null, method:null, live:true, outSlot });
       } else {
         const result = simulateBout(a.fighter, b.fighter, { arena:{floor:'neutral court'}, hometownPit:false });
-        matches.push({ a, b, winner:{ fighter: result.winner }, live:false });
-        next.push({ fighter: result.winner, pending:false });
+        outSlot.fighter = result.winner;
+        outSlot.pending = false;
+        matches.push({ a, b, winner:{ fighter: result.winner }, method: result.method, live:false, outSlot });
       }
+      next.push(outSlot);
     }
     rounds.push({ name: roundNames[r], matches });
     current = next;
@@ -1650,18 +1687,38 @@ function buildBracket(field, playerId){
   return rounds;
 }
 
+// After the player's own live match resolves (win advances them, loss eliminates them),
+// any match still waiting on that outcome — plus every match those matches were feeding
+// into — is now resolvable. Simulates straight through the rest of the field to a final
+// champion, so an eliminated player can still watch how the bracket actually finished
+// instead of the story just stopping the moment they lose.
+function finishBracketSimulation(rounds){
+  for(let r=0;r<rounds.length;r++){
+    rounds[r].matches.forEach(m=>{
+      if(!m.winner && m.a.fighter && m.b.fighter){
+        const result = simulateBout(m.a.fighter, m.b.fighter, { arena:{floor:'neutral court'}, hometownPit:false });
+        m.winner = { fighter: result.winner };
+        m.method = result.method;
+        m.live = false;
+        m.outSlot.fighter = result.winner;
+        m.outSlot.pending = false;
+      }
+    });
+  }
+}
+
 function liveMatchOpponent(match){
   return match.a.pending ? match.b.fighter : match.a.fighter;
 }
 
-// Draws the next-best available island-wide field-pool fighter in a weight class for
-// the player's invite bracket — same "best available, wherever they're from" pool the
-// NPC-only invite brackets pull from.
-function drawFromJuvenileInviteField(weightClass){
+// Draws the next-best available island-wide field-pool fighter in a weight class + age
+// band for the player's invite bracket — same "best available, wherever they're from"
+// pool the NPC-only invite brackets pull from.
+function drawFromJuvenileInviteField(weightClass, ageBand){
   const pools = loadFieldPools();
   const candidates = [];
   Object.values(pools.juvenile || {}).forEach(list=>{
-    list.forEach(f=>{ if(f.weightClass===weightClass) candidates.push(f); });
+    list.forEach(f=>{ if(f.weightClass===weightClass && (!ageBand || ageBandOf(f.age)===ageBand)) candidates.push(f); });
   });
   candidates.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats));
   // Blind draw from the upper half of the class rather than always the literal #1, so
@@ -1675,10 +1732,15 @@ function startJuvenileInviteBracket(){
   const pending = f.pendingJuvenileInvite;
   if(!pending) return;
   const pools = loadFieldPools();
-  const inClass = [];
+  const band = pending.ageBand || ageBandOf(f.age);
+  const inBand = [];
   Object.values(pools.juvenile || {}).forEach(list=>{
-    list.forEach(x=>{ if(x.weightClass===pending.weightClass) inClass.push(x); });
+    list.forEach(x=>{ if(x.weightClass===pending.weightClass && ageBandOf(x.age)===band) inBand.push(x); });
   });
+  // Prefer a same-age-band field; if that's too thin this week, fall back to the wider
+  // weight-class pool rather than cancel the invite outright.
+  const useBand = inBand.length >= 3;
+  const inClass = useBand ? inBand : (()=>{ const l=[]; Object.values(pools.juvenile||{}).forEach(list=> list.forEach(x=>{ if(x.weightClass===pending.weightClass) l.push(x); })); return l; })();
   const size = inClass.length >= 7 ? 8 : (inClass.length >= 3 ? 4 : 0);
   if(!size){
     // Not enough of a field to actually run it this week — quietly clear the invite
@@ -1687,7 +1749,7 @@ function startJuvenileInviteBracket(){
     state.screen = 'select';
     return;
   }
-  const field = pickBracketField(f, size, ()=> drawFromJuvenileInviteField(pending.weightClass));
+  const field = pickBracketField(f, size, ()=> drawFromJuvenileInviteField(pending.weightClass, useBand ? band : null));
   const rounds = buildBracket(field, f.id);
   state.bracket = { rounds };
   state.bracketRoundIndex = 0;
@@ -2092,6 +2154,8 @@ const state = {
   lastSimResult: null,
   bracket: null, // { rounds: [...] } — full precomputed tournament bracket for the current stage
   bracketRoundIndex: 0,
+  bracketComplete: false, // true while showing the fully-resolved bracket after player elimination
+  pendingFinalizeFn: null, // queued season/invite finalize call, run once the player clicks Continue
 };
 
 /* ============================ RENDER ============================ */
@@ -2989,6 +3053,15 @@ function wireEvents(){
     render();
   };
 
+  const continueAfterBracket = document.getElementById('continue-after-bracket');
+  if(continueAfterBracket) continueAfterBracket.onclick = ()=>{
+    const fn = state.pendingFinalizeFn;
+    state.bracketComplete = false;
+    state.pendingFinalizeFn = null;
+    if(fn) fn();
+    render();
+  };
+
   const declineInvite = document.getElementById('decline-invite');
   if(declineInvite) declineInvite.onclick = ()=>{
     updateFighter(state.fighterId, (f)=>{ f.pendingJuvenileInvite = null; });
@@ -3051,11 +3124,13 @@ function renderBracketView(){
       const winnerId = m.winner ? m.winner.fighter.id : null;
       const aCls = aIsPlayer ? 'you' : (winnerId && m.a.fighter && winnerId===m.a.fighter.id ? 'winner' : '');
       const bCls = bIsPlayer ? 'you' : (winnerId && m.b.fighter && winnerId===m.b.fighter.id ? 'winner' : '');
+      const methodNote = (m.winner && m.method) ? `<div class="bracket-method">${m.method}</div>` : '';
       return `
         <div class="bracket-match ${m.live?'live':''}">
           <div class="bracket-side ${aCls}">${aIsPlayer?'YOU — ':''}${aName}</div>
           <div class="bracket-vs">${m.live ? 'LIVE' : 'vs'}</div>
           <div class="bracket-side ${bCls}" style="text-align:right;">${bName}${bIsPlayer?' — YOU':''}</div>
+          ${methodNote}
         </div>
       `;
     }).join('');
@@ -3069,6 +3144,22 @@ function renderBracketView(){
 
   const bracketTitle = state.mode === 'juvenile-invite' ? state.inviteEventLabel : `${state.tournamentStage} Bracket`;
   const fighterCount = Math.pow(2, state.bracket.rounds.length);
+
+  if(state.bracketComplete){
+    const finalRound = rounds[rounds.length-1];
+    const championMatch = finalRound.matches[0];
+    const champion = championMatch.winner ? championMatch.winner.fighter : null;
+    const championIsPlayer = champion && champion.id === f.id;
+    return `
+      <div class="section-label">${bracketTitle} — Final Results</div>
+      <p style="font-family:var(--label); font-size:14px; letter-spacing:1px; text-transform:uppercase; color:var(--brass); text-align:center; margin-bottom:14px;">
+        🏆 ${championIsPlayer ? 'You are' : (champion ? champion.name+' is' : 'Nobody was')} crowned ${champion?'champion':''}.
+      </p>
+      ${roundsHtml}
+      <div class="btn-row" style="margin-top:14px;"><span></span><button class="btn btn-primary" id="continue-after-bracket">Continue →</button></div>
+    `;
+  }
+
   return `
     <div class="section-label">${bracketTitle} — ${fighterCount} Fighters, Blind Draw</div>
     <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:18px;">
@@ -3102,7 +3193,7 @@ function applyBoutResult(){
       tier: tierName, opponent: state.opponent.name, opponentId: state.opponent.id, result: playerWon ? 'W':'L', method: r.method,
       location: `${state.arena.name} — ${s.pitName}`, date: dateForDay(getCurrentDay()).toISOString(),
     });
-    growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), isAmateur);
+    growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), state.opponent.age, isAmateur);
     if(s.fightsPlayed >= total){
       s.complete = true;
       f.age = clamp((f.age || 12) + 1, 12, 18); // a full season completing ≈ a year passing
@@ -3150,6 +3241,27 @@ function applyBoutResult(){
   render();
 }
 
+// Called the moment the player loses a live bracket match. Records the opponent as that
+// match's winner, then quick-sims everything still hanging on that outcome through to a
+// final champion — so an eliminated player still gets to watch how the rest of the
+// bracket actually played out, instead of the screen just cutting to a season recap.
+function eliminatePlayerAndFinishBracket(finalizeFn){
+  const round = state.bracket.rounds[state.bracketRoundIndex];
+  const liveMatch = round.matches.find(m=> m.live);
+  if(liveMatch){
+    const opp = liveMatchOpponent(liveMatch);
+    liveMatch.winner = { fighter: opp };
+    liveMatch.method = state.boutResult.method;
+    liveMatch.live = false;
+    liveMatch.outSlot.fighter = opp;
+    liveMatch.outSlot.pending = false;
+  }
+  finishBracketSimulation(state.bracket.rounds);
+  state.bracketComplete = true;
+  state.pendingFinalizeFn = finalizeFn;
+  state.screen = 'bracket-view';
+}
+
 function applyTournamentBoutResult(){
   const r = state.boutResult;
   const playerWon = r.winner.id === state.fighterId;
@@ -3162,7 +3274,7 @@ function applyTournamentBoutResult(){
       tier: 'Amateur', opponent: state.opponent.name, opponentId: state.opponent.id, result: playerWon ? 'W':'L', method: r.method,
       location: `${state.arena.name} — ${stage} ${roundName}`, date: dateForDay(getCurrentDay()).toISOString(),
     });
-    growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), true);
+    growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), state.opponent.age, true);
   });
 
   if(state.opponent.leagueId){
@@ -3174,7 +3286,7 @@ function applyTournamentBoutResult(){
   }
 
   if(!playerWon){
-    finalizeAmateurSeason(true, `Eliminated - ${stage} ${roundName}`);
+    eliminatePlayerAndFinishBracket(()=> finalizeAmateurSeason(true, `Eliminated - ${stage} ${roundName}`));
     return;
   }
 
@@ -3204,7 +3316,7 @@ function applyJuvenileInviteBoutResult(){
       tier: 'Juvenile', opponent: state.opponent.name, opponentId: state.opponent.id, result: playerWon ? 'W':'L', method: r.method,
       location: `${state.inviteHostKey} — ${label} (${state.inviteWeightClass}weight)`, date: dateForDay(getCurrentDay()).toISOString(),
     });
-    growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), false);
+    growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), state.opponent.age, false);
   });
 
   updateFieldFighterRecord(state.opponent.id, state.opponent.provinceId, !playerWon, true, {
@@ -3218,7 +3330,7 @@ function applyJuvenileInviteBoutResult(){
     // that isn't the Final) = 3rd. Anything earlier than that in an 8-bracket doesn't
     // get a numbered placement, same as the NPC-only brackets.
     const place = roundName === 'Final' ? 2 : (roundName === 'Semifinals' ? 3 : null);
-    finalizeJuvenileInvite(place);
+    eliminatePlayerAndFinishBracket(()=> finalizeJuvenileInvite(place));
     return;
   }
 
@@ -3266,6 +3378,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V27 · 2026-07-14</div>
+<div class="version-badge">FIGHT PIT · V28 · 2026-07-14</div>
 </body>
 </html>
