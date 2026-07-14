@@ -360,7 +360,12 @@ function ensureFighterDefaults(f){
   if(!f.amateurSeasonHistory) f.amateurSeasonHistory = [];
   if(!f.age) f.age = 12;
   if(!f.talentTier) f.talentTier = 'normal';
-  if(f.juvenileHomeProvinceId === undefined) f.juvenileHomeProvinceId = null; // one-time Juvenile league declaration
+  if(f.juvenileHomeProvinceId === undefined){
+    // Backfill for fighters who signed at a pit in Free Roam before this field existed
+    // there — without this they'd be permanently locked out of Junior League draft
+    // eligibility no matter how active their career actually was.
+    f.juvenileHomeProvinceId = (f.pitMemberships && f.pitMemberships.length) ? f.pitMemberships[0].provinceId : null;
+  }
   if(f.amateurLeagueId === undefined) f.amateurLeagueId = null; // one-time Amateur league commitment
   if(!f.pendingAmateurOffers) f.pendingAmateurOffers = [];
   if(f.lastGrowthAge === undefined) f.lastGrowthAge = 12; // every career starts at 12 — safe retroactive catch-up point
@@ -1196,7 +1201,11 @@ function runWednesdayEvents(pools, day){
   const reservedSlots = []; // { hostKey, eventLabel, weightClass, ageBand } claimed by a player invite this week
 
   roster.forEach(f=>{
-    if(!f.juvenileSeason || f.juvenileSeason.complete) return;
+    // Registered Juvenile fighter, either through Fight Pit's season flow or Free Roam's
+    // pit sign-up — both set juvenileHomeProvinceId now, so this covers either path
+    // instead of requiring a Fight-Pit-specific season object Free Roam fighters never have.
+    if(!f.juvenileHomeProvinceId || f.juniorTeamId) return;
+    if(f.age && f.age >= 18) return;
     if(f.pendingJuvenileInvite) return; // already sitting on an invite from a prior week
     if(juvenileFightsRemaining(f) <= 0) return; // out of career fights, or locked out on a petition
     ensureJuvenileYearWindow(f, day);
@@ -2467,14 +2476,28 @@ function render(){
   else if(state.screen==='invite-prompt'){ body = renderInvitePrompt(); title='AN INVITE CAME IN'; }
   else if(state.screen==='invite-summary'){ body = renderInviteSummary(); title='INVITE RESULT'; }
 
+  const bannerFighter = state.fighterId ? getFighterById(state.fighterId) : null;
+  let bannerFighterInfo = '';
+  if(bannerFighter){
+    if(state.seasonType === 'juvenile' && bannerFighter.juvenileSeason && !bannerFighter.juvenileSeason.complete){
+      const s = bannerFighter.juvenileSeason;
+      bannerFighterInfo = `<span>${bannerFighter.name}: Season Fight <b>${s.fightsPlayed}/${JUVENILE_TOTAL_FIGHTS}</b> · <b>${juvenileFightsRemaining(bannerFighter)}</b> career fights left</span>`;
+    } else if(state.seasonType === 'amateur' && bannerFighter.amateurSeason && !bannerFighter.amateurSeason.complete){
+      const s = bannerFighter.amateurSeason;
+      bannerFighterInfo = `<span>${bannerFighter.name}: Amateur Fight <b>${s.fightsPlayed}/${AMATEUR_TOTAL_FIGHTS}</b></span>`;
+    } else if(bannerFighter.juvenileHomeProvinceId){
+      bannerFighterInfo = `<span>${bannerFighter.name}: <b>${juvenileFightsRemaining(bannerFighter)}</b> career Juvenile fights left</span>`;
+    }
+  }
+
   app.innerHTML = `
     <div class="ticket-header">
       <div><div class="ticket-eyebrow">Iron Island · Fight League</div><div class="ticket-title">${title}</div></div>
       <div class="ticket-sub">${sub}</div>
     </div>
     <div class="calendar-banner">
-      <span>Juvenile Season: <b>${formatCalendarDateShort(JUVENILE_SEASON_START_DAY)}</b> – <b>${formatCalendarDateShort(JUVENILE_SEASON_END_DAY)}</b></span>
       <span>Today: <b>${formatCalendarDate(getCurrentDay())}</b> · ${eventNameForDay(getCurrentDay())}</span>
+      ${bannerFighterInfo}
     </div>
     <div class="panel">${body}</div>
   `;
@@ -3564,6 +3587,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V30 · 2026-07-15</div>
+<div class="version-badge">FIGHT PIT · V32 · 2026-07-15</div>
 </body>
 </html>
