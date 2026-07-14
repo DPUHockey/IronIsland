@@ -1338,6 +1338,19 @@ function catchUpJuvenileSimulation(){
   pruneRoamStateProactively();
   repairOrphanedHometowns(pools);
   const today = getCurrentDay();
+  // A fighter locked out after a failed early-draft petition still ages toward natural
+  // eligibility over real time, even though they can't fight to trigger normal age-up.
+  try{
+    const roster = loadRoster();
+    let changed = false;
+    roster.forEach(f=>{
+      if(!f.juvenilePetitionStatus) return;
+      const before = f.age;
+      ageLockedJuvenileIfDue(f, today);
+      if(f.age !== before) changed = true;
+    });
+    if(changed) saveRoster(roster);
+  }catch(err){}
   const lastSim = pools.juvenileLastSimDay || 0;
   if(lastSim >= today){ saveFieldPoolsSafely(pools); return pools; }
   const MAX_CATCHUP_DAYS = 500;
@@ -1366,6 +1379,41 @@ function addTempBoost(stats, amount){
   const boosted = { ...stats };
   Object.keys(boosted).forEach(k=> boosted[k] += amount);
   return boosted;
+}
+
+// A Juvenile career has a real ceiling now — 9 fights/season × up to ~9 seasons before
+// the Junior draft window closes was producing absurd totals (300+ fights for a fighter
+// who ran every bracket every week). 75 lifetime fights is the hard cap; yearly caps on
+// top of that stop a fighter from blowing through the whole budget in one hot month.
+const JUVENILE_CAREER_FIGHT_CAP = 75;
+const JUVENILE_INVITE_ENTRIES_PER_YEAR = 4;
+const JUVENILE_TOURNAMENT_ENTRIES_PER_YEAR = 4; // Tuesday Local Tournament + Wednesday Fiesta combined
+const DAYS_PER_JUVENILE_YEAR = 63; // a season's nominal length — reused as "how long is a year" for calendar-based aging
+
+function juvenileFightsRemaining(f){
+  return Math.max(0, JUVENILE_CAREER_FIGHT_CAP - (f.juvenileCareerFights || 0));
+}
+
+function ensureJuvenileYearWindow(f, today){
+  if(!f.juvenileYearResetDay || today - f.juvenileYearResetDay >= DAYS_PER_JUVENILE_YEAR){
+    f.juvenileYearResetDay = today;
+    f.juvenileInviteEntriesThisYear = 0;
+    f.juvenileTournamentEntriesThisYear = 0;
+  }
+}
+
+// A fighter locked out after a failed/denied early-draft petition still needs to age up
+// toward natural eligibility (14) over real calendar time — normally aging up requires
+// completing a season of fights, which a locked-out fighter can't do anymore.
+function ageLockedJuvenileIfDue(f, today){
+  if(!f.juvenilePetitionStatus || f.juvenilePetitionStatus === 'approved-pending-draft') return;
+  if(f.age >= 14){ f.juvenilePetitionStatus = null; return; }
+  if(!f.juvenileLockoutStartDay) f.juvenileLockoutStartDay = today;
+  while(f.age < 14 && today - f.juvenileLockoutStartDay >= DAYS_PER_JUVENILE_YEAR){
+    f.age += 1;
+    f.juvenileLockoutStartDay += DAYS_PER_JUVENILE_YEAR;
+  }
+  if(f.age >= 14) f.juvenilePetitionStatus = null;
 }
 
 function growFighterStats(f, playerWon, method, oppOVR, oppAge){
@@ -4077,6 +4125,14 @@ function wireEvents(){
       return;
     }
     const f = getFighterById(state.fighterId);
+    if(juvenileFightsRemaining(f) <= 0){
+      state.flashMessage = f.age >= 14
+        ? "That body's given everything it's got in Juvenile — head to Junior League and see about a draft."
+        : "No fights left in the tank — that's the career limit. Check the Season screen about petitioning for early draft entry.";
+      state.screen = 'city-walk';
+      render();
+      return;
+    }
     const pit = currentPits().find(p=>p.id===pitId);
     const entryFee = 2 + Math.round(pit.reputationRequired/5);
     if(f.wallet < entryFee){
@@ -4139,8 +4195,25 @@ function wireEvents(){
     const pit = currentPits().find(p=>p.id===state.visitingLocation.pitId);
     const f = getFighterById(state.fighterId);
     const day = getCurrentDay();
+    if(juvenileFightsRemaining(f) <= 0){
+      state.flashMessage = f.age >= 14
+        ? "That body's given everything it's got in Juvenile — head to Junior League and see about a draft."
+        : "No fights left in the tank — that's the career limit. Check the Season screen about petitioning for early draft entry.";
+      render();
+      return;
+    }
+    ensureJuvenileYearWindow(f, day);
+    if((f.juvenileTournamentEntriesThisYear||0) >= JUVENILE_TOURNAMENT_ENTRIES_PER_YEAR){
+      state.flashMessage = `Already fought ${JUVENILE_TOURNAMENT_ENTRIES_PER_YEAR} tournament cards this year — camp wants a break before the next one.`;
+      render();
+      return;
+    }
     const kind = weekdayNameForDay(day) === 'Wednesday' ? 'fiesta' : 'local';
     createPitTournament(pit, day, true, weightClassOf(f.weightLb), kind);
+    updateFighter(state.fighterId, ff=>{
+      ensureJuvenileYearWindow(ff, day);
+      ff.juvenileTournamentEntriesThisYear = (ff.juvenileTournamentEntriesThisYear||0) + 1;
+    });
     render();
   };
   const watchTournament = document.getElementById('watch-tournament');
@@ -4286,6 +4359,7 @@ function wireEvents(){
         ff.fame += fameGain;
         ff.tempBoost = null;
         deltas = growFighterStats(ff, won, r.method, oppOVR, state.opponent.age);
+        ff.juvenileCareerFights = (ff.juvenileCareerFights || 0) + 1;
       });
       const s2 = loadRoamState();
       const key2 = tc.pitId + '|' + tc.day + '|' + tc.weightClass;
@@ -4352,6 +4426,7 @@ function wireEvents(){
         ff.freeRoamFightCount += 1;
         ff.tempBoost = null;
         deltas = growFighterStats(ff, won, r.method, oppOVR, state.opponent.age);
+        ff.juvenileCareerFights = (ff.juvenileCareerFights || 0) + 1;
         const nextChoices = opponentChoiceCount(ff.freeRoamFightCount);
         const prevChoices = opponentChoiceCount(ff.freeRoamFightCount-1);
         if(nextChoices > prevChoices) flash = `Word's getting around — you can now pick from ${nextChoices} opponents when you register.`;
@@ -4402,6 +4477,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V28 · 2026-07-14</div>
+<div class="version-badge">FREE ROAM · V29 · 2026-07-15</div>
 </body>
 </html>
