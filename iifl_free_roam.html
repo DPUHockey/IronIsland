@@ -28,6 +28,12 @@
   .ticket-eyebrow{ font-family:var(--label); font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--brass); }
   .ticket-title{ font-family:var(--display); font-size:24px; letter-spacing:1px; color:var(--bone); text-transform:uppercase; }
   .ticket-sub{ font-family:var(--mono); font-size:11px; color:var(--muted); text-align:right; }
+  .calendar-banner{
+    background:var(--bg-raised); border:1px solid var(--line); border-top:none; padding:9px 24px;
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;
+    font-family:var(--mono); font-size:10.5px; color:var(--muted);
+  }
+  .calendar-banner b{ color:var(--brass); font-weight:600; }
   .panel{ background:var(--bg-panel); border:1px solid var(--line); border-top:none; padding:32px; min-height:420px; }
   .section-label{
     font-family:var(--label); font-size:12px; letter-spacing:2.5px; text-transform:uppercase; color:var(--brass);
@@ -1183,8 +1189,14 @@ function runWednesdayEvents(pools, day){
   const reservedSlots = [];
 
   roster.forEach(f=>{
-    if(!f.juvenileSeason || f.juvenileSeason.complete) return;
+    // Registered Juvenile fighter, either through Fight Pit's season flow or Free Roam's
+    // pit sign-up — both set juvenileHomeProvinceId now, so this covers either path.
+    if(!f.juvenileHomeProvinceId || f.juniorTeamId) return;
+    if(f.age && f.age >= 18) return;
     if(f.pendingJuvenileInvite) return;
+    if(juvenileFightsRemaining(f) <= 0) return; // out of career fights, or locked out on a petition
+    ensureJuvenileYearWindow(f, day);
+    if((f.juvenileInviteEntriesThisYear||0) >= JUVENILE_INVITE_ENTRIES_PER_YEAR) return;
     const wClass = weightClassOf(f.weightLb);
     const band = ageBandOf(f.age);
     const fOvr = calcOVR(f.stats);
@@ -1200,6 +1212,7 @@ function runWednesdayEvents(pools, day){
     if(reason === 'Local Favorite' && host.provinceId !== f.provinceId) reason = 'Political Appointment';
     const label = eventLabelByHost[host.key];
     f.pendingJuvenileInvite = { day, hostKey: host.key, eventLabel: label, weightClass: wClass, ageBand: band, reason };
+    f.juvenileInviteEntriesThisYear = (f.juvenileInviteEntriesThisYear||0) + 1;
     reservedSlots.push({ hostKey: host.key, eventLabel: label, weightClass: wClass, ageBand: band });
     rosterChanged = true;
   });
@@ -1760,6 +1773,12 @@ function ensureFighterDefaults(f){
   if(f.agentType === undefined) f.agentType = null;
   if(!f.blackMarketLog) f.blackMarketLog = [];
   if(f.tempBoost === undefined) f.tempBoost = null;
+  if(f.juvenileHomeProvinceId === undefined){
+    // Backfill for fighters who signed at a pit before this field existed in Free Roam —
+    // without this they're permanently locked out of Junior League draft eligibility no
+    // matter how active their career actually was.
+    f.juvenileHomeProvinceId = (f.pitMemberships && f.pitMemberships.length) ? f.pitMemberships[0].provinceId : null;
+  }
   reconcileRecord(f);
   return f;
 }
@@ -1796,6 +1815,11 @@ function signAtPit(fighterId, cityKey, pit, provinceId, settlementName){
   updateFighter(fighterId, f=>{
     if(isSignedAtPit(f, cityKey)) return;
     f.pitMemberships.push({ key: cityKey, pitId: pit.id, pitName: pit.name, settlementName, provinceId, record: { wins:0, losses:0 } });
+    // One-time Juvenile league declaration — previously this only ever happened in Fight
+    // Pit's separate season-selection screen, so anyone who played exclusively through
+    // Free Roam never got it set and was silently locked out of Junior League draft
+    // eligibility (which requires it) no matter how active their career was.
+    if(!f.juvenileHomeProvinceId) f.juvenileHomeProvinceId = provinceId;
   });
 }
 function recordPitResult(fighterId, cityKey, won){
@@ -2516,10 +2540,19 @@ function render(){
   else if(state.screen==='bout'){ body = renderBout(); title='FIGHT NIGHT'; }
   else if(state.screen==='fight-result'){ body = renderFightResult(); title='RESULT'; }
 
+  const bannerFighter = state.fighterId ? getFighterById(state.fighterId) : null;
+  const bannerFighterInfo = (bannerFighter && bannerFighter.juvenileHomeProvinceId)
+    ? `<span>${bannerFighter.name}: <b>${juvenileFightsRemaining(bannerFighter)}</b> career Juvenile fights left</span>`
+    : '';
+
   app.innerHTML = `
     <div class="ticket-header">
       <div><div class="ticket-eyebrow">Iron Island · Fight League</div><div class="ticket-title">${title}</div></div>
       <div class="ticket-sub">${sub}</div>
+    </div>
+    <div class="calendar-banner">
+      <span>Today: <b>${formatCalendarDate(getCurrentDay())}</b> · ${eventNameForDay(getCurrentDay())}</span>
+      ${bannerFighterInfo}
     </div>
     <div class="panel">${body}</div>
   `;
@@ -4477,6 +4510,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V29 · 2026-07-15</div>
+<div class="version-badge">FREE ROAM · V31 · 2026-07-15</div>
 </body>
 </html>
