@@ -302,14 +302,14 @@ const ROSTER_KEY = 'iifl_roster_v1';
 const ROAM_STATE_KEY = 'iifl_free_roam_v1';
 
 const PROVINCES = [
-  { id:'alexandretta', name:'Alexandretta Province', color:'#5C7C5E', pit:'The Forge Pit', primary:['boxer','karate'], secondary:['wrestler'] },
-  { id:'kolsati', name:'Kolsati District', color:'#5E7A93', pit:'The Concrete Ring', primary:['brawler','mma'], secondary:['boxer'] },
-  { id:'sherwood', name:'Sherwood Province', color:'#A0623B', pit:'Frontenac Fight House', primary:['wrestler','catch'], secondary:['brawler'] },
-  { id:'gazon', name:'Gazon Province', color:'#C8943F', pit:'The Dust Circle', primary:['boxer'], secondary:[] },
-  { id:'ditiero', name:'Di Tiero Province', color:'#7C5491', pit:"Big Jim's Fightin' Pit", primary:['karate'], secondary:['brawler'] },
-  { id:'carpathia', name:'Targu Banshea Province', color:'#5B4070', pit:'The Hollow Ring', primary:['sambo','judo'], secondary:['catch'] },
-  { id:'northeast', name:'Northeast Territory', color:'#9C4242', pit:'Dojo Reach', primary:['karate','judo'], secondary:['mma'] },
-  { id:'bay', name:'White Bay Province', color:'#6E8C9C', pit:'The Fairground Ring', primary:['wrestler','catch'], secondary:[] },
+  { flag:'flags/alexandretta.jpg', id:'alexandretta', name:'Alexandretta Province', color:'#5C7C5E', pit:'The Forge Pit', primary:['boxer','karate'], secondary:['wrestler'] },
+  { flag:'flags/kolsati.jpg', id:'kolsati', name:'Kolsati District', color:'#5E7A93', pit:'The Concrete Ring', primary:['brawler','mma'], secondary:['boxer'] },
+  { flag:'flags/sherwood.jpg', id:'sherwood', name:'Sherwood Province', color:'#A0623B', pit:'Frontenac Fight House', primary:['wrestler','catch'], secondary:['brawler'] },
+  { flag:'flags/gazon.jpg', id:'gazon', name:'Gazon Province', color:'#C8943F', pit:'The Dust Circle', primary:['boxer'], secondary:[] },
+  { flag:'flags/ditiero.jpg', id:'ditiero', name:'Di Tiero Province', color:'#7C5491', pit:"Big Jim's Fightin' Pit", primary:['karate'], secondary:['brawler'] },
+  { flag:'flags/carpathia.jpg', id:'carpathia', name:'Targu Banshea Province', color:'#5B4070', pit:'The Hollow Ring', primary:['sambo','judo'], secondary:['catch'] },
+  { flag:'flags/northeast.jpg', id:'northeast', name:'Northeast Territory', color:'#9C4242', pit:'Dojo Reach', primary:['karate','judo'], secondary:['mma'] },
+  { flag:'flags/bay.jpg', id:'bay', name:'White Bay Province', color:'#6E8C9C', pit:'The Fairground Ring', primary:['wrestler','catch'], secondary:[] },
 ];
 const DISCIPLINE_NAMES = {
   boxer:'Boxer', brawler:'Street Brawler', wrestler:'Wrestler', sambo:'Russian Sambo',
@@ -2612,7 +2612,10 @@ function renderCityWalk(){
     }
   }
 
+  const prov = PROVINCES.find(p=>p.id===state.provinceId);
   return `
+    <div style="position:relative;">
+      ${prov ? `<div style="position:absolute; top:-10px; right:-10px; width:150px; height:150px; background-image:url('${prov.flag}'); background-size:cover; background-position:center; opacity:0.07; pointer-events:none; border-radius:50%;"></div>` : ''}
     <div class="city-head">
       <div class="city-head-name">${state.settlementName}</div>
       <div class="city-head-meta">${entry?entry.tier:''} · Pop. ${entry?entry.population.toLocaleString():'?'} · ${pits.length} fight pit${pits.length===1?'':'s'} in town</div>
@@ -2633,6 +2636,7 @@ function renderCityWalk(){
       <button class="btn" id="read-newspaper">📰 Newspaper</button>
       <button class="btn" id="view-black-market">🕶️ Black Market (${(f.blackMarketLog||[]).length})</button>
       ${pits.some(p=> isSignedAtPit(f, state.provinceId+'|'+state.settlementName+'|'+p.id)) && eligiblePits.length ? `<button class="btn btn-primary" id="find-a-fight">Find a Fight →</button>` : ''}
+    </div>
     </div>
   `;
 }
@@ -4510,6 +4514,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V31 · 2026-07-15</div>
+<div class="version-badge">FREE ROAM · V32 · 2026-07-15</div>
 </body>
 </html>
