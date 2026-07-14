@@ -1152,6 +1152,41 @@ function pickWeightedPitLocation(provinceId){
   return locs[locs.length-1];
 }
 
+// The standing pool has no natural way to shrink — field-pool NPCs never age up or
+// retire the way the player's own fighter does, and intake only ever adds. Left alone,
+// a long-running save grows the pool forever until it outgrows what a browser will let
+// a site store in localStorage at all (this is exactly what caused a QuotaExceededError
+// bug — the save was silently failing every time because the blob had gotten too big).
+// Cap is 1.5x each province's own healthy target, so there's real headroom for organic
+// growth/variety without it running away.
+function provincePoolCap(provinceId){
+  const target = pitLocationsForProvince(provinceId).reduce((s,l)=> s + l.perClass*3, 0);
+  return Math.max(100, Math.round(target * 1.5));
+}
+function enforceProvincePoolCap(pools, provinceId, capOverride){
+  const pool = pools.juvenile[provinceId];
+  if(!pool) return;
+  const cap = capOverride || provincePoolCap(provinceId);
+  if(pool.length <= cap) return;
+  // Trim the longest-tenured, weakest performers first — "aging out of the scene,"
+  // abstracted, since standing-pool NPCs don't actually age up like the player does.
+  const sorted = [...pool].sort((a,b)=> (a.entryDay-b.entryDay) || (calcOVR(a.stats)-calcOVR(b.stats)));
+  const removeIds = new Set(sorted.slice(0, pool.length-cap).map(f=>f.id));
+  pools.juvenile[provinceId] = pool.filter(f=> !removeIds.has(f.id));
+}
+
+// Tries a normal save first; if localStorage is still over quota (an already-bloated
+// save from before the population cap existed), prunes hard and tries again rather than
+// silently failing forever — a permanently-failing save is worse than losing some of the
+// least-relevant standing-pool fighters.
+function saveFieldPoolsSafely(pools){
+  if(saveFieldPools(pools)) return true;
+  PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 150));
+  if(saveFieldPools(pools)) return true;
+  PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 40));
+  return saveFieldPools(pools);
+}
+
 function runJuvenileIntake(pools, provinceId, day){
   // Chance is derived straight from PROVINCE_APPETITE rather than tracked as its own
   // separate table — one number per province for "how much does this place care about
@@ -1185,6 +1220,7 @@ function runJuvenileIntake(pools, provinceId, day){
     f.entryDay = day;
     pools.juvenile[provinceId].push(f);
   }
+  enforceProvincePoolCap(pools, provinceId);
 }
 
 // Fixes fighters whose hometown points to a settlement that's since been removed
@@ -1208,10 +1244,14 @@ function catchUpJuvenileSimulation(){
   const pools = loadFieldPools();
   if(!pools.juvenile) pools.juvenile = {};
   PROVINCES.forEach(p=> seedJuvenilePoolInPlace(pools, p.id));
+  // Self-heal an already-bloated save from before the population cap existed — this is
+  // what fixes an existing QuotaExceededError-stuck save without the player having to
+  // clear site data by hand.
+  PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id));
   repairOrphanedHometowns(pools);
   const today = getCurrentDay();
   const lastSim = pools.juvenileLastSimDay || 0;
-  if(lastSim >= today){ saveFieldPools(pools); return pools; }
+  if(lastSim >= today){ saveFieldPoolsSafely(pools); return pools; }
   const MAX_CATCHUP_DAYS = 500; // safety cap so a long-idle save can't spin forever
   const startDay = Math.max(lastSim+1, today-MAX_CATCHUP_DAYS+1);
   for(let d=startDay; d<=today; d++){
@@ -1226,7 +1266,7 @@ function catchUpJuvenileSimulation(){
     }
   }
   pools.juvenileLastSimDay = today;
-  saveFieldPools(pools);
+  saveFieldPoolsSafely(pools);
   return pools;
 }
 
@@ -3210,6 +3250,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V23 · 2026-07-14</div>
+<div class="version-badge">FIGHT PIT · V24 · 2026-07-14</div>
 </body>
 </html>
