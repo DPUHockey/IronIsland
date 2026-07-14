@@ -1021,7 +1021,19 @@ function pickInviteWildcard(pool, reason, hostProvinceId){
 // fighters are spliced out in place, so repeated calls across multiple host pits in the
 // same week work against a shrinking list instead of re-filtering the full population
 // (thousands of fighters) from scratch every time.
-function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, eventLabel, weightClass, day){
+// Age matters more than weight class for Juvenile — an 11-year-old and a 17-year-old
+// can share a weight class but shouldn't share a bracket just because of that. Three
+// bands loosely tracking real physical/skill maturity gaps, used to group invite
+// brackets and eligibility checks (League Night/Tournament/Fiesta already sort by raw
+// age within weight class before pairing, which handles it well enough there).
+const JUVENILE_AGE_BANDS = ['Young','Mid','Old'];
+function ageBandOf(age){
+  if(age <= 13) return 'Young';
+  if(age <= 15) return 'Mid';
+  return 'Old';
+}
+
+function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, eventLabel, weightClass, ageBand, day){
   const size = classListAvailable.length >= 8 ? 8 : (classListAvailable.length >= 4 ? 4 : 0);
   if(!size) return;
   const wildcardCount = size >= 8 ? 2 : 1;
@@ -1047,7 +1059,7 @@ function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, even
     for(let i=0;i+1<remaining.length;i+=2){
       const { winner, loser } = quickSimBout(remaining[i], remaining[i+1]);
       winner.record.wins += 1; loser.record.losses += 1;
-      logNpcBout(winner, loser, 'Juvenile', `${hostKey} — ${eventLabel} (${weightClass}weight)`, day);
+      logNpcBout(winner, loser, 'Juvenile', `${hostKey} — ${eventLabel} (${weightClass}weight, ${ageBand})`, day);
       applyNpcGrowthTick(winner);
       if(isFinal) recordInvitePlacement(loser, eventLabel, weightClass, day, 2);
       else if(isSemifinal) recordInvitePlacement(loser, eventLabel, weightClass, day, 3);
@@ -1089,14 +1101,19 @@ function runWednesdayEvents(pools, day){
     return;
   }
 
-  // Build each weight class's full island-wide roster ONCE, sorted by OVR — reused
-  // below by every host pit's bracket AND the player-eligibility check, instead of
-  // rescanning the entire population (thousands of fighters) over and over.
-  const byClass = { Light: [], Middle: [], Heavy: [] };
+  // Build each (weight class × age band) island-wide roster ONCE, sorted by OVR —
+  // reused below by every host pit's bracket AND the player-eligibility check. Age band
+  // matters more than weight class for Juvenile: an 11-year-old and a 17-year-old can
+  // share a weight class but shouldn't share a bracket just because of that.
+  const byClassBand = {};
+  ['Light','Middle','Heavy'].forEach(wc=>{ byClassBand[wc] = { Young:[], Mid:[], Old:[] }; });
   Object.values(pools.juvenile).forEach(list=>{
-    list.forEach(f=>{ if(byClass[f.weightClass]) byClass[f.weightClass].push(f); });
+    list.forEach(f=>{
+      const bucket = byClassBand[f.weightClass];
+      if(bucket) bucket[ageBandOf(f.age)].push(f);
+    });
   });
-  Object.keys(byClass).forEach(wc=> byClass[wc].sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats)));
+  Object.values(byClassBand).forEach(bands=> Object.values(bands).forEach(arr=> arr.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats))));
 
   const claimedFighterIds = new Set();
 
@@ -1112,8 +1129,9 @@ function runWednesdayEvents(pools, day){
     if(!f.juvenileSeason || f.juvenileSeason.complete) return;
     if(f.pendingJuvenileInvite) return;
     const wClass = weightClassOf(f.weightLb);
+    const band = ageBandOf(f.age);
     const fOvr = calcOVR(f.stats);
-    const classList = byClass[wClass] || [];
+    const classList = (byClassBand[wClass] && byClassBand[wClass][band]) || [];
     const bar = classList[7] ? calcOVR(classList[7].stats) : 0;
     let reason = 'Top Contender';
     if(fOvr < bar){
@@ -1124,8 +1142,8 @@ function runWednesdayEvents(pools, day){
     if(!host) return;
     if(reason === 'Local Favorite' && host.provinceId !== f.provinceId) reason = 'Political Appointment';
     const label = eventLabelByHost[host.key];
-    f.pendingJuvenileInvite = { day, hostKey: host.key, eventLabel: label, weightClass: wClass, reason };
-    reservedSlots.push({ hostKey: host.key, eventLabel: label, weightClass: wClass });
+    f.pendingJuvenileInvite = { day, hostKey: host.key, eventLabel: label, weightClass: wClass, ageBand: band, reason };
+    reservedSlots.push({ hostKey: host.key, eventLabel: label, weightClass: wClass, ageBand: band });
     rosterChanged = true;
   });
   if(rosterChanged){ try{ saveRoster(roster); }catch(err){} }
@@ -1133,10 +1151,12 @@ function runWednesdayEvents(pools, day){
   hostingThisWeek.forEach(host=>{
     const label = eventLabelByHost[host.key];
     ['Light','Middle','Heavy'].forEach(wc=>{
-      const isReserved = reservedSlots.some(r=> r.hostKey===host.key && r.weightClass===wc);
-      if(isReserved) return;
-      const field = runInviteClassBracket(byClass[wc], host.key, host.provinceId, label, wc, day);
-      (field||[]).forEach(f=> claimedFighterIds.add(f.id));
+      JUVENILE_AGE_BANDS.forEach(band=>{
+        const isReserved = reservedSlots.some(r=> r.hostKey===host.key && r.weightClass===wc && r.ageBand===band);
+        if(isReserved) return;
+        const field = runInviteClassBracket(byClassBand[wc][band], host.key, host.provinceId, label, wc, band, day);
+        (field||[]).forEach(f=> claimedFighterIds.add(f.id));
+      });
     });
   });
 
@@ -1290,17 +1310,25 @@ function addTempBoost(stats, amount){
   return boosted;
 }
 
-function growFighterStats(f, playerWon, method, oppOVR){
+function growFighterStats(f, playerWon, method, oppOVR, oppAge){
   const ceiling = bandCeiling(f.age||12, f.talentTier||'normal');
   const potentialFactor = clamp((f.potential || 50) / 99, 0, 1);
   const ownOVR = calcOVR(f.stats);
+  const ownAge = f.age || 12;
+  // Every 3 years older or ~12 OVR stronger counts as one "step," capped at 3 combined
+  // — the bigger the gap, the bigger the developmental reward either way, win or lose.
+  const ageGap = oppAge ? Math.max(0, oppAge - ownAge) : 0;
+  const ovrGap = Math.max(0, oppOVR - ownOVR);
+  const toughnessSteps = Math.min(3, Math.floor(ageGap/3) + Math.floor(ovrGap/12));
   let growthTicks = 0;
   if(playerWon){
     growthTicks += 1;
     if(method !== 'Decision') growthTicks += 1;
     if(oppOVR > ownOVR) growthTicks += 1;
-  } else if(Math.random() < 0.3){
-    growthTicks += 1;
+    growthTicks += toughnessSteps;
+  } else {
+    const lossChance = 0.3 + toughnessSteps * 0.15;
+    if(Math.random() < lossChance) growthTicks += 1 + Math.floor(toughnessSteps/2);
   }
   growthTicks = Math.round(growthTicks * (0.4 + potentialFactor * 0.9));
   const before = { ...f.stats };
@@ -2055,8 +2083,120 @@ const FIGHTER_NEWS_TEMPLATES = [
 ];
 const NPC_ROLE_LINES = { pit: ADVICE_LINES_PIT, training: ADVICE_LINES_TRAINING, games: ADVICE_LINES_GAMES };
 
+/* ============================ LOCAL ENCOUNTERS ============================ */
+/*
+  What used to be pure flavor text on "Local" grid boxes is now a real choice, for about
+  half of them (fighter-news and local-color stay as quick informational stops — not
+  every stranger on the street needs to be a life event). Three tiers, same math under
+  every flavor: Decline is always free and safe. Smart Play is a modest, mostly-safe bet.
+  Going All In is the foolhardy option — real upside, real chance it costs you.
+  Injury is modeled as a negative tempBoost (the same field a lucky potion uses, just
+  going the other way) so it plugs into every existing "apply tempBoost before the next
+  fight" code path for free instead of needing its own wiring.
+*/
+const ENCOUNTER_OUTCOME_TABLE = {
+  smart: { successChance: 0.80, success: { money:[4,12], fame:[0,1] }, setback: { money:[-6,-2] } },
+  bold:  { successChance: 0.55, success: { money:[15,40], fame:[1,3] }, setback: { money:[-20,-8], fame:[-2,0], injury:[-8,-3] } },
+};
+function resolveLocalEncounterChoice(tier){
+  if(tier === 'decline') return { outcome:'declined' };
+  const table = ENCOUNTER_OUTCOME_TABLE[tier];
+  const won = Math.random() < table.successChance;
+  const bucket = won ? table.success : table.setback;
+  const result = { outcome: won ? 'success' : 'setback', tier };
+  if(bucket.money) result.money = rand(bucket.money[0], bucket.money[1]);
+  if(bucket.fame) result.fame = rand(bucket.fame[0], bucket.fame[1]);
+  if(bucket.injury) result.injury = rand(bucket.injury[0], bucket.injury[1]);
+  if(tier==='bold' && won && Math.random() < 0.25) result.statBoost = 1; // rare genuine growth tick, on top of the cash
+  return result;
+}
+
+const LOCAL_ENCOUNTERS = [
+  {
+    title: 'The Runner',
+    setup: n=> `"${n}" needs something carried across town before curfew. "Don't look inside, don't ask questions, just get it there."`,
+    declineLabel: 'Not My Problem', smartLabel: 'Take the Long, Lit Way', boldLabel: 'Cut Through the Alleys',
+    smartWin: n=> `You stick to the main streets and hand it off clean. ${n} slips you something for the trouble.`,
+    smartLose: n=> `A patrol stops you halfway. Whatever ${n} had you carrying costs you a fine before they let you go.`,
+    boldWin: n=> `Nobody sees you cut through. ${n} pays double for the speed — and word gets around that you're reliable.`,
+    boldLose: n=> `Somebody in the alley wanted what you were carrying more than you did. You limp out short on cash and worse for wear.`,
+  },
+  {
+    title: 'The Corner Man',
+    setup: n=> `"${n}" says he trained a champion once, long before you were born. "I can still see it — what's wrong with your form. Costs you, though."`,
+    declineLabel: 'Walk On', smartLabel: 'Hear Him Out', boldLabel: 'Pay for the Full Session',
+    smartWin: n=> `${n}'s eye is sharper than his coat suggests. A small tip, but a real one.`,
+    smartLose: n=> `${n} rambles for ten minutes about a fighter nobody's heard of. You paid for nothing.`,
+    boldWin: n=> `${n} breaks down a habit you didn't know you had — the kind of thing that actually sticks.`,
+    boldLose: n=> `${n} was just lonely and broke. You're out the money and no wiser.`,
+  },
+  {
+    title: 'The Wager',
+    setup: n=> `"${n}" is holding court outside a bar, betting anyone who'll listen that they can't do something stupid and physical. "Put your money where your mouth is."`,
+    declineLabel: "Not Today", smartLabel: 'Take the Safe Bet', boldLabel: 'Go All In on the Dare',
+    smartWin: n=> `Easy money. ${n} pays up, grumbling.`,
+    smartLose: n=> `Tougher than it looked. You're out a little cash and a little pride.`,
+    boldWin: n=> `The crowd goes nuts. ${n} pays out big, and half the street's talking about you tomorrow.`,
+    boldLose: n=> `You land wrong. It costs you money, and you'll feel it in the next fight.`,
+  },
+  {
+    title: 'The Favor',
+    setup: n=> `"${n}" is in a jam — owes the wrong person money, and wants backup for the conversation. "Just stand there. Look like you fight for a living. Which you do."`,
+    declineLabel: "Find Someone Else", smartLabel: 'Stand There, Look Mean', boldLabel: 'Actually Get Involved',
+    smartWin: n=> `Your presence alone does the job. ${n} is grateful, and it shows.`,
+    smartLose: n=> `The other guy wasn't impressed. Things got tense before ${n} talked it down — no harm, no reward either.`,
+    boldWin: n=> `You step in and it works — ${n}'s debt gets renegotiated on the spot, and there's a real reward in it for you.`,
+    boldLose: n=> `It goes sideways fast. You walk away with less money and a few new bruises.`,
+  },
+  {
+    title: 'The Tip',
+    setup: n=> `"${n}" claims to have real scouting info on someone you might be fighting soon. "Everybody's got a hole. I know theirs. Costs you, though."`,
+    declineLabel: 'Not Interested', smartLabel: 'Buy the Cheap Version', boldLabel: 'Pay for Everything He Knows',
+    smartWin: n=> `Turns out ${n} actually knows something. Small edge, but real.`,
+    smartLose: n=> `${n} was guessing. You paid for nothing.`,
+    boldWin: n=> `${n}'s intel is exactly right — a real, lasting edge going into your next real test.`,
+    boldLose: n=> `Total fabrication. You're out real money for a story somebody made up an hour ago.`,
+  },
+  {
+    title: 'The Shortcut',
+    setup: n=> `"${n}" has a little bottle and a confident smile. "Nothing illegal. Probably. You'll feel it before your next fight, guaranteed."`,
+    declineLabel: 'Pass', smartLabel: 'Take the Mild Dose', boldLabel: 'Take the Full Dose',
+    smartWin: n=> `Whatever it was, it's mild but real — you'll feel a little sharper next time out.`,
+    smartLose: n=> `It does nothing except cost you money and leave a bad taste, literally.`,
+    boldWin: n=> `It's the real thing. You feel it — a genuine edge heading into your next fight.`,
+    boldLose: n=> `Bad batch. You're sick, sore, and lighter in the wallet — and it'll cost you in the ring too.`,
+  },
+  {
+    title: 'The Grudge',
+    setup: n=> `"${n}" has a problem with somebody at a rival pit and wants you to "have a word." "Doesn't have to get physical. Probably won't."`,
+    declineLabel: "Stay Out Of It", smartLabel: 'Have a Calm Word', boldLabel: 'Make a Real Statement',
+    smartWin: n=> `A firm word does the trick. ${n} owes you one, and it's worth something.`,
+    smartLose: n=> `Nobody backs down. Awkward, but nothing lost either.`,
+    boldWin: n=> `You make your point hard. ${n} is thrilled, word gets around, and it pays off.`,
+    boldLose: n=> `It escalates. You walk away with less money, a sore body, and a new enemy.`,
+  },
+  {
+    title: 'The Investment',
+    setup: n=> `"${n}" is a small-time promoter looking to fund an undercard, and wants you to buy in — cover part of the purse yourself for a bigger cut if it draws a crowd.`,
+    declineLabel: 'Not Gambling Tonight', smartLabel: 'Buy In Small', boldLabel: 'Buy In Big',
+    smartWin: n=> `The card draws a decent house. Your small stake pays off modestly.`,
+    smartLose: n=> `The card flops. Small loss, no real harm.`,
+    boldWin: n=> `The house is packed. ${n} is thrilled, and your cut is a real payday.`,
+    boldLose: n=> `Barely anyone shows. You're out a real chunk of money for an empty room.`,
+  },
+];
+
+function generateLocalEncounter(provinceId, settlementName){
+  const name = pickName(provinceId, settlementName);
+  const template = pick(LOCAL_ENCOUNTERS);
+  return { name, role:'encounter', template, setupLine: template.setup(name) };
+}
+
 function generateNpc(provinceId, settlementName, role, pits){
   const name = pickName(provinceId, settlementName);
+  if(role === 'encounter'){
+    return generateLocalEncounter(provinceId, settlementName);
+  }
   if(role === 'fighter-news'){
     const pool = pits.flatMap(p=>p.roster);
     if(pool.length){
@@ -2115,7 +2255,7 @@ function ensureCityGrid(provinceId, settlementName){
   });
   if(idx < available.length){ locations.push({ ...available[idx], type:'travel' }); idx++; }
   const npcCount = clamp(Math.round(size*0.9), 2, 6);
-  const npcRoles = ['pit','training','games','fighter-news','local-color','fighter-news'];
+  const npcRoles = ['encounter','encounter','encounter','fighter-news','local-color','fighter-news'];
   for(let i=0;i<npcCount && idx<available.length;i++){
     locations.push({ ...available[idx], type:'npc', npc: generateNpc(provinceId, settlementName, npcRoles[i%npcRoles.length], pits) });
     idx++;
@@ -2170,6 +2310,7 @@ const state = {
   period: 'Morning', movesRemaining: 3,
   isBlackMarket: false,
   randomEventPending: null, // event type awaiting resolution on the current screen
+  encounterResult: null, // outcome of a Local encounter choice, awaiting the player closing it out
   standingsTier: 'pro',
   newspaperProvinceId: null, // which province's paper is currently open; null = player's own
   pendingScheduleSlot: null, // index of the fight-night slot being booked
@@ -2377,6 +2518,37 @@ function renderLocTravel(){
 
 function renderLocNpc(){
   const npc = state.visitingLocation.npc;
+  if(npc.role === 'encounter'){
+    const t = npc.template;
+    if(state.encounterResult){
+      const res = state.encounterResult;
+      let flavor, tone;
+      if(res.outcome === 'declined'){ flavor = "You keep walking. Not every offer's worth the risk."; tone = ''; }
+      else if(res.tier === 'smart'){ flavor = res.outcome==='success' ? t.smartWin(npc.name) : t.smartLose(npc.name); tone = res.outcome==='success' ? 'good' : 'bad'; }
+      else { flavor = res.outcome==='success' ? t.boldWin(npc.name) : t.boldLose(npc.name); tone = res.outcome==='success' ? 'good' : 'bad'; }
+      const bits = [];
+      if(res.money){ bits.push(`<span style="color:${res.money>0?'var(--good)':'var(--ink-red)'};">${res.money>0?'+':''}$${res.money}</span>`); }
+      if(res.fame){ bits.push(`<span style="color:${res.fame>0?'var(--good)':'var(--ink-red)'};">${res.fame>0?'+':''}${res.fame} Fame</span>`); }
+      if(res.statBoost){ bits.push(`<span style="color:var(--brass);">A real, permanent edge — stat boost banked.</span>`); }
+      if(res.injury){ bits.push(`<span style="color:var(--ink-red);">Banged up — ${res.injury} to everything, next fight only.</span>`); }
+      return `
+        <div class="loc-head"><div class="loc-name">${t.title}</div></div>
+        <div class="npc-quote">"${npc.setupLine}"<span class="npc-name">— ${npc.name}</span></div>
+        <p style="font-family:var(--body); font-size:13.5px; color:var(--bone-dim); margin:14px 0 8px;">${flavor}</p>
+        ${bits.length ? `<div style="font-family:var(--mono); font-size:12px; text-align:center; margin-bottom:14px;">${bits.join(' &nbsp; ')}</div>` : ''}
+        <div class="btn-row"><span></span><button class="btn btn-primary" id="back-to-walk">Keep Walking →</button></div>
+      `;
+    }
+    return `
+      <div class="loc-head"><div class="loc-name">${t.title}</div></div>
+      <div class="npc-quote">"${npc.setupLine}"<span class="npc-name">— ${npc.name}</span></div>
+      <div class="btn-row" style="margin-top:14px; flex-direction:column; gap:8px;">
+        <button class="btn" id="encounter-decline" style="width:100%;">${t.declineLabel}</button>
+        <button class="btn" id="encounter-smart" style="width:100%;">${t.smartLabel}</button>
+        <button class="btn btn-primary" id="encounter-bold" style="width:100%;">${t.boldLabel}</button>
+      </div>
+    `;
+  }
   return `
     <div class="npc-quote">
       "${npc.line}"
@@ -3655,7 +3827,28 @@ function wireEvents(){
   });
 
   const backToWalk = document.getElementById('back-to-walk');
-  if(backToWalk) backToWalk.onclick = ()=>{ state.screen='city-walk'; render(); };
+  if(backToWalk) backToWalk.onclick = ()=>{ state.encounterResult = null; state.screen='city-walk'; render(); };
+
+  ['decline','smart','bold'].forEach(tier=>{
+    const btn = document.getElementById('encounter-'+tier);
+    if(!btn) return;
+    btn.onclick = ()=>{
+      const res = resolveLocalEncounterChoice(tier);
+      updateFighter(state.fighterId, ff=>{
+        if(res.money) ff.wallet = Math.max(0, ff.wallet + res.money);
+        if(res.fame) ff.fame = Math.max(0, ff.fame + res.fame);
+        if(res.injury) ff.tempBoost = { amount: res.injury, usesLeft: 1 }; // negative amount = hurt, not boosted
+        if(res.statBoost){
+          const statKeys = ['speed','quickness','toughness','power','agility'];
+          const key = pick(statKeys);
+          const ceiling = bandCeiling(ff.age||12, ff.talentTier||'normal');
+          if(ff.stats[key] < ceiling) ff.stats[key] = clamp(ff.stats[key] + res.statBoost, 1, ceiling);
+        }
+      });
+      state.encounterResult = res;
+      render();
+    };
+  });
 
   document.querySelectorAll('[data-travel-to]').forEach(card=>{
     card.onclick = ()=>{
@@ -3928,7 +4121,7 @@ function wireEvents(){
         ff.wallet += prize;
         ff.fame += fameGain;
         ff.tempBoost = null;
-        deltas = growFighterStats(ff, won, r.method, oppOVR);
+        deltas = growFighterStats(ff, won, r.method, oppOVR, state.opponent.age);
       });
       flash = "Word won't get back to any pit boss about this one.";
     } else if(state.tournamentContext){
@@ -3952,7 +4145,7 @@ function wireEvents(){
         ff.wallet += prize;
         ff.fame += fameGain;
         ff.tempBoost = null;
-        deltas = growFighterStats(ff, won, r.method, oppOVR);
+        deltas = growFighterStats(ff, won, r.method, oppOVR, state.opponent.age);
       });
       const s2 = loadRoamState();
       const key2 = tc.pitId + '|' + tc.day + '|' + tc.weightClass;
@@ -3991,7 +4184,7 @@ function wireEvents(){
         ff.fame += fameGain;
         ff.freeRoamFightCount += 1;
         ff.tempBoost = null;
-        deltas = growFighterStats(ff, won, r.method, oppOVR);
+        deltas = growFighterStats(ff, won, r.method, oppOVR, state.opponent.age);
       });
       flash = state.fiestaContext.isVisitor ? "Word travels fast — that one might make the papers in another province." : null;
     } else {
@@ -4018,7 +4211,7 @@ function wireEvents(){
         ff.fame += fameGain;
         ff.freeRoamFightCount += 1;
         ff.tempBoost = null;
-        deltas = growFighterStats(ff, won, r.method, oppOVR);
+        deltas = growFighterStats(ff, won, r.method, oppOVR, state.opponent.age);
         const nextChoices = opponentChoiceCount(ff.freeRoamFightCount);
         const prevChoices = opponentChoiceCount(ff.freeRoamFightCount-1);
         if(nextChoices > prevChoices) flash = `Word's getting around — you can now pick from ${nextChoices} opponents when you register.`;
@@ -4069,6 +4262,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V26 · 2026-07-14</div>
+<div class="version-badge">FREE ROAM · V27 · 2026-07-14</div>
 </body>
 </html>
