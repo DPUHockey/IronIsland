@@ -671,8 +671,25 @@ function loadFieldPools(){
 }
 function saveFieldPools(pools){
   try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
-  catch(err){ console.error('IIFL field pool save failed:', err); return false; }
+  catch(err){
+    console.error('IIFL field pool save failed, attempting cleanup:', err);
+    // Storage is over quota — prune the standing pool and retry, progressively harder,
+    // rather than silently failing forever (which is what used to happen here).
+    if(typeof PROVINCES !== 'undefined' && typeof enforceProvincePoolCap === 'function'){
+      PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 150));
+      try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
+      catch(err2){
+        PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 40));
+        try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
+        catch(err3){ console.error('IIFL field pool save still failing after aggressive cleanup:', err3); return false; }
+      }
+    }
+    return false;
+  }
 }
+// Kept as an explicit alias — saveFieldPools is self-healing now, but call sites that
+// want to be clear they expect recovery attempts can still say so.
+function saveFieldPoolsSafely(pools){ return saveFieldPools(pools); }
 
 function generateAmateurFieldFighter(division, weightClass, province, leagueId){
   const range = AMATEUR_DIVISIONS[division];
@@ -1153,30 +1170,14 @@ function enforceProvincePoolCap(pools, provinceId, capOverride){
   pools.juvenile[provinceId] = pool.filter(f=> !removeIds.has(f.id));
 }
 
-// Tries a normal save first; if localStorage is still over quota (an already-bloated
-// save from before the population cap existed), prunes hard and tries again rather than
-// silently failing forever — a permanently-failing save is worse than losing some of the
-// least-relevant standing-pool fighters.
-function saveFieldPoolsSafely(pools){
-  if(saveFieldPools(pools)) return true;
-  PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 150));
-  if(saveFieldPools(pools)) return true;
-  PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 40));
-  return saveFieldPools(pools);
-}
-
-// Newspaper flavor is cached per province per day and otherwise never cleaned up —
-// bounded here too so a long save doesn't quietly accumulate hundreds of stale editions.
-function pruneOldNewspapers(){
+// Proactively bounds roam state (tournament brackets, newspapers, cached grids) on
+// every load, not just reactively when a save has already failed — the goal is to
+// avoid hitting the quota wall in the first place, not just recover after the fact.
+function pruneRoamStateProactively(){
   const s = loadRoamState();
-  if(!s.newspapers) return;
-  const today = getCurrentDay();
-  let changed = false;
-  Object.keys(s.newspapers).forEach(key=>{
-    const day = parseInt(key.split('|')[1], 10);
-    if(!isNaN(day) && today - day > 30){ delete s.newspapers[key]; changed = true; }
-  });
-  if(changed) saveRoamState(s);
+  const before = JSON.stringify(s).length;
+  pruneRoamStateForSpace(s);
+  if(JSON.stringify(s).length !== before) saveRoamState(s);
 }
 
 function runJuvenileIntake(pools, provinceId, day){
@@ -1240,7 +1241,7 @@ function catchUpJuvenileSimulation(){
   // what fixes an existing QuotaExceededError-stuck save without the player having to
   // clear site data by hand.
   PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id));
-  pruneOldNewspapers();
+  pruneRoamStateProactively();
   repairOrphanedHometowns(pools);
   const today = getCurrentDay();
   const lastSim = pools.juvenileLastSimDay || 0;
@@ -1661,7 +1662,40 @@ function loadRoamState(){
 }
 function saveRoamState(s){
   try{ localStorage.setItem(ROAM_STATE_KEY, JSON.stringify(s)); return true; }
-  catch(err){ console.error('IIFL free roam state save failed:', err); return false; }
+  catch(err){
+    console.error('IIFL free roam state save failed, attempting cleanup:', err);
+    pruneRoamStateForSpace(s);
+    try{ localStorage.setItem(ROAM_STATE_KEY, JSON.stringify(s)); return true; }
+    catch(err2){ console.error('IIFL free roam state save still failing after cleanup:', err2); return false; }
+  }
+}
+
+// Three separate things in roam state grow without bound the same way the standing
+// Juvenile pool did: tournament brackets are cached per pit per day forever, newspaper
+// flavor is cached per province per day forever, and every settlement's walkable grid
+// gets cached the first time it's visited and never evicted. None of these need to be
+// permanent — a tournament bracket is a single night, a newspaper is old news in a
+// month, and a revisited settlement can just regenerate a fresh layout.
+function pruneRoamStateForSpace(s){
+  const today = getCurrentDay();
+  if(s.pitTournaments){
+    Object.keys(s.pitTournaments).forEach(key=>{
+      const day = parseInt(key.split('|').pop(), 10);
+      if(!isNaN(day) && today - day > 14) delete s.pitTournaments[key];
+    });
+  }
+  if(s.newspapers){
+    Object.keys(s.newspapers).forEach(key=>{
+      const day = parseInt(key.split('|').pop(), 10);
+      if(!isNaN(day) && today - day > 30) delete s.newspapers[key];
+    });
+  }
+  if(s.grids){
+    const keys = Object.keys(s.grids);
+    if(keys.length > 40){
+      keys.slice(0, keys.length-40).forEach(k=> delete s.grids[k]);
+    }
+  }
 }
 
 /* ============================ PIT GENERATION ============================ */
@@ -4007,6 +4041,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V23 · 2026-07-14</div>
+<div class="version-badge">FREE ROAM · V24 · 2026-07-14</div>
 </body>
 </html>
