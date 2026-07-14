@@ -946,22 +946,30 @@ function runJuvenileTournamentDay(pools, provinceId, day){
       else return; // not enough in this weight class this week — skip, don't force a mismatch
       // Age-sorted seeding so the bracket isn't a coin-flip 12-vs-17 matchup in round one.
       let field = [...classGroup].sort((a,b)=> a.age-b.age).slice(0, size);
+      let runnerUp = null;
       while(field.length > 1){
+        const isFinal = field.length === 2;
         const nextRound = [];
         for(let i=0;i+1<field.length;i+=2){
           const { winner, loser } = quickSimBout(field[i], field[i+1]);
           winner.record.wins += 1; loser.record.losses += 1;
           logNpcBout(winner, loser, 'Juvenile', `${settlement} — Local Tournament (${wc}weight)`, day);
+          if(isFinal) runnerUp = loser;
           nextRound.push(winner);
         }
         field = nextRound;
       }
-      if(field[0]){ applyNpcGrowthTick(field[0]); applyNpcGrowthTick(field[0]); } // tournament win = an extra growth tick
+      if(field[0]){
+        applyNpcGrowthTick(field[0]); applyNpcGrowthTick(field[0]); // tournament win = an extra growth tick
+        // Not logged to the shared results feed — Tuesday's local brackets run in every
+        // settlement with enough registered fighters, dozens per week, and would drown
+        // out the comparatively rare Wednesday Invite results the feed exists to surface.
+      }
     });
   });
 }
 
-function runJuvenileFiestaDay(pools, provinceId, day, poolOverride){
+function runJuvenileFiestaDay(pools, provinceId, day, poolOverride, resultsBuffer){
   const pool = poolOverride || pools.juvenile[provinceId];
   if(!pool || pool.length < 4) return;
   Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
@@ -973,23 +981,53 @@ function runJuvenileFiestaDay(pools, provinceId, day, poolOverride){
       else if(classGroup.length >= 4) size = 4;
       else return; // not enough for a bracket this week in this class
       let field = [...classGroup].sort(()=>Math.random()-0.5).slice(0, size);
+      let runnerUp = null;
       while(field.length > 1){
+        const isFinal = field.length === 2;
         const nextRound = [];
         for(let i=0;i+1<field.length;i+=2){
           const { winner, loser } = quickSimBout(field[i], field[i+1]);
           winner.record.wins += 1; loser.record.losses += 1;
           logNpcBout(winner, loser, 'Juvenile', `${settlement} — Fiesta Fights (${wc}weight)`, day);
+          if(isFinal) runnerUp = loser;
           nextRound.push(winner);
         }
         field = nextRound;
       }
-      if(field[0]) applyNpcGrowthTick(field[0]); // tournament win = a growth tick, same as Tuesday
+      if(field[0]){
+        applyNpcGrowthTick(field[0]); // tournament win = a growth tick, same as Tuesday
+        (resultsBuffer||[]).push({
+          day, hostKey: settlement, eventLabel: 'Fiesta Fights', weightClass: wc, kind:'fiesta', size,
+          championId: field[0].id, championName: field[0].name,
+          runnerUpId: runnerUp ? runnerUp.id : null, runnerUpName: runnerUp ? runnerUp.name : null,
+        });
+      }
     });
   });
 }
 
 // Records a 1st/2nd/3rd finish on a fighter's own history — first-round-and-out losses
 // in an 8-man field don't get a numbered placement, just the normal fight-log loss.
+// A lightweight, bounded, shared log of every bracket champion crowned island-wide —
+// Invite Night, Tuesday Local Tournament, and Fiesta Fights all write here. This is what
+// makes "who won Wednesday's card in Sherwood" an answerable question instead of
+// something only visible if you happened to be standing in that specific pit.
+const RESULTS_LOG_KEY = 'iifl_juvenile_results_log_v1';
+function loadResultsLog(){
+  try{ const raw = localStorage.getItem(RESULTS_LOG_KEY); return raw ? JSON.parse(raw) : []; }
+  catch(err){ return []; }
+}
+function saveResultsLog(log){
+  try{ localStorage.setItem(RESULTS_LOG_KEY, JSON.stringify(log)); }
+  catch(err){ console.error('IIFL results log save failed:', err); }
+}
+function logNotableResult(entry){
+  const log = loadResultsLog();
+  log.unshift(entry);
+  if(log.length > 3000) log.length = 3000; // recent history, not a full ledger — filtering by province/day keeps it browsable
+  saveResultsLog(log);
+}
+
 function recordInvitePlacement(f, eventLabel, weightClass, day, place){
   if(!f.inviteResults) f.inviteResults = [];
   f.inviteResults.push({ event: eventLabel, weightClass, place, date: dateForDay(day).toISOString() });
@@ -1027,7 +1065,7 @@ function pickInviteWildcard(pool, reason, hostProvinceId){
 // fighters are spliced out in place, so repeated calls across multiple host pits in the
 // same week work against a shrinking list instead of re-filtering the full population
 // (thousands of fighters) from scratch every time.
-function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, eventLabel, weightClass, ageBand, day){
+function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, eventLabel, weightClass, ageBand, day, resultsBuffer){
   const size = classListAvailable.length >= 8 ? 8 : (classListAvailable.length >= 4 ? 4 : 0);
   if(!size) return;
   const wildcardCount = size >= 8 ? 2 : 1;
@@ -1046,6 +1084,7 @@ function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, even
   }
   if(!field.length) return field;
   let remaining = [...field];
+  let runnerUp = null;
   while(remaining.length > 1){
     const isFinal = remaining.length === 2;
     const isSemifinal = remaining.length === 4;
@@ -1055,7 +1094,7 @@ function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, even
       winner.record.wins += 1; loser.record.losses += 1;
       logNpcBout(winner, loser, 'Juvenile', `${hostKey} — ${eventLabel} (${weightClass}weight, ${ageBand})`, day);
       applyNpcGrowthTick(winner);
-      if(isFinal) recordInvitePlacement(loser, eventLabel, weightClass, day, 2);
+      if(isFinal){ recordInvitePlacement(loser, eventLabel, weightClass, day, 2); runnerUp = loser; }
       else if(isSemifinal) recordInvitePlacement(loser, eventLabel, weightClass, day, 3);
       nextRound.push(winner);
     }
@@ -1064,6 +1103,11 @@ function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, even
   if(remaining[0]){
     applyNpcGrowthTick(remaining[0]); applyNpcGrowthTick(remaining[0]); // tournament win = an extra growth tick
     recordInvitePlacement(remaining[0], eventLabel, weightClass, day, 1);
+    (resultsBuffer||[]).push({
+      day, hostKey, eventLabel, weightClass, ageBand, kind:'invite', size,
+      championId: remaining[0].id, championName: remaining[0].name,
+      runnerUpId: runnerUp ? runnerUp.id : null, runnerUpName: runnerUp ? runnerUp.name : null,
+    });
   }
   return field;
 }
@@ -1088,7 +1132,19 @@ function ageBandOf(age){
   return 'Old';
 }
 
+// Adds a batch of results to the log in ONE load+save cycle, instead of the naive
+// load-modify-save per bracket completion that made a single Wednesday (hundreds of
+// small brackets across the island) cost tens of seconds during catch-up.
+function flushResultsLog(newEntries){
+  if(!newEntries.length) return;
+  const log = loadResultsLog();
+  const merged = newEntries.concat(log);
+  if(merged.length > 3000) merged.length = 3000;
+  saveResultsLog(merged);
+}
+
 function runWednesdayEvents(pools, day){
+  const resultsBuffer = [];
   const topPits = topPitsIslandWide(WEDNESDAY_TOP_PIT_COUNT);
   const topKeys = new Set(topPits.map(p=>p.key));
   const hostingThisWeek = topPits.filter(()=> Math.random() < WEDNESDAY_TOP_HOST_CHANCE);
@@ -1105,7 +1161,8 @@ function runWednesdayEvents(pools, day){
   if(!hostingThisWeek.length){
     // Nobody's hosting an invite night this week — straight to Fiesta for everyone,
     // no need to build the (comparatively expensive) sorted class lists below at all.
-    PROVINCES.forEach(p=>{ runJuvenileFiestaDay(pools, p.id, day); });
+    PROVINCES.forEach(p=>{ runJuvenileFiestaDay(pools, p.id, day, null, resultsBuffer); });
+    flushResultsLog(resultsBuffer);
     return;
   }
 
@@ -1169,7 +1226,7 @@ function runWednesdayEvents(pools, day){
       JUVENILE_AGE_BANDS.forEach(band=>{
         const isReserved = reservedSlots.some(r=> r.hostKey===host.key && r.weightClass===wc && r.ageBand===band);
         if(isReserved) return; // this bracket is waiting on the player's accept/decline instead
-        const field = runInviteClassBracket(byClassBand[wc][band], host.key, host.provinceId, label, wc, band, day);
+        const field = runInviteClassBracket(byClassBand[wc][band], host.key, host.provinceId, label, wc, band, day, resultsBuffer);
         (field||[]).forEach(f=> claimedFighterIds.add(f.id));
       });
     });
@@ -1181,8 +1238,9 @@ function runWednesdayEvents(pools, day){
     const pool = pools.juvenile[p.id];
     if(!pool) return;
     const leftover = pool.filter(f=> !claimedFighterIds.has(f.id));
-    runJuvenileFiestaDay(pools, p.id, day, leftover);
+    runJuvenileFiestaDay(pools, p.id, day, leftover, resultsBuffer);
   });
+  flushResultsLog(resultsBuffer);
 }
 
 
@@ -2676,7 +2734,7 @@ function renderPreview(){
     </div>
 
     <div class="btn-row">
-      <span></span>
+      ${(state.mode==='tournament'||state.mode==='juvenile-invite') ? `<button class="btn" id="back-to-bracket-from-preview">← Back to Bracket</button>` : '<span></span>'}
       <button class="btn btn-primary" id="enter-arena">Enter the Arena →</button>
     </div>
   `;
@@ -3016,6 +3074,14 @@ function wireEvents(){
   const enterArena = document.getElementById('enter-arena');
   if(enterArena) enterArena.onclick = ()=>{ state.screen = 'bout'; render(); };
 
+  const backToBracketFromPreview = document.getElementById('back-to-bracket-from-preview');
+  if(backToBracketFromPreview) backToBracketFromPreview.onclick = ()=>{
+    state.boutResult = null;
+    state.opponent = null;
+    state.screen = 'bracket-view';
+    render();
+  };
+
   const advanceBout = document.getElementById('advance-bout');
   if(advanceBout) advanceBout.onclick = ()=>{
     const r = state.boutResult;
@@ -3117,8 +3183,8 @@ function renderBracketView(){
   const rounds = state.bracket.rounds;
   const roundsHtml = rounds.map(round=>{
     const matchesHtml = round.matches.map(m=>{
-      const aName = m.a.fighter ? m.a.fighter.name : 'TBD';
-      const bName = m.b.fighter ? m.b.fighter.name : 'TBD';
+      const aName = m.a.fighter ? `<span class="clickable-name" data-open-fighter="${m.a.fighter.id}">${m.a.fighter.name}</span>` : 'TBD';
+      const bName = m.b.fighter ? `<span class="clickable-name" data-open-fighter="${m.b.fighter.id}">${m.b.fighter.name}</span>` : 'TBD';
       const aIsPlayer = m.a.fighter && m.a.fighter.id === f.id;
       const bIsPlayer = m.b.fighter && m.b.fighter.id === f.id;
       const winnerId = m.winner ? m.winner.fighter.id : null;
@@ -3241,21 +3307,28 @@ function applyBoutResult(){
   render();
 }
 
-// Called the moment the player loses a live bracket match. Records the opponent as that
-// match's winner, then quick-sims everything still hanging on that outcome through to a
-// final champion — so an eliminated player still gets to watch how the rest of the
-// bracket actually played out, instead of the screen just cutting to a season recap.
-function eliminatePlayerAndFinishBracket(finalizeFn){
+// Records the outcome of the bracket's current live match — win OR loss — onto the
+// match object itself (winner, method, outSlot propagation to the next round). This has
+// to happen regardless of outcome: previously it only ran on elimination, which meant a
+// player advancing through wins left their own rounds permanently unrecorded (no method
+// shown, blank history) even though the match had clearly been decided.
+function recordLiveMatchResult(playerWon){
   const round = state.bracket.rounds[state.bracketRoundIndex];
   const liveMatch = round.matches.find(m=> m.live);
-  if(liveMatch){
-    const opp = liveMatchOpponent(liveMatch);
-    liveMatch.winner = { fighter: opp };
-    liveMatch.method = state.boutResult.method;
-    liveMatch.live = false;
-    liveMatch.outSlot.fighter = opp;
-    liveMatch.outSlot.pending = false;
-  }
+  if(!liveMatch) return;
+  const winnerFighter = playerWon ? getFighterById(state.fighterId) : liveMatchOpponent(liveMatch);
+  liveMatch.winner = { fighter: winnerFighter };
+  liveMatch.method = state.boutResult.method;
+  liveMatch.live = false;
+  liveMatch.outSlot.fighter = winnerFighter;
+  liveMatch.outSlot.pending = false;
+}
+
+// Called the moment the player loses a live bracket match. Quick-sims everything still
+// hanging on that outcome through to a final champion — so an eliminated player still
+// gets to watch how the rest of the bracket actually played out, instead of the screen
+// just cutting to a season recap.
+function eliminatePlayerAndFinishBracket(finalizeFn){
   finishBracketSimulation(state.bracket.rounds);
   state.bracketComplete = true;
   state.pendingFinalizeFn = finalizeFn;
@@ -3267,6 +3340,7 @@ function applyTournamentBoutResult(){
   const playerWon = r.winner.id === state.fighterId;
   const stage = state.tournamentStage;
   const roundName = state.bracket.rounds[state.bracketRoundIndex].name;
+  recordLiveMatchResult(playerWon);
 
   updateFighter(state.fighterId, (f)=>{
     if(playerWon) f.record.wins += 1; else f.record.losses += 1;
@@ -3309,6 +3383,7 @@ function applyJuvenileInviteBoutResult(){
   const playerWon = r.winner.id === state.fighterId;
   const roundName = state.bracket.rounds[state.bracketRoundIndex].name;
   const label = state.inviteEventLabel;
+  recordLiveMatchResult(playerWon);
 
   updateFighter(state.fighterId, (f)=>{
     if(playerWon) f.record.wins += 1; else f.record.losses += 1;
@@ -3378,6 +3453,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V28 · 2026-07-14</div>
+<div class="version-badge">FIGHT PIT · V29 · 2026-07-14</div>
 </body>
 </html>
