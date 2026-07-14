@@ -942,22 +942,41 @@ function runJuvenileTournamentDay(pools, provinceId, day){
       else return; // not enough in this weight class this week — skip, don't force a mismatch
       // Age-sorted seeding so the bracket isn't a coin-flip 12-vs-17 matchup in round one.
       let field = [...classGroup].sort((a,b)=> a.age-b.age).slice(0, size);
+      let runnerUp = null;
       while(field.length > 1){
+        const isFinal = field.length === 2;
         const nextRound = [];
         for(let i=0;i+1<field.length;i+=2){
           const { winner, loser } = quickSimBout(field[i], field[i+1]);
           winner.record.wins += 1; loser.record.losses += 1;
           logNpcBout(winner, loser, 'Juvenile', `${settlement} — Local Tournament (${wc}weight)`, day);
+          if(isFinal) runnerUp = loser;
           nextRound.push(winner);
         }
         field = nextRound;
       }
-      if(field[0]){ applyNpcGrowthTick(field[0]); applyNpcGrowthTick(field[0]); } // tournament win = an extra growth tick
+      if(field[0]){
+        applyNpcGrowthTick(field[0]); applyNpcGrowthTick(field[0]); // tournament win = an extra growth tick
+        // Not logged to the shared results feed — Tuesday's local brackets run in every
+        // settlement with enough registered fighters, dozens per week, and would drown
+        // out the comparatively rare Wednesday Invite results the feed exists to surface.
+      }
     });
   });
 }
 
-function runJuvenileFiestaDay(pools, provinceId, day, poolOverride){
+// Adds a batch of results to the log in ONE load+save cycle, instead of the naive
+// load-modify-save per bracket completion that made a single Wednesday (hundreds of
+// small brackets across the island) cost tens of seconds during catch-up.
+function flushResultsLog(newEntries){
+  if(!newEntries.length) return;
+  const log = loadResultsLog();
+  const merged = newEntries.concat(log);
+  if(merged.length > 3000) merged.length = 3000;
+  saveResultsLog(merged);
+}
+
+function runJuvenileFiestaDay(pools, provinceId, day, poolOverride, resultsBuffer){
   const pool = poolOverride || pools.juvenile[provinceId];
   if(!pool || pool.length < 4) return;
   Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
@@ -969,23 +988,53 @@ function runJuvenileFiestaDay(pools, provinceId, day, poolOverride){
       else if(classGroup.length >= 4) size = 4;
       else return; // not enough for a bracket this week in this class
       let field = [...classGroup].sort(()=>Math.random()-0.5).slice(0, size);
+      let runnerUp = null;
       while(field.length > 1){
+        const isFinal = field.length === 2;
         const nextRound = [];
         for(let i=0;i+1<field.length;i+=2){
           const { winner, loser } = quickSimBout(field[i], field[i+1]);
           winner.record.wins += 1; loser.record.losses += 1;
           logNpcBout(winner, loser, 'Juvenile', `${settlement} — Fiesta Fights (${wc}weight)`, day);
+          if(isFinal) runnerUp = loser;
           nextRound.push(winner);
         }
         field = nextRound;
       }
-      if(field[0]) applyNpcGrowthTick(field[0]); // tournament win = a growth tick, same as Tuesday
+      if(field[0]){
+        applyNpcGrowthTick(field[0]); // tournament win = a growth tick, same as Tuesday
+        (resultsBuffer||[]).push({
+          day, hostKey: settlement, eventLabel: 'Fiesta Fights', weightClass: wc, kind:'fiesta', size,
+          championId: field[0].id, championName: field[0].name,
+          runnerUpId: runnerUp ? runnerUp.id : null, runnerUpName: runnerUp ? runnerUp.name : null,
+        });
+      }
     });
   });
 }
 
 // Records a 1st/2nd/3rd finish on a fighter's own history — first-round-and-out losses
 // in an 8-man field don't get a numbered placement, just the normal fight-log loss.
+// A lightweight, bounded, shared log of every bracket champion crowned island-wide —
+// Invite Night, Tuesday Local Tournament, and Fiesta Fights all write here. This is what
+// makes "who won Wednesday's card in Sherwood" an answerable question instead of
+// something only visible if you happened to be standing in that specific pit.
+const RESULTS_LOG_KEY = 'iifl_juvenile_results_log_v1';
+function loadResultsLog(){
+  try{ const raw = localStorage.getItem(RESULTS_LOG_KEY); return raw ? JSON.parse(raw) : []; }
+  catch(err){ return []; }
+}
+function saveResultsLog(log){
+  try{ localStorage.setItem(RESULTS_LOG_KEY, JSON.stringify(log)); }
+  catch(err){ console.error('IIFL results log save failed:', err); }
+}
+function logNotableResult(entry){
+  const log = loadResultsLog();
+  log.unshift(entry);
+  if(log.length > 3000) log.length = 3000; // recent history, not a full ledger — filtering by province/day keeps it browsable
+  saveResultsLog(log);
+}
+
 function recordInvitePlacement(f, eventLabel, weightClass, day, place){
   if(!f.inviteResults) f.inviteResults = [];
   f.inviteResults.push({ event: eventLabel, weightClass, place, date: dateForDay(day).toISOString() });
@@ -1033,7 +1082,7 @@ function ageBandOf(age){
   return 'Old';
 }
 
-function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, eventLabel, weightClass, ageBand, day){
+function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, eventLabel, weightClass, ageBand, day, resultsBuffer){
   const size = classListAvailable.length >= 8 ? 8 : (classListAvailable.length >= 4 ? 4 : 0);
   if(!size) return;
   const wildcardCount = size >= 8 ? 2 : 1;
@@ -1052,6 +1101,7 @@ function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, even
   }
   if(!field.length) return field;
   let remaining = [...field];
+  let runnerUp = null;
   while(remaining.length > 1){
     const isFinal = remaining.length === 2;
     const isSemifinal = remaining.length === 4;
@@ -1061,7 +1111,7 @@ function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, even
       winner.record.wins += 1; loser.record.losses += 1;
       logNpcBout(winner, loser, 'Juvenile', `${hostKey} — ${eventLabel} (${weightClass}weight, ${ageBand})`, day);
       applyNpcGrowthTick(winner);
-      if(isFinal) recordInvitePlacement(loser, eventLabel, weightClass, day, 2);
+      if(isFinal){ recordInvitePlacement(loser, eventLabel, weightClass, day, 2); runnerUp = loser; }
       else if(isSemifinal) recordInvitePlacement(loser, eventLabel, weightClass, day, 3);
       nextRound.push(winner);
     }
@@ -1070,6 +1120,11 @@ function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, even
   if(remaining[0]){
     applyNpcGrowthTick(remaining[0]); applyNpcGrowthTick(remaining[0]);
     recordInvitePlacement(remaining[0], eventLabel, weightClass, day, 1);
+    (resultsBuffer||[]).push({
+      day, hostKey, eventLabel, weightClass, ageBand, kind:'invite', size,
+      championId: remaining[0].id, championName: remaining[0].name,
+      runnerUpId: runnerUp ? runnerUp.id : null, runnerUpName: runnerUp ? runnerUp.name : null,
+    });
   }
   return field;
 }
@@ -1083,6 +1138,7 @@ const WEDNESDAY_SURPRISE_HOST_CHANCE = 0.02;
 // own roster fighters are good enough to get pulled in themselves (queued for a popup
 // rather than auto-resolved), and sends everyone left over to ordinary Fiesta Fights.
 function runWednesdayEvents(pools, day){
+  const resultsBuffer = [];
   const topPits = topPitsIslandWide(WEDNESDAY_TOP_PIT_COUNT);
   const topKeys = new Set(topPits.map(p=>p.key));
   const hostingThisWeek = topPits.filter(()=> Math.random() < WEDNESDAY_TOP_HOST_CHANCE);
@@ -1097,7 +1153,8 @@ function runWednesdayEvents(pools, day){
   });
 
   if(!hostingThisWeek.length){
-    PROVINCES.forEach(p=>{ runJuvenileFiestaDay(pools, p.id, day); });
+    PROVINCES.forEach(p=>{ runJuvenileFiestaDay(pools, p.id, day, null, resultsBuffer); });
+    flushResultsLog(resultsBuffer);
     return;
   }
 
@@ -1154,7 +1211,7 @@ function runWednesdayEvents(pools, day){
       JUVENILE_AGE_BANDS.forEach(band=>{
         const isReserved = reservedSlots.some(r=> r.hostKey===host.key && r.weightClass===wc && r.ageBand===band);
         if(isReserved) return;
-        const field = runInviteClassBracket(byClassBand[wc][band], host.key, host.provinceId, label, wc, band, day);
+        const field = runInviteClassBracket(byClassBand[wc][band], host.key, host.provinceId, label, wc, band, day, resultsBuffer);
         (field||[]).forEach(f=> claimedFighterIds.add(f.id));
       });
     });
@@ -1164,8 +1221,9 @@ function runWednesdayEvents(pools, day){
     const pool = pools.juvenile[p.id];
     if(!pool) return;
     const leftover = pool.filter(f=> !claimedFighterIds.has(f.id));
-    runJuvenileFiestaDay(pools, p.id, day, leftover);
+    runJuvenileFiestaDay(pools, p.id, day, leftover, resultsBuffer);
   });
+  flushResultsLog(resultsBuffer);
 }
 
 // Picks a pit location for a province weighted by that pit's own size, so new intake
@@ -2310,6 +2368,7 @@ const state = {
   period: 'Morning', movesRemaining: 3,
   isBlackMarket: false,
   randomEventPending: null, // event type awaiting resolution on the current screen
+  resultsFilterProvince: 'island', // province filter for the Fight Card Results screen
   encounterResult: null, // outcome of a Local encounter choice, awaiting the player closing it out
   standingsTier: 'pro',
   newspaperProvinceId: null, // which province's paper is currently open; null = player's own
@@ -2394,6 +2453,7 @@ function render(){
   else if(state.screen==='loc-minigames'){ body = renderLocMinigames(); title='???'; }
   else if(state.screen==='loc-travel'){ body = renderLocTravel(); title='THE ROAD OUT'; sub=state.settlementName; }
   else if(state.screen==='random-event'){ body = renderRandomEvent(); title='ON THE STREET'; }
+  else if(state.screen==='results'){ body = renderResultsScreen(); title='FIGHT RESULTS'; }
   else if(state.screen==='newspaper-picker'){ body = renderNewspaperPicker(); title='NEWSSTAND'; sub='PICK A PAPER'; }
   else if(state.screen==='book-slot'){ body = renderBookSlot(); title='BOOK YOUR FIGHT'; sub='PICK AN OPPONENT'; }
   else if(state.screen==='tournament-night'){ body = renderTournamentNight(); title='TOURNAMENT NIGHT'; sub='SINGLE ELIMINATION'; }
@@ -3002,6 +3062,66 @@ const TRAINER_TIP_LINES = [
 ];
 
 // Real, persistent Juvenile leaders — same registry the player draws opponents from.
+// Short preview for the newspaper — a handful of the most recent results relevant to
+// this province (or everywhere, for the island edition).
+function recentResultsSnippetHtml(provinceId){
+  const log = loadResultsLog();
+  const filtered = provinceId==='island' ? log : log.filter(e=> provinceHasHost(provinceId, e.hostKey));
+  if(!filtered.length) return `<p>No fight cards on record yet — check back after Monday.</p>`;
+  return filtered.slice(0,5).map(e=> `
+    <p style="margin-bottom:6px;">
+      <b>${e.eventLabel}</b> at ${e.hostKey} (${e.weightClass}weight) —
+      <span class="clickable-name" data-open-fighter="${e.championId}">${e.championName}</span> takes it${e.runnerUpName ? ` over <span class="clickable-name" data-open-fighter="${e.runnerUpId}">${e.runnerUpName}</span>` : ''}.
+    </p>
+  `).join('');
+}
+
+// True if a settlement/pit key belongs to the given province — used to filter the
+// island-wide results log down to "just what happened around here."
+function provinceHasHost(provinceId, hostKey){
+  const settlements = SETTLEMENT_DATA[provinceId] || [];
+  if(settlements.some(s=> s.name===hostKey)) return true;
+  if(provinceId==='carpathia' && CARPATHIA_COMBINED_PITS[hostKey]) return true;
+  return false;
+}
+
+function renderResultsScreen(){
+  const filterProvince = state.resultsFilterProvince || 'island';
+  const log = loadResultsLog();
+  const filtered = filterProvince==='island' ? log : log.filter(e=> provinceHasHost(filterProvince, e.hostKey));
+  const byDay = {};
+  filtered.slice(0, 100).forEach(e=>{ (byDay[e.day] = byDay[e.day]||[]).push(e); });
+  const days = Object.keys(byDay).map(Number).sort((a,b)=> b-a);
+
+  const kindLabel = { invite:'⭐ Invite Circuit', tournament:'Local Tournament', fiesta:'Fiesta Fights' };
+  const daysHtml = days.length ? days.map(day=>{
+    const entries = byDay[day];
+    const rows = entries.map(e=> `
+      <div class="sched-row">
+        <span class="sched-time">${e.size}-man</span>
+        <span class="sched-matchup">
+          <b>${kindLabel[e.kind]||e.eventLabel}</b>${e.kind!=='invite'?'':''} — ${e.hostKey} (${e.weightClass}weight${e.ageBand?', '+e.ageBand:''})<br>
+          <span class="clickable-name" data-open-fighter="${e.championId}">${e.championName}</span> champion${e.runnerUpName ? `, def. <span class="clickable-name" data-open-fighter="${e.runnerUpId}">${e.runnerUpName}</span>` : ''}
+        </span>
+      </div>
+    `).join('');
+    return `<div class="weight-class-block"><div class="wc-label">${formatCalendarDate(day)}</div>${rows}</div>`;
+  }).join('') : `<p style="font-family:var(--body); color:var(--bone-dim); text-align:center;">Nothing on record yet for this filter.</p>`;
+
+  const provinceOptions = ['island', ...PROVINCES.map(p=>p.id)].map(pid=>
+    `<option value="${pid}" ${filterProvince===pid?'selected':''}>${pid==='island'?'Island Wide':PROVINCES.find(p=>p.id===pid).name}</option>`
+  ).join('');
+
+  return `
+    <div class="loc-head"><div class="loc-name">Fight Card Results</div></div>
+    <div class="btn-row" style="margin-bottom:12px;">
+      <select id="results-province-filter" style="flex:1; background:var(--bg-raised); color:var(--bone); border:1px solid var(--line); padding:8px; font-family:var(--body); font-size:13px;">${provinceOptions}</select>
+    </div>
+    ${daysHtml}
+    <div class="btn-row" style="margin-top:14px;"><span></span><button class="btn btn-primary" id="back-to-walk">← Back</button></div>
+  `;
+}
+
 function topJuvenileFightersFor(provinceId, n){
   catchUpJuvenileSimulation();
   const pools = loadFieldPools();
@@ -3148,6 +3268,14 @@ function renderNewspaper(){
         <div class="np-headline">${isIsland ? 'Juvenile Leaders — Island Wide' : 'Around The Circuit'}</div>
         <div class="np-byline">Real records, updated as of today</div>
         <div class="np-body">${juvHtml}</div>
+      </div>
+      <hr class="np-divider">
+
+      <div class="np-section">
+        <div class="np-headline">Fight Card Results</div>
+        <div class="np-byline">Who won what, recently</div>
+        <div class="np-body">${recentResultsSnippetHtml(provinceId)}</div>
+        <div class="btn-row" style="margin-top:8px;"><span></span><button class="btn" id="view-full-results">See Full Results →</button></div>
       </div>
       <hr class="np-divider">
 
@@ -3887,6 +4015,18 @@ function wireEvents(){
   const backToNewspaper = document.getElementById('back-to-newspaper');
   if(backToNewspaper) backToNewspaper.onclick = ()=>{ state.screen='newspaper'; render(); };
 
+  const viewFullResults = document.getElementById('view-full-results');
+  if(viewFullResults) viewFullResults.onclick = ()=>{
+    state.resultsFilterProvince = (state.newspaperProvinceId && state.newspaperProvinceId !== 'island') ? state.newspaperProvinceId : 'island';
+    state.screen = 'results';
+    render();
+  };
+  const resultsProvinceFilter = document.getElementById('results-province-filter');
+  if(resultsProvinceFilter) resultsProvinceFilter.onchange = (e)=>{
+    state.resultsFilterProvince = e.target.value;
+    render();
+  };
+
   const viewBlackMarket = document.getElementById('view-black-market');
   if(viewBlackMarket) viewBlackMarket.onclick = ()=>{ state.screen='black-market'; render(); };
 
@@ -4262,6 +4402,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V27 · 2026-07-14</div>
+<div class="version-badge">FREE ROAM · V28 · 2026-07-14</div>
 </body>
 </html>
