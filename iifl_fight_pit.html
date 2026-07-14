@@ -993,35 +993,29 @@ function pickInviteWildcard(pool, reason, hostProvinceId){
   return candidates.length ? pick(candidates) : null;
 }
 
-// Runs one pit's invite bracket for a single weight class — mostly the BEST available
-// fighters island-wide, plus a couple of wildcard slots that aren't about the OVR at
-// all. claimedFighterIds keeps the same fighter from getting pulled into two brackets
-// in the same week.
-function runInviteClassBracket(pools, hostKey, hostProvinceId, eventLabel, weightClass, day, claimedFighterIds){
-  const allInClass = [];
-  Object.values(pools.juvenile).forEach(list=>{
-    list.forEach(f=>{ if(f.weightClass===weightClass && !claimedFighterIds.has(f.id)) allInClass.push(f); });
-  });
-  allInClass.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats));
-  const size = allInClass.length >= 8 ? 8 : (allInClass.length >= 4 ? 4 : 0);
+// Runs one pit's invite bracket for a single weight class, pulling from a SHARED,
+// already-sorted, mutable array for that class (see runWednesdayEvents) — selected
+// fighters are spliced out in place, so repeated calls across multiple host pits in the
+// same week work against a shrinking list instead of re-filtering the full population
+// (thousands of fighters) from scratch every time.
+function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, eventLabel, weightClass, day){
+  const size = classListAvailable.length >= 8 ? 8 : (classListAvailable.length >= 4 ? 4 : 0);
   if(!size) return;
   const wildcardCount = size >= 8 ? 2 : 1;
-  const used = new Set();
   const field = [];
   for(let i=0;i<wildcardCount;i++){
-    const remaining = allInClass.filter(f=> !used.has(f.id));
-    if(!remaining.length) break;
+    if(!classListAvailable.length) break;
     const reason = pick(INVITE_WILDCARD_REASONS);
-    const chosen = pickInviteWildcard(remaining, reason, hostProvinceId);
-    if(chosen){ field.push(chosen); used.add(chosen.id); }
+    const chosen = pickInviteWildcard(classListAvailable, reason, hostProvinceId);
+    if(!chosen) continue;
+    const idx = classListAvailable.indexOf(chosen);
+    if(idx>=0) classListAvailable.splice(idx,1);
+    field.push(chosen);
   }
-  for(const f of allInClass){
-    if(field.length >= size) break;
-    if(used.has(f.id)) continue;
-    field.push(f); used.add(f.id);
+  while(field.length < size && classListAvailable.length){
+    field.push(classListAvailable.shift()); // still OVR-sorted, so this is "next best available"
   }
-  if(!field.length) return;
-  field.forEach(f=> claimedFighterIds.add(f.id));
+  if(!field.length) return field;
   let remaining = [...field];
   while(remaining.length > 1){
     const isFinal = remaining.length === 2;
@@ -1042,6 +1036,7 @@ function runInviteClassBracket(pools, hostKey, hostProvinceId, eventLabel, weigh
     applyNpcGrowthTick(remaining[0]); applyNpcGrowthTick(remaining[0]); // tournament win = an extra growth tick
     recordInvitePlacement(remaining[0], eventLabel, weightClass, day, 1);
   }
+  return field;
 }
 
 const WEDNESDAY_TOP_PIT_COUNT = 6;
@@ -1066,6 +1061,23 @@ function runWednesdayEvents(pools, day){
     });
   });
 
+  if(!hostingThisWeek.length){
+    // Nobody's hosting an invite night this week — straight to Fiesta for everyone,
+    // no need to build the (comparatively expensive) sorted class lists below at all.
+    PROVINCES.forEach(p=>{ runJuvenileFiestaDay(pools, p.id, day); });
+    return;
+  }
+
+  // Build each weight class's full island-wide roster ONCE, sorted by OVR — reused
+  // below by every host pit's bracket AND the player-eligibility check, instead of
+  // rescanning the entire population (thousands of fighters) over and over. This one
+  // change is the difference between catching up a season in milliseconds vs seconds.
+  const byClass = { Light: [], Middle: [], Heavy: [] };
+  Object.values(pools.juvenile).forEach(list=>{
+    list.forEach(f=>{ if(byClass[f.weightClass]) byClass[f.weightClass].push(f); });
+  });
+  Object.keys(byClass).forEach(wc=> byClass[wc].sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats)));
+
   const claimedFighterIds = new Set();
 
   // Book each hosting pit's event edition exactly once for the week — reused below by
@@ -1081,34 +1093,28 @@ function runWednesdayEvents(pools, day){
   let rosterChanged = false;
   const reservedSlots = []; // { hostKey, eventLabel, weightClass } claimed by a player invite this week
 
-  if(hostingThisWeek.length){
-    roster.forEach(f=>{
-      if(!f.juvenileSeason || f.juvenileSeason.complete) return;
-      if(f.pendingJuvenileInvite) return; // already sitting on an invite from a prior week
-      const wClass = weightClassOf(f.weightLb);
-      const fOvr = calcOVR(f.stats);
-      const contenders = [];
-      Object.values(pools.juvenile).forEach(list=>{
-        list.forEach(x=>{ if(x.weightClass===wClass) contenders.push(calcOVR(x.stats)); });
-      });
-      contenders.sort((a,b)=>b-a);
-      const bar = contenders[7] ?? 0; // 8th-best OVR island-wide in this class
-      let reason = 'Top Contender';
-      if(fOvr < bar){
-        // Not top-8 on paper — still a small independent shot at a wildcard slot,
-        // same as any other fighter in the pool.
-        if(Math.random() >= 0.12) return;
-        reason = pick(INVITE_WILDCARD_REASONS);
-      }
-      const host = hostingThisWeek.find(h=> h.provinceId === f.provinceId) || hostingThisWeek[0];
-      if(!host) return;
-      if(reason === 'Local Favorite' && host.provinceId !== f.provinceId) reason = 'Political Appointment';
-      const label = eventLabelByHost[host.key];
-      f.pendingJuvenileInvite = { day, hostKey: host.key, eventLabel: label, weightClass: wClass, reason };
-      reservedSlots.push({ hostKey: host.key, eventLabel: label, weightClass: wClass });
-      rosterChanged = true;
-    });
-  }
+  roster.forEach(f=>{
+    if(!f.juvenileSeason || f.juvenileSeason.complete) return;
+    if(f.pendingJuvenileInvite) return; // already sitting on an invite from a prior week
+    const wClass = weightClassOf(f.weightLb);
+    const fOvr = calcOVR(f.stats);
+    const classList = byClass[wClass] || [];
+    const bar = classList[7] ? calcOVR(classList[7].stats) : 0; // 8th-best OVR island-wide in this class
+    let reason = 'Top Contender';
+    if(fOvr < bar){
+      // Not top-8 on paper — still a small independent shot at a wildcard slot,
+      // same as any other fighter in the pool.
+      if(Math.random() >= 0.12) return;
+      reason = pick(INVITE_WILDCARD_REASONS);
+    }
+    const host = hostingThisWeek.find(h=> h.provinceId === f.provinceId) || hostingThisWeek[0];
+    if(!host) return;
+    if(reason === 'Local Favorite' && host.provinceId !== f.provinceId) reason = 'Political Appointment';
+    const label = eventLabelByHost[host.key];
+    f.pendingJuvenileInvite = { day, hostKey: host.key, eventLabel: label, weightClass: wClass, reason };
+    reservedSlots.push({ hostKey: host.key, eventLabel: label, weightClass: wClass });
+    rosterChanged = true;
+  });
   if(rosterChanged){ try{ saveRoster(roster); }catch(err){} }
 
   hostingThisWeek.forEach(host=>{
@@ -1116,7 +1122,8 @@ function runWednesdayEvents(pools, day){
     ['Light','Middle','Heavy'].forEach(wc=>{
       const isReserved = reservedSlots.some(r=> r.hostKey===host.key && r.weightClass===wc);
       if(isReserved) return; // this bracket is waiting on the player's accept/decline instead
-      runInviteClassBracket(pools, host.key, host.provinceId, label, wc, day, claimedFighterIds);
+      const field = runInviteClassBracket(byClass[wc], host.key, host.provinceId, label, wc, day);
+      (field||[]).forEach(f=> claimedFighterIds.add(f.id));
     });
   });
 
@@ -3203,6 +3210,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V22 · 2026-07-14</div>
+<div class="version-badge">FIGHT PIT · V23 · 2026-07-14</div>
 </body>
 </html>
