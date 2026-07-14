@@ -420,7 +420,7 @@ function eventNameForDay(day){
   const w = weekdayNameForDay(day);
   if(w==='Monday') return 'Juvenile League Fight Night';
   if(w==='Tuesday') return 'Juvenile Local Tournament';
-  if(w==='Wednesday') return 'Juvenile Fiesta Fights';
+  if(w==='Wednesday') return 'Invite Circuit / Fiesta Fights';
   if(w==='Thursday') return 'Junior League Night';
   if(w==='Friday') return 'Amateur Fight Night';
   if(w==='Saturday') return 'Pro League Night';
@@ -447,17 +447,209 @@ function eventNameForDay(day){
   standing pool below is a representative, UI-practical sample sized proportionally —
   not the literal 800, which would be unusable as a list.
 */
-const FIELD_KEY = 'iifl_field_fighters_v2';
+const FIELD_KEY = 'iifl_field_fighters_v3'; // bumped so existing pools regenerate under the settlement-tier pit system
 const AMATEUR_POOL_COMPOSITION = { Novice:8, Developing:8, Contender:5, Elite:3 }; // 24 per province
 
-// Standing Juvenile pool size per province (ages 11-18), population-weighted.
-// Bumped up from the original sample size now that this pool is a real, persistent,
-// simulated cast (newspaper + opponents) rather than a one-off flavor list — plus new
-// 11-year-olds keep entering every simulated Monday as the season goes (see intake below).
-const JUVENILE_POOL_SIZES = {
-  kolsati:140, sherwood:88, ditiero:80, northeast:48,
-  alexandretta:45, carpathia:43, bay:43, gazon:30,
+// Settlement population + tier data (Capital/City/Town/Village), canonical copy kept
+// identical to Free Roam and Character Creator — this is what drives how many Juvenile
+// pits exist in a province and how deep each one runs (see pitLocationsForProvince).
+const SETTLEMENT_DATA = {
+  alexandretta: [
+    { name:'Williamsburg', population:72296, tier:'Capital' }, { name:'St. Anne', population:48210, tier:'City' },
+    { name:'Wolverbridge', population:14512, tier:'Town' }, { name:'Port Oxford', population:9820, tier:'Town' },
+    { name:'Nattingham', population:7204, tier:'Town' }, { name:'Blackchapel', population:6113, tier:'Town' },
+    { name:'Munchen', population:5402, tier:'Village' }, { name:'Cowborough', population:1804, tier:'Village' },
+    { name:'Blackford', population:1206, tier:'Village' }, { name:'Mosshead', population:902, tier:'Village' },
+  ],
+  kolsati: [
+    { name:'Kolsati', population:92651, tier:'Capital' }, { name:'St. Johnson', population:47320, tier:'City' },
+    { name:'North Bender', population:16210, tier:'Town' }, { name:'Lincoln', population:12812, tier:'Town' },
+    { name:'Richmond', population:9601, tier:'Town' }, { name:'Wickson', population:8104, tier:'Town' },
+    { name:'Briggston', population:6702, tier:'Town' }, { name:'Castellan Heights', population:5904, tier:'Town' },
+    { name:'Marrow Hill', population:2801, tier:'Village' }, { name:"Pell's Crossing", population:2401, tier:'Village' },
+    { name:'Dorado', population:2201, tier:'Village' }, { name:'Coco Ridge', population:1601, tier:'Village' },
+    { name:'Dunmore', population:1401, tier:'Village' }, { name:'Iron Wharf', population:1201, tier:'Village' },
+    { name:'Slate Row', population:901, tier:'Village' }, { name:"Cutter's End", population:701, tier:'Village' },
+    { name:'Venice', population:1101, tier:'Village' },
+  ],
+  sherwood: [
+    { name:'Frontenac City', population:83231, tier:'Capital' }, { name:'Kahuna', population:41022, tier:'City' },
+    { name:'Shorneville', population:15304, tier:'Town' }, { name:'Dennapolis', population:13108, tier:'Town' },
+    { name:'Sheffield', population:8904, tier:'Town' }, { name:'Cambridge', population:7402, tier:'Town' },
+    { name:'Lawrenceville', population:6301, tier:'Town' }, { name:'Millbrook Heights', population:2904, tier:'Village' },
+    { name:"Devil's Point", population:2104, tier:'Village' }, { name:'Starsanne', population:1502, tier:'Village' },
+    { name:'North Lawrenceville', population:1301, tier:'Village' }, { name:'Caldwell Junction', population:1001, tier:'Village' },
+    { name:'Petsworth', population:901, tier:'Village' }, { name:"Harrow's Bend", population:801, tier:'Village' },
+    { name:'Oak Siding', population:701, tier:'Village' }, { name:'Greeley Flats', population:601, tier:'Village' },
+    { name:'Thistledown', population:501, tier:'Village' }, { name:'Brakken', population:801, tier:'Village' },
+  ],
+  gazon: [
+    { name:'Gazon Main', population:82335, tier:'Capital' }, { name:'Northern Gazon', population:11204, tier:'Town' },
+    { name:'Cangate', population:6801, tier:'Town' }, { name:'Gazon South', population:2204, tier:'Village' },
+  ],
+  ditiero: [
+    { name:'Di Tiero', population:73180, tier:'Capital' }, { name:'Alibar', population:33012, tier:'City' },
+    { name:'Bakii', population:14702, tier:'Town' }, { name:"Suli' Ba", population:8203, tier:'Town' },
+    { name:'South Bender', population:2801, tier:'Village' }, { name:'Bellechasse', population:1701, tier:'Village' },
+    { name:'Port Maray', population:1401, tier:'Village' }, { name:'Buradam', population:3101, tier:'Village' },
+    { name:'Cane Hollow', population:1201, tier:'Village' }, { name:'Marsh Landing', population:1101, tier:'Village' },
+    { name:'Bayou Verte', population:901, tier:'Village' }, { name:'Saint Roque', population:801, tier:'Village' },
+    { name:'Driftwood Key', population:701, tier:'Village' }, { name:'Crayfish Bend', population:601, tier:'Village' },
+    { name:'Lantern Cay', population:501, tier:'Village' }, { name:'Bantha', population:601, tier:'Village' },
+  ],
+  carpathia: [
+    { name:'Bukovene', population:71619, tier:'Capital' }, { name:'Corsuva', population:29103, tier:'City' },
+    { name:'South Port', population:9101, tier:'Town' }, { name:'Vyrholm', population:7602, tier:'Town' },
+    { name:'Castle Reach', population:6203, tier:'Town' }, { name:'Mikini', population:2801, tier:'Village' },
+    { name:'Purovest', population:2101, tier:'Village' }, { name:'Greywatch', population:1901, tier:'Village' },
+    { name:'White Sands', population:1301, tier:'Village' }, { name:'Slanik', population:1101, tier:'Village' },
+    { name:'Hollowmere', population:1001, tier:'Village' }, { name:"Sorrow's Pass", population:901, tier:'Village' },
+    { name:'Ravenshade', population:801, tier:'Village' }, { name:'Drovna', population:701, tier:'Village' },
+    { name:'Kessel Vorn', population:601, tier:'Village' }, { name:'Bargo Pass', population:501, tier:'Village' },
+    { name:'Thornfall', population:601, tier:'Village' }, { name:'Wraithwood', population:401, tier:'Village' },
+    { name:'Ludus', population:951, tier:'Village' }, { name:'Varna', population:801, tier:'Village' },
+    { name:'Balchik', population:701, tier:'Village' }, { name:'Pice', population:501, tier:'Village' },
+  ],
+  northeast: [
+    { name:'Santorino', population:75708, tier:'Capital' }, { name:'Ineawood', population:29304, tier:'City' },
+    { name:'Mizukoshi', population:8702, tier:'Town' }, { name:'Tsubaki Bay', population:6103, tier:'Town' },
+    { name:'Hoshimura', population:2801, tier:'Village' }, { name:'Kanesato', population:2101, tier:'Village' },
+    { name:'Renkawa', population:1901, tier:'Village' }, { name:'Sodegaura', population:1301, tier:'Village' },
+    { name:'Takamine', population:1101, tier:'Village' }, { name:'Usuzumi', population:901, tier:'Village' },
+    { name:'Yorimasa', population:801, tier:'Village' }, { name:'Fubuki', population:701, tier:'Village' },
+    { name:'Iwagakure', population:601, tier:'Village' }, { name:'Barsastro', population:2401, tier:'Village' },
+  ],
+  bay: [
+    { name:'Charleston', population:67103, tier:'Capital' }, { name:'Iron City', population:37021, tier:'City' },
+    { name:'Treasure Beach', population:9302, tier:'Town' }, { name:'Bayport', population:7104, tier:'Town' },
+    { name:'Pinecrest Hollow', population:2601, tier:'Village' }, { name:"Dell's Corner", population:1401, tier:'Village' },
+    { name:'Maple Junction', population:1201, tier:'Village' }, { name:'Briarwood', population:1001, tier:'Village' },
+    { name:'Sunfish Cove', population:901, tier:'Village' }, { name:'Acorn Flats', population:801, tier:'Village' },
+    { name:'Quail Hollow', population:701, tier:'Village' }, { name:'Hickory Bend', population:601, tier:'Village' },
+  ],
 };
+
+// Carpathia's remote villages are too sparse to each field a standalone Juvenile pit,
+// so they pool into three shared regional circuits instead. Bargo Rift is the smallest
+// and most remote of the three (built around Wraithwood, the least populated settlement
+// on the island) — it's the intended source for the GDD's rare "cohort of near-invincible
+// fighters" event; nobody really knows what training looks like that far from anywhere.
+const CARPATHIA_COMBINED_PITS = {
+  'Highreach Circuit': ['Mikini','Purovest','Greywatch','White Sands','Slanik','Hollowmere'],
+  'Hollow Road Circuit': ["Sorrow's Pass",'Ravenshade','Varna','Drovna','Balchik','Ludus'],
+  'Bargo Rift Circuit': ['Kessel Vorn','Thornfall','Bargo Pass','Pice','Wraithwood'],
+};
+
+// Juvenile pit sizing, PER WEIGHT CLASS (multiply by 3 for a location's total roster).
+// TARGET is what a settlement fields at full province appetite (1.0); HARD_MIN is the
+// absolute floor regardless of appetite, so even the lowest-interest province still
+// puts on a real Tuesday-night bracket everywhere instead of a two-man scrap.
+const PIT_TIER_TARGET  = { Village:6, CombinedPit:11, Town:20, City:35, Capital:50 };
+const PIT_TIER_HARDMIN = { Village:4, CombinedPit:6,  Town:10, City:18, Capital:28 };
+
+// How much of a province's population actually turns out for organized Juvenile
+// fighting (0-1). Settlement counts and populations set the ceiling; appetite is the
+// knob that sets the actual island pecking order — Kolsati and Sherwood are fight-mad,
+// Gazon and Carpathia are provinces nobody bothers scouting.
+const PROVINCE_APPETITE = {
+  kolsati:1.00, sherwood:0.90, ditiero:0.68, alexandretta:0.60,
+  northeast:0.55, bay:0.58, carpathia:0.28, gazon:0.40,
+};
+
+// Every Juvenile pit location in a province, with how many fighters per weight class it
+// should carry. Real settlements map 1:1 except Carpathia, where combined-pit members
+// are folded into their circuit and each fighter's hometown is drawn from the real
+// member villages (so Free Roam's map/walkability never sees a fake location name —
+// only the fight-log/tournament grouping treats them as one shared pit).
+function pitLocationsForProvince(provinceId){
+  const settlements = SETTLEMENT_DATA[provinceId] || [];
+  const appetite = PROVINCE_APPETITE[provinceId] ?? 0.5;
+  const combined = provinceId === 'carpathia' ? CARPATHIA_COMBINED_PITS : null;
+  const combinedMembers = combined ? new Set(Object.values(combined).flat()) : new Set();
+  const locations = [];
+  settlements.forEach(s=>{
+    if(combinedMembers.has(s.name)) return; // folded into a combined pit below
+    const perClass = Math.max(PIT_TIER_HARDMIN[s.tier], Math.round(PIT_TIER_TARGET[s.tier] * appetite));
+    locations.push({ key: s.name, hometownPool:[s.name], perClass });
+  });
+  if(combined){
+    Object.entries(combined).forEach(([pitName, members])=>{
+      const perClass = Math.max(PIT_TIER_HARDMIN.CombinedPit, Math.round(PIT_TIER_TARGET.CombinedPit * appetite));
+      locations.push({ key: pitName, hometownPool: members, perClass });
+    });
+  }
+  return locations;
+}
+
+// Resolves a fighter's real hometown to its shared-pit grouping key for fight-log and
+// tournament-bracket purposes — Carpathia's combined-circuit villages collapse to one
+// key (e.g. "Bargo Rift Circuit"), everyone else's hometown is already the key.
+function pitKeyForHometown(hometown){
+  for(const [pitName, members] of Object.entries(CARPATHIA_COMBINED_PITS)){
+    if(members.includes(hometown)) return pitName;
+  }
+  return hometown;
+}
+
+// Every pit location island-wide, ranked by roster depth — this IS the ranking that
+// decides which 5-6 pits are big enough to host a Wednesday invitational most weeks.
+// Computed fresh from PIT_TIER_TARGET/PROVINCE_APPETITE rather than a hardcoded list,
+// so retuning those constants automatically retunes who's "top tier" too.
+function topPitsIslandWide(n){
+  const all = [];
+  PROVINCES.forEach(p=>{
+    pitLocationsForProvince(p.id).forEach(loc=>{
+      all.push({ provinceId: p.id, key: loc.key, hometownPool: loc.hometownPool, perClass: loc.perClass });
+    });
+  });
+  all.sort((a,b)=> b.perClass - a.perClass);
+  return all.slice(0, n);
+}
+
+// Roughly evocative, gritty promo-circuit names — the pool an event's sponsor name gets
+// drawn from. The same name can run independently at multiple pits (a "Cannonball
+// Rumble" in Kolsati and a separate "Cannonball Rumble" in Alexandretta both track their
+// own edition numbers), and a single pit can host more than one named series over time.
+const INVITE_SPONSOR_NAMES = [
+  'Cannonball Rumble','Wednesday Beatdown','Iron Fist Invitational','The Blacktop Brawl',
+  'Sundown Slugfest','The Hard Row Classic','Lantern Night Showcase','The Anvil Cup',
+  'Tin Roof Throwdown','Dustbowl Derby','The Salt Circuit Invitational','Midweek Mayhem',
+  'The Broken Bell Invitational','Cinder Row Clash','The Drydock Duel','Foghorn Faceoff',
+  'The Split Lip Series','Hollow Bell Showcase','The Rust Belt Rumble','Payday Fights',
+];
+const INVITE_REGISTRY_KEY = 'iifl_invite_registry_v1';
+function loadInviteRegistry(){
+  try{ const raw = localStorage.getItem(INVITE_REGISTRY_KEY); return raw ? JSON.parse(raw) : {}; }
+  catch(err){ return {}; }
+}
+function saveInviteRegistry(reg){
+  try{ localStorage.setItem(INVITE_REGISTRY_KEY, JSON.stringify(reg)); }catch(err){}
+}
+function ordinal(n){
+  const suf = ['th','st','nd','rd'], v = n % 100;
+  return n + (suf[(v-20)%10] || suf[v] || suf[0]);
+}
+// Books this week's edition of a hosting pit's event — reuses one of that pit's
+// established sponsors 85% of the time (incrementing its count), occasionally launching
+// a brand new named series at that pit instead (starts at "1st").
+function bookInviteEdition(pitKey){
+  const reg = loadInviteRegistry();
+  if(!reg[pitKey]) reg[pitKey] = [];
+  let entry;
+  if(reg[pitKey].length && Math.random() < 0.85){
+    entry = pick(reg[pitKey]);
+  } else {
+    const used = new Set(reg[pitKey].map(e=>e.name));
+    const available = INVITE_SPONSOR_NAMES.filter(n=> !used.has(n));
+    const name = available.length ? pick(available) : pick(INVITE_SPONSOR_NAMES);
+    entry = { name, count: 0 };
+    reg[pitKey].push(entry);
+  }
+  entry.count += 1;
+  saveInviteRegistry(reg);
+  return { name: entry.name, edition: entry.count, label: `${ordinal(entry.count)} ${entry.name}` };
+}
+
 // Relative share of each juvenile age in a standing population with realistic dropout —
 // younger cohorts are always more numerous than older ones since attrition is cumulative.
 // Ages 14-17 are also the Junior League draft window (14th birth-year earliest, 17 latest);
@@ -497,7 +689,7 @@ function generateAmateurFieldFighter(division, weightClass, province, leagueId){
   return opp;
 }
 
-function generateJuvenileFieldFighter(weightClass, province){
+function generateJuvenileFieldFighter(weightClass, province, hometown){
   const age = parseInt(weightedPick(JUVENILE_AGE_WEIGHTS), 10);
   const tier = rollTalentTier(0.46);
   const rawCenter = rand(10,90);
@@ -507,7 +699,7 @@ function generateJuvenileFieldFighter(weightClass, province){
     stats[k] = compressStat(raw, age, tier);
   });
   const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
-  const opp = finalizeOpponent(stats, avgOvr, weightClass, province, age);
+  const opp = finalizeOpponent(stats, avgOvr, weightClass, province, age, hometown);
   opp.age = age;
   opp.talentTier = tier;
   opp.weightClass = weightClassOf(opp.weightLb); // derive from the real BMI-based weight, not the pre-picked target
@@ -543,13 +735,17 @@ function seedJuvenilePoolInPlace(pools, provinceId){
   const province = PROVINCES.find(p=>p.id===provinceId);
   if(!province) return;
   const weightClasses = ['Light','Middle','Heavy'];
-  const size = JUVENILE_POOL_SIZES[provinceId] || 25;
   const pool = [];
-  for(let i=0;i<size;i++){
-    const f = generateJuvenileFieldFighter(pick(weightClasses), province);
-    f.entryDay = JUVENILE_SEASON_START_DAY;
-    pool.push(f);
-  }
+  pitLocationsForProvince(provinceId).forEach(loc=>{
+    weightClasses.forEach(wc=>{
+      for(let i=0;i<loc.perClass;i++){
+        const hometown = pick(loc.hometownPool);
+        const f = generateJuvenileFieldFighter(wc, province, hometown);
+        f.entryDay = JUVENILE_SEASON_START_DAY;
+        pool.push(f);
+      }
+    });
+  });
   pools.juvenile[provinceId] = pool;
 }
 
@@ -648,10 +844,13 @@ function updateFieldFighterRecord(fighterId, poolKey, won, isJuvenile, logEntry)
   pool the player draws opponents from and that Free Roam's newspaper reports on. Runs on
   the real Mon/Tue/Wed cadence off the shared game clock: Monday = League Fight Night
   (paired bouts within a settlement), Tuesday = Local Tournament (single-elim within a
-  settlement, 8 or 16 deep), Wednesday = Fiesta Fights (wider, sometimes cross-province,
-  matchups). Records and stats accumulate for real as days pass, and new 11-year-olds
-  keep entering most Mondays — this is what makes "who's out there" and what the paper
-  prints an actual, consistent, growing cast instead of invented-per-render flavor.
+  settlement, 8 or 16 deep), Wednesday = a two-tier night — the island's 5-6 biggest pits
+  run a named, sponsored invite circuit (best-available field drawn island-wide, plus a
+  couple of wildcard slots that aren't about the resume), while every other pit (and
+  anyone not pulled into an invite bracket) gets the older, looser Fiesta Fights instead.
+  Records and stats accumulate for real as days pass, and new 11-year-olds keep entering
+  most Mondays — this is what makes "who's out there" and what the paper prints an actual,
+  consistent, growing cast instead of invented-per-render flavor.
 */
 
 function quickSimBout(fA, fB){
@@ -674,7 +873,7 @@ function applyNpcGrowthTick(f){
 
 function groupFightersBySettlement(list){
   const map = {};
-  list.forEach(f=>{ const k = f.hometown || 'unknown'; (map[k] = map[k]||[]).push(f); });
+  list.forEach(f=>{ const k = pitKeyForHometown(f.hometown || 'unknown'); (map[k] = map[k]||[]).push(f); });
   return map;
 }
 
@@ -692,41 +891,52 @@ function runJuvenileLeagueNight(pools, provinceId, day){
   if(!pool || pool.length < 2) return;
   Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
     // Not everybody fights every week — roughly 40% of a settlement's roster is on any
-    // given week's card, paired off within it.
+    // given week's card. Paired within weight class, closest-age-first, so the pairing
+    // is at least a plausible matchup instead of whoever landed next to each other.
     const participants = group.filter(()=> Math.random() < 0.4);
-    for(let i=0;i+1<participants.length;i+=2){
-      const { winner, loser } = quickSimBout(participants[i], participants[i+1]);
-      winner.record.wins += 1; loser.record.losses += 1;
-      logNpcBout(winner, loser, 'Juvenile', `${settlement} — League Night`, day);
-      applyNpcGrowthTick(winner);
-      if(Math.random() < 0.5) applyNpcGrowthTick(loser);
-    }
+    ['Light','Middle','Heavy'].forEach(wc=>{
+      const classGroup = participants.filter(f=> f.weightClass===wc).sort((a,b)=> a.age-b.age);
+      for(let i=0;i+1<classGroup.length;i+=2){
+        const { winner, loser } = quickSimBout(classGroup[i], classGroup[i+1]);
+        winner.record.wins += 1; loser.record.losses += 1;
+        logNpcBout(winner, loser, 'Juvenile', `${settlement} — League Night (${wc}weight)`, day);
+        applyNpcGrowthTick(winner);
+        if(Math.random() < 0.5) applyNpcGrowthTick(loser);
+      }
+    });
   });
 }
 
 function runJuvenileTournamentDay(pools, provinceId, day){
   const pool = pools.juvenile[provinceId];
-  if(!pool || pool.length < 8) return;
+  if(!pool || pool.length < 4) return;
   Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
-    if(group.length < 8) return;
-    const size = group.length >= 16 ? 16 : 8;
-    let field = [...group].sort(()=>Math.random()-0.5).slice(0, size);
-    while(field.length > 1){
-      const nextRound = [];
-      for(let i=0;i+1<field.length;i+=2){
-        const { winner, loser } = quickSimBout(field[i], field[i+1]);
-        winner.record.wins += 1; loser.record.losses += 1;
-        logNpcBout(winner, loser, 'Juvenile', `${settlement} — Local Tournament`, day);
-        nextRound.push(winner);
+    ['Light','Middle','Heavy'].forEach(wc=>{
+      const classGroup = group.filter(f=> f.weightClass===wc);
+      let size;
+      if(classGroup.length >= 16) size = 16;
+      else if(classGroup.length >= 8) size = 8;
+      else if(classGroup.length >= 4) size = 4;
+      else return; // not enough in this weight class this week — skip, don't force a mismatch
+      // Age-sorted seeding so the bracket isn't a coin-flip 12-vs-17 matchup in round one.
+      let field = [...classGroup].sort((a,b)=> a.age-b.age).slice(0, size);
+      while(field.length > 1){
+        const nextRound = [];
+        for(let i=0;i+1<field.length;i+=2){
+          const { winner, loser } = quickSimBout(field[i], field[i+1]);
+          winner.record.wins += 1; loser.record.losses += 1;
+          logNpcBout(winner, loser, 'Juvenile', `${settlement} — Local Tournament (${wc}weight)`, day);
+          nextRound.push(winner);
+        }
+        field = nextRound;
       }
-      field = nextRound;
-    }
-    if(field[0]){ applyNpcGrowthTick(field[0]); applyNpcGrowthTick(field[0]); } // tournament win = an extra growth tick
+      if(field[0]){ applyNpcGrowthTick(field[0]); applyNpcGrowthTick(field[0]); } // tournament win = an extra growth tick
+    });
   });
 }
 
-function runJuvenileFiestaDay(pools, provinceId, day){
-  const pool = pools.juvenile[provinceId];
+function runJuvenileFiestaDay(pools, provinceId, day, poolOverride){
+  const pool = poolOverride || pools.juvenile[provinceId];
   if(!pool || pool.length < 2) return;
   const participants = [...pool].sort(()=>Math.random()-0.5).filter(()=> Math.random() < 0.3);
   for(let i=0;i<participants.length;i++){
@@ -749,13 +959,198 @@ function runJuvenileFiestaDay(pools, provinceId, day){
   }
 }
 
-// Roughly population-scaled chance of 1-2 new 11-year-olds registering on a given Monday.
-const JUVENILE_INTAKE_CHANCE = {
-  kolsati:0.9, sherwood:0.7, ditiero:0.65, northeast:0.55,
-  alexandretta:0.5, carpathia:0.45, bay:0.45, gazon:0.35,
-};
+// Records a 1st/2nd/3rd finish on a fighter's own history — first-round-and-out losses
+// in an 8-man field don't get a numbered placement, just the normal fight-log loss.
+function recordInvitePlacement(f, eventLabel, weightClass, day, place){
+  if(!f.inviteResults) f.inviteResults = [];
+  f.inviteResults.push({ event: eventLabel, weightClass, place, date: dateForDay(day).toISOString() });
+  if(f.inviteResults.length > 20) f.inviteResults = f.inviteResults.slice(-20); // flavor history, not a full ledger
+}
+
+// Not every invite is earned by the numbers — a card needs a hometown kid, a hot
+// streak everyone's talking about, a name with real drawing power, or just a promoter
+// doing a favor for someone with pull.
+const INVITE_WILDCARD_REASONS = ['Local Favorite','Hot Streak','Fan Favorite','Political Appointment'];
+
+// Picks one fighter for a wildcard slot per the given reason, falling back to a random
+// pick from the same pool if nobody in it actually fits the story.
+function pickInviteWildcard(pool, reason, hostProvinceId){
+  let candidates = pool;
+  if(reason === 'Local Favorite'){
+    candidates = pool.filter(f=> f.provinceId === hostProvinceId);
+  } else if(reason === 'Hot Streak'){
+    const withForm = pool.map(f=>{
+      const recent = (f.fightLog||[]).slice(-3);
+      return { f, wins: recent.filter(e=>e.result==='W').length };
+    }).filter(x=> x.wins >= 2).sort((a,b)=> b.wins-a.wins);
+    candidates = withForm.map(x=>x.f);
+  } else if(reason === 'Fan Favorite'){
+    candidates = pool.filter(f=> f.talentTier==='prodigy' || f.talentTier==='generational');
+  }
+  // Political Appointment (or an empty fit for any other reason) = pure random pick,
+  // no merit attached — that's the point.
+  if(!candidates.length) candidates = pool;
+  return candidates.length ? pick(candidates) : null;
+}
+
+// Runs one pit's invite bracket for a single weight class — mostly the BEST available
+// fighters island-wide, plus a couple of wildcard slots that aren't about the OVR at
+// all. claimedFighterIds keeps the same fighter from getting pulled into two brackets
+// in the same week.
+function runInviteClassBracket(pools, hostKey, hostProvinceId, eventLabel, weightClass, day, claimedFighterIds){
+  const allInClass = [];
+  Object.values(pools.juvenile).forEach(list=>{
+    list.forEach(f=>{ if(f.weightClass===weightClass && !claimedFighterIds.has(f.id)) allInClass.push(f); });
+  });
+  allInClass.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats));
+  const size = allInClass.length >= 8 ? 8 : (allInClass.length >= 4 ? 4 : 0);
+  if(!size) return;
+  const wildcardCount = size >= 8 ? 2 : 1;
+  const used = new Set();
+  const field = [];
+  for(let i=0;i<wildcardCount;i++){
+    const remaining = allInClass.filter(f=> !used.has(f.id));
+    if(!remaining.length) break;
+    const reason = pick(INVITE_WILDCARD_REASONS);
+    const chosen = pickInviteWildcard(remaining, reason, hostProvinceId);
+    if(chosen){ field.push(chosen); used.add(chosen.id); }
+  }
+  for(const f of allInClass){
+    if(field.length >= size) break;
+    if(used.has(f.id)) continue;
+    field.push(f); used.add(f.id);
+  }
+  if(!field.length) return;
+  field.forEach(f=> claimedFighterIds.add(f.id));
+  let remaining = [...field];
+  while(remaining.length > 1){
+    const isFinal = remaining.length === 2;
+    const isSemifinal = remaining.length === 4;
+    const nextRound = [];
+    for(let i=0;i+1<remaining.length;i+=2){
+      const { winner, loser } = quickSimBout(remaining[i], remaining[i+1]);
+      winner.record.wins += 1; loser.record.losses += 1;
+      logNpcBout(winner, loser, 'Juvenile', `${hostKey} — ${eventLabel} (${weightClass}weight)`, day);
+      applyNpcGrowthTick(winner);
+      if(isFinal) recordInvitePlacement(loser, eventLabel, weightClass, day, 2);
+      else if(isSemifinal) recordInvitePlacement(loser, eventLabel, weightClass, day, 3);
+      nextRound.push(winner);
+    }
+    remaining = nextRound;
+  }
+  if(remaining[0]){
+    applyNpcGrowthTick(remaining[0]); applyNpcGrowthTick(remaining[0]); // tournament win = an extra growth tick
+    recordInvitePlacement(remaining[0], eventLabel, weightClass, day, 1);
+  }
+}
+
+const WEDNESDAY_TOP_PIT_COUNT = 6;
+const WEDNESDAY_TOP_HOST_CHANCE = 0.88; // the big pits host almost every week, but can take a week or two off
+const WEDNESDAY_SURPRISE_HOST_CHANCE = 0.02; // any other pit can occasionally try hosting one
+
+// Island-wide Wednesday resolution: decides which pits host an invite night this week,
+// books each one's event edition, runs the actual brackets, checks whether the player's
+// own roster fighters are good enough to get pulled in themselves (queued for a popup
+// rather than auto-resolved), and sends everyone left over to ordinary Fiesta Fights.
+function runWednesdayEvents(pools, day){
+  const topPits = topPitsIslandWide(WEDNESDAY_TOP_PIT_COUNT);
+  const topKeys = new Set(topPits.map(p=>p.key));
+  const hostingThisWeek = topPits.filter(()=> Math.random() < WEDNESDAY_TOP_HOST_CHANCE);
+
+  PROVINCES.forEach(prov=>{
+    pitLocationsForProvince(prov.id).forEach(loc=>{
+      if(topKeys.has(loc.key)) return;
+      if(Math.random() < WEDNESDAY_SURPRISE_HOST_CHANCE){
+        hostingThisWeek.push({ provinceId: prov.id, key: loc.key, hometownPool: loc.hometownPool, perClass: loc.perClass });
+      }
+    });
+  });
+
+  const claimedFighterIds = new Set();
+
+  // Book each hosting pit's event edition exactly once for the week — reused below by
+  // both the player-eligibility check and the NPC brackets, so nobody sees a different
+  // event name than what actually got run at that pit tonight.
+  const eventLabelByHost = {};
+  hostingThisWeek.forEach(host=>{ eventLabelByHost[host.key] = bookInviteEdition(host.key).label; });
+
+  // Check the player's own roster before auto-simming anything — a good enough fighter
+  // gets queued for an accept/decline popup instead of being resolved as an NPC bracket.
+  let roster = [];
+  try{ roster = loadRoster(); }catch(err){ roster = []; }
+  let rosterChanged = false;
+  const reservedSlots = []; // { hostKey, eventLabel, weightClass } claimed by a player invite this week
+
+  if(hostingThisWeek.length){
+    roster.forEach(f=>{
+      if(!f.juvenileSeason || f.juvenileSeason.complete) return;
+      if(f.pendingJuvenileInvite) return; // already sitting on an invite from a prior week
+      const wClass = weightClassOf(f.weightLb);
+      const fOvr = calcOVR(f.stats);
+      const contenders = [];
+      Object.values(pools.juvenile).forEach(list=>{
+        list.forEach(x=>{ if(x.weightClass===wClass) contenders.push(calcOVR(x.stats)); });
+      });
+      contenders.sort((a,b)=>b-a);
+      const bar = contenders[7] ?? 0; // 8th-best OVR island-wide in this class
+      let reason = 'Top Contender';
+      if(fOvr < bar){
+        // Not top-8 on paper — still a small independent shot at a wildcard slot,
+        // same as any other fighter in the pool.
+        if(Math.random() >= 0.12) return;
+        reason = pick(INVITE_WILDCARD_REASONS);
+      }
+      const host = hostingThisWeek.find(h=> h.provinceId === f.provinceId) || hostingThisWeek[0];
+      if(!host) return;
+      if(reason === 'Local Favorite' && host.provinceId !== f.provinceId) reason = 'Political Appointment';
+      const label = eventLabelByHost[host.key];
+      f.pendingJuvenileInvite = { day, hostKey: host.key, eventLabel: label, weightClass: wClass, reason };
+      reservedSlots.push({ hostKey: host.key, eventLabel: label, weightClass: wClass });
+      rosterChanged = true;
+    });
+  }
+  if(rosterChanged){ try{ saveRoster(roster); }catch(err){} }
+
+  hostingThisWeek.forEach(host=>{
+    const label = eventLabelByHost[host.key];
+    ['Light','Middle','Heavy'].forEach(wc=>{
+      const isReserved = reservedSlots.some(r=> r.hostKey===host.key && r.weightClass===wc);
+      if(isReserved) return; // this bracket is waiting on the player's accept/decline instead
+      runInviteClassBracket(pools, host.key, host.provinceId, label, wc, day, claimedFighterIds);
+    });
+  });
+
+  // Everybody not pulled into an invite bracket this week still gets the old loose
+  // Fiesta Fights treatment, province by province.
+  PROVINCES.forEach(p=>{
+    const pool = pools.juvenile[p.id];
+    if(!pool) return;
+    const leftover = pool.filter(f=> !claimedFighterIds.has(f.id));
+    runJuvenileFiestaDay(pools, p.id, day, leftover);
+  });
+}
+
+
+// lands proportionally the same way the standing pool was seeded — a big city pit is
+// far more likely to get this Monday's new 11-year-old than a one-village circuit.
+function pickWeightedPitLocation(provinceId){
+  const locs = pitLocationsForProvince(provinceId);
+  if(!locs.length) return null;
+  const total = locs.reduce((s,l)=> s + l.perClass, 0);
+  let r = Math.random() * total;
+  for(const loc of locs){
+    r -= loc.perClass;
+    if(r <= 0) return loc;
+  }
+  return locs[locs.length-1];
+}
+
 function runJuvenileIntake(pools, provinceId, day){
-  const chance = JUVENILE_INTAKE_CHANCE[provinceId] || 0.5;
+  // Chance is derived straight from PROVINCE_APPETITE rather than tracked as its own
+  // separate table — one number per province for "how much does this place care about
+  // Juvenile fighting," reused everywhere, instead of two lists that can drift apart.
+  const appetite = PROVINCE_APPETITE[provinceId] ?? 0.5;
+  const chance = Math.max(0.3, appetite);
   if(Math.random() > chance) return;
   const province = PROVINCES.find(p=>p.id===provinceId);
   if(!province) return;
@@ -772,7 +1167,9 @@ function runJuvenileIntake(pools, provinceId, day){
     });
     const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
     const weightClass = pick(weightClasses);
-    const f = finalizeOpponent(stats, avgOvr, weightClass, province, age);
+    const loc = pickWeightedPitLocation(province.id);
+    const hometown = loc ? pick(loc.hometownPool) : undefined;
+    const f = finalizeOpponent(stats, avgOvr, weightClass, province, age, hometown);
     f.age = age;
     f.talentTier = tier;
     f.weightClass = weightClassOf(f.weightLb); // derive from the real BMI-based weight, not the pre-picked target
@@ -812,11 +1209,14 @@ function catchUpJuvenileSimulation(){
   const startDay = Math.max(lastSim+1, today-MAX_CATCHUP_DAYS+1);
   for(let d=startDay; d<=today; d++){
     const weekday = weekdayNameForDay(d);
-    PROVINCES.forEach(p=>{
-      if(weekday==='Monday'){ runJuvenileLeagueNight(pools, p.id, d); runJuvenileIntake(pools, p.id, d); }
-      else if(weekday==='Tuesday'){ runJuvenileTournamentDay(pools, p.id, d); }
-      else if(weekday==='Wednesday'){ runJuvenileFiestaDay(pools, p.id, d); }
-    });
+    if(weekday==='Wednesday'){
+      runWednesdayEvents(pools, d);
+    } else {
+      PROVINCES.forEach(p=>{
+        if(weekday==='Monday'){ runJuvenileLeagueNight(pools, p.id, d); runJuvenileIntake(pools, p.id, d); }
+        else if(weekday==='Tuesday'){ runJuvenileTournamentDay(pools, p.id, d); }
+      });
+    }
   }
   pools.juvenileLastSimDay = today;
   saveFieldPools(pools);
@@ -1127,6 +1527,7 @@ const TOURNAMENT_STAGE_SIZES = { City:16, Province:16, National:8 };
 const TOURNAMENT_ROUND_NAMES = {
   16: ['Round of 16','Quarterfinals','Semifinals','Final'],
   8: ['Quarterfinals','Semifinals','Final'],
+  4: ['Semifinals','Final'],
 };
 
 // Draws (size-1) opponents via drawFn, lightly deduped, and combines with the player
@@ -1190,6 +1591,50 @@ function liveMatchOpponent(match){
   return match.a.pending ? match.b.fighter : match.a.fighter;
 }
 
+// Draws the next-best available island-wide field-pool fighter in a weight class for
+// the player's invite bracket — same "best available, wherever they're from" pool the
+// NPC-only invite brackets pull from.
+function drawFromJuvenileInviteField(weightClass){
+  const pools = loadFieldPools();
+  const candidates = [];
+  Object.values(pools.juvenile || {}).forEach(list=>{
+    list.forEach(f=>{ if(f.weightClass===weightClass) candidates.push(f); });
+  });
+  candidates.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats));
+  // Blind draw from the upper half of the class rather than always the literal #1, so
+  // the field isn't the exact same 7 names every time this weight class gets an invite.
+  const pool = candidates.slice(0, Math.max(12, Math.ceil(candidates.length/2)));
+  return pool.length ? pick(pool) : null;
+}
+
+function startJuvenileInviteBracket(){
+  const f = getFighterById(state.fighterId);
+  const pending = f.pendingJuvenileInvite;
+  if(!pending) return;
+  const pools = loadFieldPools();
+  const inClass = [];
+  Object.values(pools.juvenile || {}).forEach(list=>{
+    list.forEach(x=>{ if(x.weightClass===pending.weightClass) inClass.push(x); });
+  });
+  const size = inClass.length >= 7 ? 8 : (inClass.length >= 3 ? 4 : 0);
+  if(!size){
+    // Not enough of a field to actually run it this week — quietly clear the invite
+    // rather than trap the player on a broken screen.
+    updateFighter(state.fighterId, (ff)=>{ ff.pendingJuvenileInvite = null; });
+    state.screen = 'select';
+    return;
+  }
+  const field = pickBracketField(f, size, ()=> drawFromJuvenileInviteField(pending.weightClass));
+  const rounds = buildBracket(field, f.id);
+  state.bracket = { rounds };
+  state.bracketRoundIndex = 0;
+  state.inviteEventLabel = pending.eventLabel;
+  state.inviteHostKey = pending.hostKey;
+  state.inviteWeightClass = pending.weightClass;
+  state.mode = 'juvenile-invite';
+  state.screen = 'bracket-view';
+}
+
 /* ============================ BODY MODEL (height/weight) ============================ */
 /*
   Every fighter gets a rolled adult-height target first (floor 5'4" — nobody wants to
@@ -1224,14 +1669,14 @@ function weightForAge(currentHeightIn, age, bmi){
   return weightFromHeight(currentHeightIn, bmi*youthFactor);
 }
 
-function finalizeOpponent(stats, avgOvrForFlavor, weightClass, pitProvince, age){
+function finalizeOpponent(stats, avgOvrForFlavor, weightClass, pitProvince, age, hometownOverride){
   const build = pick(['lean','athletic','stocky']);
   const bmiTarget = bmiForBuild(build);
   const adultHeightIn = rollAdultHeightIn();
   const heightIn = heightForAge(adultHeightIn, age);
   const weightLb = weightForAge(heightIn, age, bmiTarget);
   const settlements = SETTLEMENTS_SHORT[pitProvince.id] || ['a nearby town'];
-  const hometown = pick(settlements);
+  const hometown = hometownOverride || pick(settlements);
   const recWins = clamp(Math.round(avgOvrForFlavor / 5) + rand(-1,1), 0, 9);
   const recLosses = clamp(rand(0,4), 0, 9);
   return {
@@ -1590,7 +2035,7 @@ const state = {
 
 /* ============================ FIGHTER CARD MODAL ============================ */
 
-const TIERS = ['All','Juvenile','Amateur','Semi-Pro','Pro','Exhibition'];
+const TIERS = ['All','Juvenile','Junior','Amateur','Pro','Exhibition']; // order matches career ladder; Junior drafts out of Juvenile, sits below Amateur
 let modalFighterId = null;
 let modalActiveTier = 'All';
 
@@ -1665,6 +2110,23 @@ function renderModal(){
     bodyExtra = `<div class="mf-empty">Procedural opponent — generated for this bout only, no persistent career record kept.</div>`;
   }
 
+  const invites = f.inviteResults || [];
+  const inviteHtml = invites.length ? (()=>{
+    const golds = invites.filter(r=>r.place===1).length;
+    const silvers = invites.filter(r=>r.place===2).length;
+    const bronzes = invites.filter(r=>r.place===3).length;
+    const recent = [...invites].sort((a,b)=> new Date(b.date)-new Date(a.date)).slice(0,5).map(r=>{
+      const dateStr = r.date ? new Date(r.date).toLocaleDateString() : '—';
+      const medal = r.place===1?'1st':r.place===2?'2nd':'3rd';
+      return `<div class="mf-history-row"><div class="mfh-date">${dateStr}</div><div class="mfh-opp"><b>${medal}</b> — ${r.event} (${r.weightClass}weight)</div></div>`;
+    }).join('');
+    return `
+      <div class="mf-section-title">Invite Tournament Finishes</div>
+      <p class="mf-growth-text">${golds} first · ${silvers} second · ${bronzes} third, across ${invites.length} invite bracket${invites.length===1?'':'s'} entered.</p>
+      ${recent}
+    `;
+  })() : '';
+
   root.innerHTML = `
     <div class="modal-overlay">
       <div class="modal-card">
@@ -1692,6 +2154,7 @@ function renderModal(){
           <div class="mf-quotes">${commentaryHtml}</div>
           ${projectedPathHtml}
           ${growthHtml}
+          ${inviteHtml}
           ${bodyExtra}
         </div>
       </div>
@@ -1719,6 +2182,14 @@ const AMATEUR_QUALIFY_WIN_PCT = 0.70;
 
 function render(){
   catchUpJuvenileSimulation();
+  if(state.screen === 'select'){
+    const invited = getRoster().find(r=> r.pendingJuvenileInvite);
+    if(invited){
+      state.fighterId = invited.id;
+      state.seasonType = 'juvenile';
+      state.screen = 'invite-prompt';
+    }
+  }
   let title='FIGHTER SELECT', sub='FIGHT PIT', body='';
   if(state.screen==='select'){ body = renderSelect(); }
   else if(state.screen==='pit-select'){ body = renderPitSelect(); title='CHOOSE A PIT'; }
@@ -1731,7 +2202,9 @@ function render(){
   else if(state.screen==='petition'){ body = renderPetition(); title='PETITION TO TRANSFER'; }
   else if(state.screen==='petition-result'){ body = renderPetitionResult(); title='GOVERNING BODY DECISION'; }
   else if(state.screen==='amateur-offers'){ body = renderAmateurOffers(); title='LEAGUE OFFERS'; }
-  else if(state.screen==='bracket-view'){ body = renderBracketView(); title=`${state.tournamentStage.toUpperCase()} BRACKET`; }
+  else if(state.screen==='bracket-view'){ body = renderBracketView(); title = state.mode==='juvenile-invite' ? 'INVITE BRACKET' : `${state.tournamentStage.toUpperCase()} BRACKET`; }
+  else if(state.screen==='invite-prompt'){ body = renderInvitePrompt(); title='AN INVITE CAME IN'; }
+  else if(state.screen==='invite-summary'){ body = renderInviteSummary(); title='INVITE RESULT'; }
 
   app.innerHTML = `
     <div class="ticket-header">
@@ -2088,7 +2561,9 @@ function renderBout(){
   const r = state.boutResult;
   const arena = state.arena;
   const s = state.seasonType === 'amateur' ? f.amateurSeason : f.juvenileSeason;
-  const pitLabel = state.mode === 'tournament' ? `${state.tournamentStage} — ${state.bracket.rounds[state.bracketRoundIndex].name}` : s.pitName;
+  const pitLabel = state.mode === 'tournament' ? `${state.tournamentStage} — ${state.bracket.rounds[state.bracketRoundIndex].name}`
+    : state.mode === 'juvenile-invite' ? `${state.inviteEventLabel} — ${state.bracket.rounds[state.bracketRoundIndex].name}`
+    : s.pitName;
   const visible = r.log.slice(0, state.revealedCount);
   const logHtml = visible.map((entry,i)=>{
     if(entry.type==='round-header') return `<div class="log-round">ROUND ${entry.round}</div>`;
@@ -2127,6 +2602,48 @@ function renderTournamentInvite(){
         <button class="btn" id="decline-tournament">Skip It — Bank the Season</button>
         <button class="btn btn-primary" id="accept-tournament">Accept Invite →</button>
       </div>
+    </div>
+  `;
+}
+
+const INVITE_REASON_FLAVOR = {
+  'Top Contender': (f, inv)=> `"${f.name}, camp just called — ${inv.hostKey} wants you for the ${inv.eventLabel} this Wednesday. Your record earned this one — you're one of the best ${inv.weightClass.toLowerCase()}weights on the island right now, and the promoter knows it."`,
+  'Local Favorite': (f, inv)=> `"${f.name}, ${inv.hostKey}'s promoter wants a hometown name on the ${inv.eventLabel} card this Wednesday. You're not the biggest résumé in the field, but the crowd wants to see one of their own."`,
+  'Hot Streak': (f, inv)=> `"${f.name}, word's gotten around about your last few fights — ${inv.hostKey} wants that streak on the ${inv.eventLabel} card this Wednesday. Everybody loves a hot hand."`,
+  'Fan Favorite': (f, inv)=> `"${f.name}, ${inv.hostKey} says people are asking to see you fight. They want you on the ${inv.eventLabel} card this Wednesday — pure drawing power, no other reason needed."`,
+  'Political Appointment': (f, inv)=> `"${f.name}, don't ask me how this happened — somebody with pull got you a slot on ${inv.hostKey}'s ${inv.eventLabel} this Wednesday. Might be a favor, might be a mistake. Either way, it's yours if you want it."`,
+};
+function renderInvitePrompt(){
+  const f = getFighterById(state.fighterId);
+  const inv = f.pendingJuvenileInvite;
+  const reason = inv.reason || 'Top Contender';
+  const flavor = (INVITE_REASON_FLAVOR[reason] || INVITE_REASON_FLAVOR['Top Contender'])(f, inv);
+  return `
+    <div class="stub-screen">
+      <h2>A Message From Your Manager</h2>
+      <p>${flavor}</p>
+      <p style="color:var(--bone-dim); font-size:12.5px;">This doesn't count against your Juvenile Season fight limit — win or lose, it's a bonus card. Every bout still goes on the record.</p>
+      <div class="btn-row">
+        <button class="btn" id="decline-invite">Pass This Time</button>
+        <button class="btn btn-primary" id="accept-invite">Take the Fight →</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderInviteSummary(){
+  const f = getFighterById(state.fighterId);
+  const place = state.inviteResultPlace;
+  let headline, extra;
+  if(place === 1){ headline = 'Champion!'; extra = `${f.name} ran the table and took the whole card.`; }
+  else if(place === 2){ headline = 'Runner-Up'; extra = `${f.name} made the Final before falling — a real result to hang a hat on.`; }
+  else if(place === 3){ headline = 'Semifinal Exit'; extra = `${f.name} made a real run before dropping the Semifinal.`; }
+  else { headline = 'Early Exit'; extra = `${f.name} didn't get out of the early rounds this time.`; }
+  return `
+    <div class="stub-screen">
+      <h2>${headline}</h2>
+      <p>${extra} None of it counted against the Juvenile Season limit — it's all extra, and it's all on the record now.</p>
+      <button class="btn btn-primary" id="back-to-select-from-summary">Back to Fighter Select</button>
     </div>
   `;
 }
@@ -2381,6 +2898,9 @@ function wireEvents(){
     } else if(state.mode === 'tournament'){
       applyTournamentBoutResult();
       render();
+    } else if(state.mode === 'juvenile-invite'){
+      applyJuvenileInviteBoutResult();
+      render();
     } else {
       applyBoutResult();
       render();
@@ -2403,6 +2923,20 @@ function wireEvents(){
   const enterBracketRoundBtn = document.getElementById('enter-bracket-round');
   if(enterBracketRoundBtn) enterBracketRoundBtn.onclick = ()=>{
     enterBracketRound();
+    render();
+  };
+
+  const declineInvite = document.getElementById('decline-invite');
+  if(declineInvite) declineInvite.onclick = ()=>{
+    updateFighter(state.fighterId, (f)=>{ f.pendingJuvenileInvite = null; });
+    state.screen = 'select';
+    state.fighterId = null;
+    render();
+  };
+
+  const acceptInvite = document.getElementById('accept-invite');
+  if(acceptInvite) acceptInvite.onclick = ()=>{
+    startJuvenileInviteBracket();
     render();
   };
 }
@@ -2470,8 +3004,10 @@ function renderBracketView(){
     `;
   }).join('');
 
+  const bracketTitle = state.mode === 'juvenile-invite' ? state.inviteEventLabel : `${state.tournamentStage} Bracket`;
+  const fighterCount = Math.pow(2, state.bracket.rounds.length);
   return `
-    <div class="section-label">${state.tournamentStage} Bracket — ${state.bracket.rounds.length===4?'16':'8'} Fighters, Blind Draw</div>
+    <div class="section-label">${bracketTitle} — ${fighterCount} Fighters, Blind Draw</div>
     <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:18px;">
       The full bracket, seeded blind. Everyone not on your side of the draw is already resolved below — your own line stays live until you actually fight it.
     </p>
@@ -2593,6 +3129,62 @@ function applyTournamentBoutResult(){
   finalizeAmateurSeason(true, 'National Champion');
 }
 
+function applyJuvenileInviteBoutResult(){
+  const r = state.boutResult;
+  const playerWon = r.winner.id === state.fighterId;
+  const roundName = state.bracket.rounds[state.bracketRoundIndex].name;
+  const label = state.inviteEventLabel;
+
+  updateFighter(state.fighterId, (f)=>{
+    if(playerWon) f.record.wins += 1; else f.record.losses += 1;
+    f.fightLog.push({
+      tier: 'Juvenile', opponent: state.opponent.name, opponentId: state.opponent.id, result: playerWon ? 'W':'L', method: r.method,
+      location: `${state.inviteHostKey} — ${label} (${state.inviteWeightClass}weight)`, date: dateForDay(getCurrentDay()).toISOString(),
+    });
+    growFighterStats(f, playerWon, r.method, calcOVR(state.opponent.stats), false);
+  });
+
+  updateFieldFighterRecord(state.opponent.id, state.opponent.provinceId, !playerWon, true, {
+    tier: 'Juvenile', opponent: getFighterById(state.fighterId).name, opponentId: state.fighterId, result: playerWon ? 'L' : 'W',
+    location: `${state.inviteHostKey} — ${label} (${state.inviteWeightClass}weight)`, date: dateForDay(getCurrentDay()).toISOString(),
+  });
+
+  const totalRounds = state.bracket.rounds.length;
+  if(!playerWon){
+    // Lost in the Final = 2nd. Lost in the Semifinals (or the only round of a 4-bracket
+    // that isn't the Final) = 3rd. Anything earlier than that in an 8-bracket doesn't
+    // get a numbered placement, same as the NPC-only brackets.
+    const place = roundName === 'Final' ? 2 : (roundName === 'Semifinals' ? 3 : null);
+    finalizeJuvenileInvite(place);
+    return;
+  }
+
+  const isLastRound = state.bracketRoundIndex >= totalRounds - 1;
+  if(!isLastRound){
+    state.bracketRoundIndex += 1;
+    enterBracketRound();
+    return;
+  }
+  finalizeJuvenileInvite(1); // won the Final
+}
+
+function finalizeJuvenileInvite(place){
+  updateFighter(state.fighterId, (f)=>{
+    if(place){
+      if(!f.inviteResults) f.inviteResults = [];
+      f.inviteResults.push({ event: state.inviteEventLabel, weightClass: state.inviteWeightClass, place, date: dateForDay(getCurrentDay()).toISOString() });
+      if(f.inviteResults.length > 20) f.inviteResults = f.inviteResults.slice(-20);
+    }
+    f.pendingJuvenileInvite = null;
+  });
+  state.mode = 'season';
+  state.bracket = null;
+  state.bracketRoundIndex = 0;
+  state.inviteResultPlace = place;
+  state.screen = 'invite-summary';
+}
+
+
 function finalizeAmateurSeason(wentToTournament, tournamentResult){
   updateFighter(state.fighterId, (f)=>{
     const s = f.amateurSeason;
@@ -2611,6 +3203,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V17 · 2026-07-13</div>
+<div class="version-badge">FIGHT PIT · V22 · 2026-07-14</div>
 </body>
 </html>
