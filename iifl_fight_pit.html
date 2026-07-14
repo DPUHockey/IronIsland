@@ -74,11 +74,15 @@
   .pit-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .pit-card{
     background:var(--bg-raised); border:1px solid var(--line); border-left:4px solid var(--pc-color, var(--brass));
-    padding:14px 16px; cursor:pointer; transition:all .15s ease;
+    padding:14px 16px; cursor:pointer; transition:all .15s ease; position:relative; overflow:hidden;
+  }
+  .pit-card::before{
+    content:''; position:absolute; inset:0; background-image:var(--pc-flag); background-size:cover; background-position:center;
+    opacity:0.16; pointer-events:none;
   }
   .pit-card:hover{ background:var(--bg-raised-2); }
-  .pit-name{ font-family:var(--label); font-size:14.5px; font-weight:600; color:var(--bone); }
-  .pit-meta{ font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:4px; }
+  .pit-name{ font-family:var(--label); font-size:14.5px; font-weight:600; color:var(--bone); position:relative; }
+  .pit-meta{ font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:4px; position:relative; }
 
   /* league offer cards */
   .offer-grid{ display:grid; gap:12px; }
@@ -204,7 +208,12 @@
     position:fixed; inset:0; background:rgba(10,8,6,0.78); display:flex; align-items:flex-start; justify-content:center;
     padding:40px 16px; z-index:1000; overflow-y:auto;
   }
-  .modal-card{ background:var(--bg-panel); border:1px solid var(--brass-dim); max-width:520px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.55); }
+  .modal-card{ background:var(--bg-panel); border:1px solid var(--brass-dim); max-width:520px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.55); position:relative; overflow:hidden; }
+  .modal-card::after{
+    content:''; position:absolute; top:-10%; right:-8%; width:220px; height:220px; background-image:var(--mf-flag,none);
+    background-size:cover; background-position:center; opacity:0.08; pointer-events:none; border-radius:50%;
+  }
+  .modal-card > *{ position:relative; }
   .modal-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
   .modal-title{ font-family:var(--display); font-size:20px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
   .modal-close{ background:transparent; border:1px solid var(--line); color:var(--muted); width:30px; height:30px; cursor:pointer; font-family:var(--mono); font-size:14px; }
@@ -261,14 +270,14 @@
 const ROSTER_KEY = 'iifl_roster_v1';
 
 const PROVINCES = [
-  { id:'alexandretta', name:'Alexandretta Province', color:'#5C7C5E', pit:'The Forge Pit', primary:['boxer','karate'], secondary:['wrestler'] },
-  { id:'kolsati', name:'Kolsati District', color:'#5E7A93', pit:'The Concrete Ring', primary:['brawler','mma'], secondary:['boxer'] },
-  { id:'sherwood', name:'Sherwood Province', color:'#A0623B', pit:'Frontenac Fight House', primary:['mma','brawler'], secondary:['boxer'] },
-  { id:'gazon', name:'Gazon Province', color:'#C8943F', pit:'The Dust Circle', primary:['boxer'], secondary:[] },
-  { id:'ditiero', name:'Di Tiero Province', color:'#7C5491', pit:"Big Jim's Fightin' Pit", primary:['karate'], secondary:['brawler'] },
-  { id:'carpathia', name:'Targu Banshea Province', color:'#5B4070', pit:'The Hollow Ring', primary:['sambo'], secondary:['judo'] },
-  { id:'northeast', name:'Northeast Territory', color:'#9C4242', pit:'Dojo Reach', primary:['sambo','judo'], secondary:['catch'] },
-  { id:'bay', name:'White Bay Province', color:'#6E8C9C', pit:'The Fairground Ring', primary:['wrestler','catch'], secondary:[] },
+  { flag:'flags/alexandretta.jpg', id:'alexandretta', name:'Alexandretta Province', color:'#5C7C5E', pit:'The Forge Pit', primary:['boxer','karate'], secondary:['wrestler'] },
+  { flag:'flags/kolsati.jpg', id:'kolsati', name:'Kolsati District', color:'#5E7A93', pit:'The Concrete Ring', primary:['brawler','mma'], secondary:['boxer'] },
+  { flag:'flags/sherwood.jpg', id:'sherwood', name:'Sherwood Province', color:'#A0623B', pit:'Frontenac Fight House', primary:['mma','brawler'], secondary:['boxer'] },
+  { flag:'flags/gazon.jpg', id:'gazon', name:'Gazon Province', color:'#C8943F', pit:'The Dust Circle', primary:['boxer'], secondary:[] },
+  { flag:'flags/ditiero.jpg', id:'ditiero', name:'Di Tiero Province', color:'#7C5491', pit:"Big Jim's Fightin' Pit", primary:['karate'], secondary:['brawler'] },
+  { flag:'flags/carpathia.jpg', id:'carpathia', name:'Targu Banshea Province', color:'#5B4070', pit:'The Hollow Ring', primary:['sambo'], secondary:['judo'] },
+  { flag:'flags/northeast.jpg', id:'northeast', name:'Northeast Territory', color:'#9C4242', pit:'Dojo Reach', primary:['sambo','judo'], secondary:['catch'] },
+  { flag:'flags/bay.jpg', id:'bay', name:'White Bay Province', color:'#6E8C9C', pit:'The Fairground Ring', primary:['wrestler','catch'], secondary:[] },
 ];
 
 const DISCIPLINE_NAMES = {
@@ -2398,7 +2407,7 @@ function renderModal(){
 
   root.innerHTML = `
     <div class="modal-overlay">
-      <div class="modal-card">
+      <div class="modal-card" style="--mf-flag:${prov ? `url('${prov.flag}')` : 'none'}">
         <div class="modal-head">
           <div class="modal-title">Fighter Card</div>
           <button class="modal-close" data-modal-close>✕</button>
@@ -2408,7 +2417,7 @@ function renderModal(){
             <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
             <div>
               <div class="mf-name">${f.name}</div>
-              <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement || f.hometown || ''}${prov?', '+prov.name:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
+              <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement || f.hometown || ''}${prov?` · <img src="${prov.flag}" alt="" style="width:14px; height:14px; object-fit:cover; vertical-align:-2px; border-radius:2px; margin-right:2px;" onerror="this.style.display='none'">${prov.name}`:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
               <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Career ${rec.wins}-${rec.losses}</div>
               ${f.juvenileHomeProvinceId ? `<div class="mf-disc" style="color:${juvenileFightsRemaining(f)<=15?'var(--ink-red)':'var(--bone-dim)'};">${juvenileFightsRemaining(f)} career Juvenile fights left</div>` : ''}
             </div>
@@ -2547,7 +2556,7 @@ function renderPitSelect(){
   const f = getFighterById(state.fighterId);
   const isAmateur = state.seasonType === 'amateur';
   const cards = PROVINCES.map(p=>`
-    <div class="pit-card" data-pit="${p.id}" style="--pc-color:${p.color}">
+    <div class="pit-card" data-pit="${p.id}" style="--pc-color:${p.color}; --pc-flag:url('${p.flag}')">
       <div class="pit-name">${p.pit}</div>
       <div class="pit-meta">${p.name}${p.id===f.provinceId ? ' · HOMETOWN PIT (+edge)' : ''}</div>
     </div>
@@ -3587,6 +3596,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V32 · 2026-07-15</div>
+<div class="version-badge">FIGHT PIT · V33 · 2026-07-15</div>
 </body>
 </html>
