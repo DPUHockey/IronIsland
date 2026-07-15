@@ -418,6 +418,14 @@ function bandCeiling(age, tier){
   const table = tier==='generational' ? AGE_BAND_GENERATIONAL : tier==='prodigy' ? AGE_BAND_PRODIGY : AGE_BAND_TYPICAL;
   return table[clamp(age, 11, 20)];
 }
+// Earned growth past a fighter's own tier ceiling reaches toward the NEXT tier's
+// ceiling instead of a flat bonus — a normal fighter who's genuinely outgrowing their
+// peers can push into prodigy territory, a prodigy can push toward generational.
+function nextTalentTier(tier){
+  if(tier === 'normal') return 'prodigy';
+  if(tier === 'prodigy') return 'generational';
+  return 'generational';
+}
 function rollTalentTier(rawAvg01){
   const generationalChance = 0.005 + rawAvg01 * 0.02;
   const prodigyChance = 0.08 + rawAvg01 * 0.28;
@@ -1430,7 +1438,7 @@ function ageLockedJuvenileIfDue(f, today){
 }
 
 function growFighterStats(f, playerWon, method, oppOVR, oppAge){
-  const ceiling = bandCeiling(f.age||12, f.talentTier||'normal');
+  const tier = f.talentTier || 'normal';
   const potentialFactor = clamp((f.potential || 50) / 99, 0, 1);
   const ownOVR = calcOVR(f.stats);
   const ownAge = f.age || 12;
@@ -1451,13 +1459,23 @@ function growFighterStats(f, playerWon, method, oppOVR, oppAge){
   }
   growthTicks = Math.round(growthTicks * (0.4 + potentialFactor * 0.9));
   const before = { ...f.stats };
+  // A fighter isn't hard-walled at their assigned talent tier's ceiling anymore — earned
+  // growth (specifically from beating fighters older or tougher — toughnessSteps) can
+  // push them toward the NEXT tier's ceiling instead, just at much longer odds.
+  const normalCeiling = bandCeiling(f.age||12, tier);
+  const hardCeiling = bandCeiling(f.age||12, nextTalentTier(tier));
   const statKeys = ['speed','quickness','toughness','power','agility'];
   for(let i=0;i<growthTicks;i++){
     const key = pick(statKeys);
     const current = f.stats[key];
-    if(current >= ceiling) continue;
-    const room = 1 - (current/ceiling);
-    if(Math.random() < 0.45 + room*0.4) f.stats[key] = clamp(current+1, 1, ceiling);
+    const pastNormalCeiling = current >= normalCeiling;
+    const effectiveCeiling = pastNormalCeiling ? hardCeiling : normalCeiling;
+    if(pastNormalCeiling && toughnessSteps === 0) continue;
+    if(current >= effectiveCeiling) continue;
+    const room = 1 - (current/effectiveCeiling);
+    let chance = 0.45 + room*0.4;
+    if(pastNormalCeiling) chance *= (0.15 + toughnessSteps*0.15);
+    if(Math.random() < chance) f.stats[key] = clamp(current+1, 1, effectiveCeiling);
   }
   const deltas = {};
   statKeys.forEach(k=>{ if(f.stats[k] !== before[k]) deltas[k] = f.stats[k]-before[k]; });
@@ -4514,6 +4532,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V33 · 2026-07-15</div>
+<div class="version-badge">FREE ROAM · V34 · 2026-07-15</div>
 </body>
 </html>
