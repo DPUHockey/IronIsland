@@ -1473,10 +1473,6 @@ function resolveJuvenilePetition(f){
 
 function growFighterStats(f, playerWon, method, oppOVR, oppAge, isAmateurContext){
   const tier = f.talentTier || 'normal';
-  // Amateur competition is age-agnostic (adult ranks) — use the age-18 ceiling
-  // regardless of literal age, which naturally keeps normal/prodigy capped at 35
-  // while still letting a Generational Talent keep climbing toward 85+.
-  const ceiling = isAmateurContext ? bandCeiling(18, tier) : bandCeiling(f.age || 12, tier);
   const potentialFactor = clamp((f.potential || 50) / 99, 0, 1);
   const ownOVR = calcOVR(f.stats);
   const ownAge = f.age || 12;
@@ -1508,14 +1504,30 @@ function growFighterStats(f, playerWon, method, oppOVR, oppAge, isAmateurContext
   if(!isAmateurContext) growthTicks = Math.round(growthTicks * juvenileHomeGrowthMultiplier(f));
   if(growthTicks <= 0) return;
 
+  // A fighter isn't hard-walled at their assigned talent tier's ceiling anymore — they
+  // can outgrow it, but only by actually earning it. The tier ceiling (normalCeiling) is
+  // still where growth happens easily, same as always. Beyond that, hardCeiling (the
+  // NEXT tier's ceiling — normal reaching toward prodigy, prodigy toward generational)
+  // is reachable too, but growth chance drops hard and only recovers proportional to
+  // toughnessSteps — meaning a fighter who only ever beats fighters at their own level
+  // will sit at their tier ceiling forever. Outgrowing the pack requires beating it.
+  const ageForCeiling = isAmateurContext ? 18 : (f.age || 12);
+  const normalCeiling = bandCeiling(ageForCeiling, tier);
+  const hardCeiling = bandCeiling(ageForCeiling, nextTalentTier(tier));
+
   const statKeys = ['speed','quickness','toughness','power','agility'];
   for(let i=0;i<growthTicks;i++){
     const key = pick(statKeys);
     const current = f.stats[key];
-    if(current >= ceiling) continue;
-    const room = 1 - (current/ceiling);
-    if(Math.random() < 0.45 + room*0.4){
-      f.stats[key] = clamp(current+1, 1, ceiling);
+    const pastNormalCeiling = current >= normalCeiling;
+    const effectiveCeiling = pastNormalCeiling ? hardCeiling : normalCeiling;
+    if(pastNormalCeiling && toughnessSteps === 0) continue; // same-level competition can't push past the tier ceiling at all — has to be earned against someone tougher
+    if(current >= effectiveCeiling) continue; // truly maxed out, even earned overreach can't help
+    const room = 1 - (current/effectiveCeiling);
+    let chance = 0.45 + room*0.4;
+    if(pastNormalCeiling) chance *= (0.15 + toughnessSteps*0.15); // scales 30%-60% of normal odds with how big the step up was
+    if(Math.random() < chance){
+      f.stats[key] = clamp(current+1, 1, effectiveCeiling);
     }
   }
 }
@@ -1647,6 +1659,16 @@ const AGE_BAND_GENERATIONAL = { 11:22, 12:30, 13:40, 14:50, 15:60, 16:70, 17:80,
 function bandCeiling(age, tier){
   const table = tier==='generational' ? AGE_BAND_GENERATIONAL : tier==='prodigy' ? AGE_BAND_PRODIGY : AGE_BAND_TYPICAL;
   return table[clamp(age, 11, 20)];
+}
+// Earned growth past a fighter's own tier ceiling reaches toward the NEXT tier's
+// ceiling instead of a flat bonus — a normal fighter who's genuinely outgrowing their
+// peers can push into prodigy territory, a prodigy can push toward generational.
+// Generational is already the top of the table, so it's its own ceiling (nowhere higher
+// to reach for) — the rare generational talent's ceiling was already sky-high anyway.
+function nextTalentTier(tier){
+  if(tier === 'normal') return 'prodigy';
+  if(tier === 'prodigy') return 'generational';
+  return 'generational';
 }
 function rollTalentTier(rawAvg01){
   const generationalChance = 0.005 + rawAvg01 * 0.02;
@@ -2035,7 +2057,7 @@ function growthOutlook(f){
   const avgStat = (f.stats.speed+f.stats.quickness+f.stats.toughness+f.stats.power+f.stats.agility)/5;
   const pctOfCeiling = clamp(avgStat/ceiling*100, 0, 100);
   let outlook;
-  if(pctOfCeiling >= 90) outlook = 'Close to maxed out for where they are right now — future growth mostly comes from aging up.';
+  if(pctOfCeiling >= 90) outlook = 'Fully tapped for where they are right now. Aging up raises the ceiling on its own — the only other way past it is outgrowing the competition: beating fighters genuinely older or tougher is the one thing that can still push a stat past what\'s expected for their age.';
   else if(pctOfCeiling >= 60) outlook = 'Solid development so far, real room left to keep climbing.';
   else if(pctOfCeiling >= 30) outlook = 'Early in the development curve — plenty of runway left.';
   else outlook = 'Very raw. Most of the growth curve is still ahead.';
@@ -3598,6 +3620,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V35 · 2026-07-15</div>
+<div class="version-badge">FIGHT PIT · V36 · 2026-07-15</div>
 </body>
 </html>
