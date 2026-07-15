@@ -231,6 +231,510 @@ function rand(lo,hi){ return Math.floor(Math.random()*(hi-lo+1))+lo; }
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
 
+/* ============================ GAME CLOCK ============================ */
+/*
+  One shared, island-wide clock (localStorage, not per-fighter) so "today" and the
+  Juvenile background simulation stay consistent across every file that reads it
+  (this file, the newspaper in Free Roam, etc). Day 1 = Monday, March 3, 1958 — chosen
+  to match Free Roam's existing flavor epoch so both calendars agree.
+*/
+const CLOCK_KEY = 'iifl_clock_v1';
+const GAME_EPOCH = new Date(1958, 2, 3); // Monday, March 3 1958 = Day 1
+const WEEKDAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const JUVENILE_SEASON_WEEKS = 16;
+const JUVENILE_SEASON_START_DAY = 1;
+const JUVENILE_SEASON_END_DAY = JUVENILE_SEASON_START_DAY + JUVENILE_SEASON_WEEKS*7 - 1;
+
+/* ============================ TIER SEASON CALENDAR ============================ */
+/*
+  Each tier runs its own annual regular-season + playoff window, anchored to a real
+  calendar month/day — Juvenile always opens May 1, and every other tier's dates are
+  offsets from that, chosen so the ENTIRE island year (every draft, deadline, and
+  championship across all four tiers) lands inside May 1 - Dec 25, never spilling into
+  the next calendar year. Deliberately stateless/derived: given any day number,
+  resolveTierSeason() recomputes which cycle-year and phase that day falls in from
+  scratch. No stored season-state to drift out of sync or need migrating.
+
+  Junior's playoffWeeks (4) covers TWO stages, not one bracket: 2 weeks of each of the
+  3 leagues running its own playoff to crown a league champion, then 2 weeks for the
+  4-team Iron Island Championship (the 3 league champs + a bid-won host city).
+  resolveJuniorPlayoffSubPhase() below tells you which of those two stages a given day
+  falls in once resolveTierSeason says Junior's phase is 'playoffs'.
+*/
+const TIER_SEASON_CONFIG = {
+  juvenile: { startMonth: 5, startDay: 1,  regularWeeks: 16, playoffWeeks: 0 },
+  junior:   { startMonth: 5, startDay: 29, regularWeeks: 16, playoffWeeks: 4 },
+  amateur:  { startMonth: 6, startDay: 1,  regularWeeks: 14, playoffWeeks: 2 },
+  pro:      { startMonth: 8, startDay: 1,  regularWeeks: 18, playoffWeeks: 3 },
+};
+
+// Day number (same 1-based convention as getCurrentDay/dateForDay) for a given real
+// calendar year/month/day — the bridge between "June 1, 1959" and the island clock.
+function dayForCalendarDate(year, month, dayOfMonth){
+  const d = new Date(year, month-1, dayOfMonth);
+  return Math.round((d - GAME_EPOCH) / 86400000) + 1;
+}
+
+// Resolves which annual cycle a tier is in for a given day, and what phase of that
+// cycle it's in: 'regular' (weekly cards happening), 'playoffs' (bracket underway),
+// or 'dead-days' (season's over, next one hasn't started — the window where the
+// player gets the stay/off-season/advance-to-next-season choice).
+function resolveTierSeason(tierKey, todayDay){
+  const cfg = TIER_SEASON_CONFIG[tierKey];
+  if(!cfg) return null;
+  const todayDate = dateForDay(todayDay);
+  let year = todayDate.getFullYear();
+  let startDay = dayForCalendarDate(year, cfg.startMonth, cfg.startDay);
+  if(todayDay < startDay){
+    year -= 1;
+    startDay = dayForCalendarDate(year, cfg.startMonth, cfg.startDay);
+  }
+  const regularEndDay = startDay + cfg.regularWeeks*7 - 1;
+  const playoffEndDay = regularEndDay + cfg.playoffWeeks*7;
+  const nextStartDay = dayForCalendarDate(year+1, cfg.startMonth, cfg.startDay);
+  let phase = 'regular';
+  if(todayDay > playoffEndDay) phase = 'dead-days';
+  else if(todayDay > regularEndDay) phase = 'playoffs';
+  return { tierKey, cycleYear: year, startDay, regularEndDay, playoffEndDay, nextStartDay, phase };
+}
+
+// The island-wide "advance to next season" action always means "fast-forward to the
+// next Juvenile opening day" — that's the anchor for the whole game year, even if
+// you're looking at Pro's dead-days when you trigger it.
+function nextJuvenileOpeningDay(fromDay){
+  const s = resolveTierSeason('juvenile', fromDay);
+  return s.phase === 'dead-days' ? s.nextStartDay : dayForCalendarDate(s.cycleYear+1, TIER_SEASON_CONFIG.juvenile.startMonth, TIER_SEASON_CONFIG.juvenile.startDay);
+}
+
+// Once Junior's overall phase is 'playoffs' (a 4-week window), this tells you which
+// half you're in: the first 2 weeks are each league running its own bracket, the
+// second 2 weeks are the 4-team Iron Island Championship.
+function resolveJuniorPlayoffSubPhase(todayDay){
+  const s = resolveTierSeason('junior', todayDay);
+  if(s.phase !== 'playoffs') return null;
+  const leaguePOEnd = s.regularEndDay + 2*7;
+  return todayDay <= leaguePOEnd ? 'league-playoffs' : 'island-championship';
+}
+
+// Every named date on the island calendar for a given island-year, all derived from
+// that year's Juvenile May 1 opener. This is the single source of truth other screens
+// (Home Hub, newspaper, etc) should read from rather than re-deriving offsets by hand.
+function tierKeyDates(cycleYear){
+  const may1 = dayForCalendarDate(cycleYear, 5, 1);
+  const jrDraft = may1 + 14;
+  const jrOpen = jrDraft + 14;
+  const amOpen = may1 + 31;
+  const proOpen = dayForCalendarDate(cycleYear, 8, 1);
+  const juvRegEnd = may1 + 16*7 - 1;
+  const amRegEnd = amOpen + 14*7 - 1;
+  const jrRegEnd = jrOpen + 16*7 - 1;
+  const jrLeaguePOEnd = jrRegEnd + 2*7;
+  const jrChampEnd = jrRegEnd + 4*7;
+  const proRegEnd = proOpen + 18*7 - 1;
+  return {
+    cycleYear,
+    juvenileOpen: may1,
+    juvenileRegEnd: juvRegEnd,
+    jrChampHostBidDue: may1,
+    jrChampHostAnnounced: may1 + 7,
+    juniorDraftDeclareDeadline: may1,
+    juniorDraftDay: jrDraft,
+    juniorOpen: jrOpen,
+    juniorTradeDeadline: jrOpen + 10*7,
+    juniorRegEnd: jrRegEnd,
+    jrLeaguePlayoffStart: jrRegEnd + 1,
+    jrLeaguePlayoffEnd: jrLeaguePOEnd,
+    jrIslandChampStart: jrLeaguePOEnd + 1,
+    jrIslandChampEnd: jrChampEnd,
+    amateurOpen: amOpen,
+    amateurTradeDeadline: amOpen + 8*7,
+    amateurRegEnd: amRegEnd,
+    amateurPlayoffStart: amRegEnd + 1,
+    amateurPlayoffEnd: amRegEnd + 2*7,
+    proDraftDeclareDeadline: may1 + 24,
+    proDraftDay: may1 + 35,
+    proOpen: proOpen,
+    proTradeDeadline: proOpen + 12*7,
+    proRegEnd: proRegEnd,
+    proPlayoffStart: proRegEnd + 1,
+    proPlayoffEnd: proRegEnd + 3*7,
+  };
+}
+
+// Weighted rotation for which QUALIFYING team hosts its league's own playoff bracket.
+// Hosting is a venue perk, not a playoff-entry mechanic — it's picked from teams that
+// already qualified. Weighted toward "better programs" (all-time win% is the proxy
+// until there's a real arena/prestige stat) with a recency penalty so the same team
+// doesn't host every single year. lastHostedYear is a { teamKey: year } map the caller
+// persists between cycles (teamKey = `${leagueId}_${teamIndex}`).
+function pickLeaguePlayoffHost(qualifyingTeams, allTimeStandings, lastHostedYear, cycleYear){
+  if(!qualifyingTeams.length) return null;
+  const weighted = qualifyingTeams.map(t=>{
+    const rec = allTimeStandings[t.teamIndex] || { wins:0, losses:0 };
+    const winPct = (rec.wins + rec.losses) ? rec.wins/(rec.wins+rec.losses) : 0.5;
+    const key = `${t.leagueId}_${t.teamIndex}`;
+    const yearsSinceHosted = lastHostedYear[key] ? Math.min(cycleYear - lastHostedYear[key], 5) : 5;
+    // Recency penalty tapers back in over 5 years so a strong program isn't locked
+    // out forever after one turn, but can't host back-to-back either.
+    const weight = Math.max(0.05, winPct) * (yearsSinceHosted / 5);
+    return { ...t, weight };
+  });
+  const total = weighted.reduce((s,t)=> s+t.weight, 0);
+  let roll = Math.random() * total;
+  for(const t of weighted){ roll -= t.weight; if(roll <= 0) return t; }
+  return weighted[weighted.length-1];
+}
+
+/* ============================ OFF-SEASON & DRAFT DECLARATION TRIGGERS ============================ */
+/*
+  "Silent" island-wide triggers — calendar-driven effects that fire without their own
+  screen (at least for now). Off-season conditioning/decline apply once a tier's
+  off-season is actively engaged (the "advance to off-season" choice, not just idly
+  sitting in dead-days). Draft declarations are a snapshot-on-a-date mechanic: the
+  eligible pool and each fighter's in/out decision are both resolved on the deadline day.
+*/
+
+// Prime-age assumption (not previously specified) — flagging it here since it's new:
+// 24-29 is a fighter's physical prime, decline starts at 30 and compounds the further
+// past it they get. Only matters for Amateur/Pro fighters since Juvenile/Junior top out
+// at 20.
+const PRIME_AGE_START = 24;
+const PRIME_AGE_END = 29;
+const DECLINE_START_AGE = 30;
+
+// Extra height/weight tick on top of the normal age-based growth curve — a real
+// off-season training camp, not just another birthday passing. Only fires for
+// still-developing fighters (under 22); grown adults don't get taller in the off-season.
+function applyOffSeasonConditioning(f){
+  if(!f.age || f.age >= 22) return;
+  const buildMult = { lean:0.9, athletic:1.0, stocky:1.15 }[(f.appearance && f.appearance.build) || 'athletic'] || 1.0;
+  f.heightIn = (f.heightIn || 60) + rand(0,1);
+  f.weightLb = (f.weightLb || 100) + Math.round(rand(2,6) * buildMult);
+}
+
+// A real training camp — more generous than the small in-season growth ticks — bumps
+// 2-3 stats toward the tier ceiling.
+function applyOffSeasonTrainingBonus(f){
+  if(!f.stats) return;
+  const ceiling = bandCeiling(f.age||18, f.talentTier||'normal');
+  const statKeys = ['speed','quickness','toughness','power','agility'];
+  const shuffled = [...statKeys].sort(()=> Math.random()-0.5);
+  const bumpCount = rand(2,3);
+  for(let i=0;i<bumpCount;i++){
+    const key = shuffled[i];
+    if(f.stats[key] < ceiling) f.stats[key] = clamp(f.stats[key] + rand(1,3), 1, ceiling);
+  }
+}
+
+// Past-prime decline — chance and magnitude both grow the further past 30 a fighter
+// gets. Only ever touches Amateur/Pro fighters since nobody in Juvenile/Junior is old
+// enough to trigger it.
+function applyPastPrimeDecline(f){
+  if(!f.age || f.age < DECLINE_START_AGE || !f.stats) return;
+  const yearsPastPrime = f.age - DECLINE_START_AGE;
+  const declineChance = clamp(0.15 + yearsPastPrime*0.08, 0.15, 0.85);
+  if(Math.random() > declineChance) return;
+  const key = pick(Object.keys(f.stats));
+  const amount = 1 + Math.floor(yearsPastPrime/3);
+  f.stats[key] = clamp(f.stats[key] - amount, 1, 99);
+}
+
+// Runs all three off-season effects on a fighter in one pass — the function the
+// "advance to off-season" action should call per-fighter once it's wired to a screen.
+function applyOffSeasonToFighter(f){
+  applyOffSeasonConditioning(f);
+  applyOffSeasonTrainingBonus(f);
+  applyPastPrimeDecline(f);
+}
+
+// The Juvenile→Junior draft-eligible pool as of the May 1 snapshot day — ages 14-17,
+// not already attached to a Junior team or Amateur league. Matches the existing Draft
+// Watch eligibility window (draftWatchHtml above).
+function juniorDraftEligiblePool(fighters){
+  return fighters.filter(f=> f.age >= 14 && f.age <= 17 && !f.juniorTeamId && !f.amateurLeagueId);
+}
+
+// Age 17 is mandatory — it's the fighter's final eligible year, so staying isn't an
+// option (they'd age out with nowhere to go). 14-16 is a real choice; NPCs default to
+// declaring once they're far enough along their growth curve, using the same
+// pctOfCeiling threshold Projected Path already reads. The player's own fighter should
+// get an actual prompt once that screen exists — this just determines the pool + the
+// NPC-side default so the mechanic isn't silently absent while the UI catches up.
+function resolveJuniorDraftDeclaration(f){
+  if(f.age === 17) return 'declared';
+  return growthOutlook(f).pctOfCeiling >= 55 ? 'declared' : 'stayed';
+}
+
+// The Junior/Amateur→Pro draft-eligible pool as of the May 25 declare deadline (draft
+// itself is June 5). Two source pools: Junior players (mandatory declare at 20, since
+// that's when they age out of Junior) and Amateur fighters (any year, once they've built
+// a real case).
+function proDraftEligiblePool(fighters){
+  return fighters.filter(f=> f.age >= 18 && (f.juniorTeamId || f.amateurLeagueId));
+}
+
+function resolveProDraftDeclaration(f){
+  if(f.juniorTeamId && f.age >= 20) return 'declared';
+  return growthOutlook(f).pctOfCeiling >= 70 ? 'declared' : 'stayed'; // Pro bar is higher than Junior's
+}
+
+function loadClock(){
+  try{ const raw = localStorage.getItem(CLOCK_KEY); return raw ? JSON.parse(raw) : { day: 1 }; }
+  catch(err){ return { day: 1 }; }
+}
+function saveClock(c){ try{ localStorage.setItem(CLOCK_KEY, JSON.stringify(c)); }catch(err){} }
+function getCurrentDay(){ return loadClock().day; }
+function advanceClockByDays(n){ const c = loadClock(); c.day = Math.max(1, c.day + n); saveClock(c); return c.day; }
+function dateForDay(day){ const d = new Date(GAME_EPOCH); d.setDate(d.getDate() + (day-1)); return d; }
+function formatCalendarDate(day){ return dateForDay(day).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); }
+function formatCalendarDateShort(day){ return dateForDay(day).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }); }
+function weekdayNameForDay(day){ return WEEKDAY_NAMES[((day-1)%7+7)%7]; }
+function eventNameForDay(day){
+  const w = weekdayNameForDay(day);
+  if(w==='Monday') return 'Juvenile League Fight Night';
+  if(w==='Tuesday') return 'Juvenile Local Tournament';
+  if(w==='Wednesday') return 'Invite Circuit / Fiesta Fights';
+  if(w==='Thursday') return 'Junior League Night';
+  if(w==='Friday') return 'Amateur Fight Night';
+  if(w==='Saturday') return 'Pro League Night';
+  return 'Off Night — no scheduled cards';
+}
+
+
+const FIELD_KEY = 'iifl_field_fighters_v3'; // bumped so existing pools regenerate under the settlement-tier pit system
+const AMATEUR_POOL_COMPOSITION = { Novice:8, Developing:8, Contender:5, Elite:3 }; // 24 per province
+
+// Settlement population + tier data (Capital/City/Town/Village), canonical copy kept
+// identical to Free Roam and Character Creator — this is what drives how many Juvenile
+// pits exist in a province and how deep each one runs (see pitLocationsForProvince).
+const SETTLEMENT_DATA = {
+  alexandretta: [
+    { name:'Williamsburg', population:72296, tier:'Capital' }, { name:'St. Anne', population:48210, tier:'City' },
+    { name:'Wolverbridge', population:14512, tier:'Town' }, { name:'Port Oxford', population:9820, tier:'Town' },
+    { name:'Nattingham', population:7204, tier:'Town' }, { name:'Blackchapel', population:6113, tier:'Town' },
+    { name:'Munchen', population:5402, tier:'Village' }, { name:'Cowborough', population:1804, tier:'Village' },
+    { name:'Blackford', population:1206, tier:'Village' }, { name:'Mosshead', population:902, tier:'Village' },
+  ],
+  kolsati: [
+    { name:'Kolsati', population:92651, tier:'Capital' }, { name:'St. Johnson', population:47320, tier:'City' },
+    { name:'North Bender', population:16210, tier:'Town' }, { name:'Lincoln', population:12812, tier:'Town' },
+    { name:'Richmond', population:9601, tier:'Town' }, { name:'Wickson', population:8104, tier:'Town' },
+    { name:'Briggston', population:6702, tier:'Town' }, { name:'Castellan Heights', population:5904, tier:'Town' },
+    { name:'Marrow Hill', population:2801, tier:'Village' }, { name:"Pell's Crossing", population:2401, tier:'Village' },
+    { name:'Dorado', population:2201, tier:'Village' }, { name:'Coco Ridge', population:1601, tier:'Village' },
+    { name:'Dunmore', population:1401, tier:'Village' }, { name:'Iron Wharf', population:1201, tier:'Village' },
+    { name:'Slate Row', population:901, tier:'Village' }, { name:"Cutter's End", population:701, tier:'Village' },
+    { name:'Venice', population:1101, tier:'Village' },
+  ],
+  sherwood: [
+    { name:'Frontenac City', population:83231, tier:'Capital' }, { name:'Kahuna', population:41022, tier:'City' },
+    { name:'Shorneville', population:15304, tier:'Town' }, { name:'Dennapolis', population:13108, tier:'Town' },
+    { name:'Sheffield', population:8904, tier:'Town' }, { name:'Cambridge', population:7402, tier:'Town' },
+    { name:'Lawrenceville', population:6301, tier:'Town' }, { name:'Millbrook Heights', population:2904, tier:'Village' },
+    { name:"Devil's Point", population:2104, tier:'Village' }, { name:'Starsanne', population:1502, tier:'Village' },
+    { name:'North Lawrenceville', population:1301, tier:'Village' }, { name:'Caldwell Junction', population:1001, tier:'Village' },
+    { name:'Petsworth', population:901, tier:'Village' }, { name:"Harrow's Bend", population:801, tier:'Village' },
+    { name:'Oak Siding', population:701, tier:'Village' }, { name:'Greeley Flats', population:601, tier:'Village' },
+    { name:'Thistledown', population:501, tier:'Village' }, { name:'Brakken', population:801, tier:'Village' },
+  ],
+  gazon: [
+    { name:'Gazon Main', population:82335, tier:'Capital' }, { name:'Northern Gazon', population:11204, tier:'Town' },
+    { name:'Cangate', population:6801, tier:'Town' }, { name:'Gazon South', population:2204, tier:'Village' },
+  ],
+  ditiero: [
+    { name:'Di Tiero', population:73180, tier:'Capital' }, { name:'Alibar', population:33012, tier:'City' },
+    { name:'Bakii', population:14702, tier:'Town' }, { name:"Suli' Ba", population:8203, tier:'Town' },
+    { name:'South Bender', population:2801, tier:'Village' }, { name:'Bellechasse', population:1701, tier:'Village' },
+    { name:'Port Maray', population:1401, tier:'Village' }, { name:'Buradam', population:3101, tier:'Village' },
+    { name:'Cane Hollow', population:1201, tier:'Village' }, { name:'Marsh Landing', population:1101, tier:'Village' },
+    { name:'Bayou Verte', population:901, tier:'Village' }, { name:'Saint Roque', population:801, tier:'Village' },
+    { name:'Driftwood Key', population:701, tier:'Village' }, { name:'Crayfish Bend', population:601, tier:'Village' },
+    { name:'Lantern Cay', population:501, tier:'Village' }, { name:'Bantha', population:601, tier:'Village' },
+  ],
+  carpathia: [
+    { name:'Bukovene', population:71619, tier:'Capital' }, { name:'Corsuva', population:29103, tier:'City' },
+    { name:'South Port', population:9101, tier:'Town' }, { name:'Vyrholm', population:7602, tier:'Town' },
+    { name:'Castle Reach', population:6203, tier:'Town' }, { name:'Mikini', population:2801, tier:'Village' },
+    { name:'Purovest', population:2101, tier:'Village' }, { name:'Greywatch', population:1901, tier:'Village' },
+    { name:'White Sands', population:1301, tier:'Village' }, { name:'Slanik', population:1101, tier:'Village' },
+    { name:'Hollowmere', population:1001, tier:'Village' }, { name:"Sorrow's Pass", population:901, tier:'Village' },
+    { name:'Ravenshade', population:801, tier:'Village' }, { name:'Drovna', population:701, tier:'Village' },
+    { name:'Kessel Vorn', population:601, tier:'Village' }, { name:'Bargo Pass', population:501, tier:'Village' },
+    { name:'Thornfall', population:601, tier:'Village' }, { name:'Wraithwood', population:401, tier:'Village' },
+    { name:'Ludus', population:951, tier:'Village' }, { name:'Varna', population:801, tier:'Village' },
+    { name:'Balchik', population:701, tier:'Village' }, { name:'Pice', population:501, tier:'Village' },
+  ],
+  northeast: [
+    { name:'Santorino', population:75708, tier:'Capital' }, { name:'Ineawood', population:29304, tier:'City' },
+    { name:'Mizukoshi', population:8702, tier:'Town' }, { name:'Tsubaki Bay', population:6103, tier:'Town' },
+    { name:'Hoshimura', population:2801, tier:'Village' }, { name:'Kanesato', population:2101, tier:'Village' },
+    { name:'Renkawa', population:1901, tier:'Village' }, { name:'Sodegaura', population:1301, tier:'Village' },
+    { name:'Takamine', population:1101, tier:'Village' }, { name:'Usuzumi', population:901, tier:'Village' },
+    { name:'Yorimasa', population:801, tier:'Village' }, { name:'Fubuki', population:701, tier:'Village' },
+    { name:'Iwagakure', population:601, tier:'Village' }, { name:'Barsastro', population:2401, tier:'Village' },
+  ],
+  bay: [
+    { name:'Charleston', population:67103, tier:'Capital' }, { name:'Iron City', population:37021, tier:'City' },
+    { name:'Treasure Beach', population:9302, tier:'Town' }, { name:'Bayport', population:7104, tier:'Town' },
+    { name:'Pinecrest Hollow', population:2601, tier:'Village' }, { name:"Dell's Corner", population:1401, tier:'Village' },
+    { name:'Maple Junction', population:1201, tier:'Village' }, { name:'Briarwood', population:1001, tier:'Village' },
+    { name:'Sunfish Cove', population:901, tier:'Village' }, { name:'Acorn Flats', population:801, tier:'Village' },
+    { name:'Quail Hollow', population:701, tier:'Village' }, { name:'Hickory Bend', population:601, tier:'Village' },
+  ],
+};
+
+// Carpathia's remote villages are too sparse to each field a standalone Juvenile pit,
+// so they pool into three shared regional circuits instead. Bargo Rift is the smallest
+// and most remote of the three (built around Wraithwood, the least populated settlement
+// on the island) — it's the intended source for the GDD's rare "cohort of near-invincible
+// fighters" event; nobody really knows what training looks like that far from anywhere.
+const CARPATHIA_COMBINED_PITS = {
+  'Highreach Circuit': ['Mikini','Purovest','Greywatch','White Sands','Slanik','Hollowmere'],
+  'Hollow Road Circuit': ["Sorrow's Pass",'Ravenshade','Varna','Drovna','Balchik','Ludus'],
+  'Bargo Rift Circuit': ['Kessel Vorn','Thornfall','Bargo Pass','Pice','Wraithwood'],
+};
+
+// Juvenile pit sizing, PER WEIGHT CLASS (multiply by 3 for a location's total roster).
+// TARGET is what a settlement fields at full province appetite (1.0); HARD_MIN is the
+// absolute floor regardless of appetite, so even the lowest-interest province still
+// puts on a real Tuesday-night bracket everywhere instead of a two-man scrap.
+const PIT_TIER_TARGET  = { Village:6, CombinedPit:11, Town:20, City:35, Capital:50 };
+const PIT_TIER_HARDMIN = { Village:4, CombinedPit:6,  Town:10, City:18, Capital:28 };
+
+// How much of a province's population actually turns out for organized Juvenile
+// fighting (0-1). Settlement counts and populations set the ceiling; appetite is the
+// knob that sets the actual island pecking order — Kolsati and Sherwood are fight-mad,
+// Gazon and Carpathia are provinces nobody bothers scouting.
+const PROVINCE_APPETITE = {
+  kolsati:1.00, sherwood:0.90, ditiero:0.68, alexandretta:0.60,
+  northeast:0.55, bay:0.58, carpathia:0.28, gazon:0.40,
+};
+
+// Every Juvenile pit location in a province, with how many fighters per weight class it
+// should carry. Real settlements map 1:1 except Carpathia, where combined-pit members
+// are folded into their circuit and each fighter's hometown is drawn from the real
+// member villages (so Free Roam's map/walkability never sees a fake location name —
+// only the fight-log/tournament grouping treats them as one shared pit).
+function pitLocationsForProvince(provinceId){
+  const settlements = SETTLEMENT_DATA[provinceId] || [];
+  const appetite = PROVINCE_APPETITE[provinceId] ?? 0.5;
+  const combined = provinceId === 'carpathia' ? CARPATHIA_COMBINED_PITS : null;
+  const combinedMembers = combined ? new Set(Object.values(combined).flat()) : new Set();
+  const locations = [];
+  settlements.forEach(s=>{
+    if(combinedMembers.has(s.name)) return; // folded into a combined pit below
+    const perClass = Math.max(PIT_TIER_HARDMIN[s.tier], Math.round(PIT_TIER_TARGET[s.tier] * appetite));
+    locations.push({ key: s.name, hometownPool:[s.name], perClass });
+  });
+  if(combined){
+    Object.entries(combined).forEach(([pitName, members])=>{
+      const perClass = Math.max(PIT_TIER_HARDMIN.CombinedPit, Math.round(PIT_TIER_TARGET.CombinedPit * appetite));
+      locations.push({ key: pitName, hometownPool: members, perClass });
+    });
+  }
+  return locations;
+}
+
+// Resolves a fighter's real hometown to its shared-pit grouping key for fight-log and
+// tournament-bracket purposes — Carpathia's combined-circuit villages collapse to one
+// key (e.g. "Bargo Rift Circuit"), everyone else's hometown is already the key.
+function pitKeyForHometown(hometown){
+  for(const [pitName, members] of Object.entries(CARPATHIA_COMBINED_PITS)){
+    if(members.includes(hometown)) return pitName;
+  }
+  return hometown;
+}
+
+// Every pit location island-wide, ranked by roster depth — this IS the ranking that
+// decides which 5-6 pits are big enough to host a Wednesday invitational most weeks.
+// Computed fresh from PIT_TIER_TARGET/PROVINCE_APPETITE rather than a hardcoded list,
+// so retuning those constants automatically retunes who's "top tier" too.
+function topPitsIslandWide(n){
+  const all = [];
+  PROVINCES.forEach(p=>{
+    pitLocationsForProvince(p.id).forEach(loc=>{
+      all.push({ provinceId: p.id, key: loc.key, hometownPool: loc.hometownPool, perClass: loc.perClass });
+    });
+  });
+  all.sort((a,b)=> b.perClass - a.perClass);
+  return all.slice(0, n);
+}
+
+// Roughly evocative, gritty promo-circuit names — the pool an event's sponsor name gets
+// drawn from. The same name can run independently at multiple pits (a "Cannonball
+// Rumble" in Kolsati and a separate "Cannonball Rumble" in Alexandretta both track their
+// own edition numbers), and a single pit can host more than one named series over time.
+const INVITE_SPONSOR_NAMES = [
+  'Cannonball Rumble','Wednesday Beatdown','Iron Fist Invitational','The Blacktop Brawl',
+  'Sundown Slugfest','The Hard Row Classic','Lantern Night Showcase','The Anvil Cup',
+  'Tin Roof Throwdown','Dustbowl Derby','The Salt Circuit Invitational','Midweek Mayhem',
+  'The Broken Bell Invitational','Cinder Row Clash','The Drydock Duel','Foghorn Faceoff',
+  'The Split Lip Series','Hollow Bell Showcase','The Rust Belt Rumble','Payday Fights',
+];
+const INVITE_REGISTRY_KEY = 'iifl_invite_registry_v1';
+function loadInviteRegistry(){
+  try{ const raw = localStorage.getItem(INVITE_REGISTRY_KEY); return raw ? JSON.parse(raw) : {}; }
+  catch(err){ return {}; }
+}
+function saveInviteRegistry(reg){
+  try{ localStorage.setItem(INVITE_REGISTRY_KEY, JSON.stringify(reg)); }catch(err){}
+}
+function ordinal(n){
+  const suf = ['th','st','nd','rd'], v = n % 100;
+  return n + (suf[(v-20)%10] || suf[v] || suf[0]);
+}
+// Books this week's edition of a hosting pit's event — reuses one of that pit's
+// established sponsors 85% of the time (incrementing its count), occasionally launching
+// a brand new named series at that pit instead (starts at "1st").
+function bookInviteEdition(pitKey){
+  const reg = loadInviteRegistry();
+  if(!reg[pitKey]) reg[pitKey] = [];
+  let entry;
+  if(reg[pitKey].length && Math.random() < 0.85){
+    entry = pick(reg[pitKey]);
+  } else {
+    const used = new Set(reg[pitKey].map(e=>e.name));
+    const available = INVITE_SPONSOR_NAMES.filter(n=> !used.has(n));
+    const name = available.length ? pick(available) : pick(INVITE_SPONSOR_NAMES);
+    entry = { name, count: 0 };
+    reg[pitKey].push(entry);
+  }
+  entry.count += 1;
+  saveInviteRegistry(reg);
+  return { name: entry.name, edition: entry.count, label: `${ordinal(entry.count)} ${entry.name}` };
+}
+
+// Relative share of each juvenile age in a standing population with realistic dropout —
+// younger cohorts are always more numerous than older ones since attrition is cumulative.
+// Ages 14-17 are also the Junior League draft window (14th birth-year earliest, 17 latest);
+// 18-year-olds who never got drafted age out of Juvenile entirely into the Amateur ranks.
+const JUVENILE_AGE_WEIGHTS = { 11:0.20, 12:0.19, 13:0.16, 14:0.13, 15:0.11, 16:0.09, 17:0.07, 18:0.05 };
+
+function loadFieldPools(){
+  try{
+    const raw = localStorage.getItem(FIELD_KEY);
+    return raw ? JSON.parse(raw) : { amateur:{}, juvenile:{} };
+  }catch(err){ console.error('IIFL field pool load failed:', err); return { amateur:{}, juvenile:{} }; }
+}
+function saveFieldPools(pools){
+  try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
+  catch(err){
+    console.error('IIFL field pool save failed, attempting cleanup:', err);
+    if(typeof PROVINCES !== 'undefined' && typeof enforceProvincePoolCap === 'function'){
+      PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 150));
+      try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
+      catch(err2){
+        PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 40));
+        try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
+        catch(err3){ console.error('IIFL field pool save still failing after aggressive cleanup:', err3); return false; }
+      }
+    }
+    return false;
+  }
+}
+function saveFieldPoolsSafely(pools){ return saveFieldPools(pools); }
+
+
 /*
   Three Junior Leagues, tiered by prestige — Kolsati drafts first and gets the best
   prospects, Northern second, Eastern last. Team home cities are drawn from each
@@ -610,6 +1114,370 @@ function recordStandingsResult(leagueId, homeIdx, awayIdx, homeWon){
   const s = loadJrState(); s.standings[leagueId] = standings; s.allTimeStandings[leagueId] = allTime; saveJrState(s);
 }
 
+/* ============================ NPC BULK DRAFT ============================ */
+/*
+  The player's own draft (runDraftForFighter, further up) resolves one fighter against
+  a flavor-only procedural board. This is the real thing — every Juvenile fighter who
+  declared on the May 1 deadline (tagged juniorDraftDeclaration/juniorDraftDeclaredYear
+  by runJuniorDraftDeclareDay in the fight_pit/free_roam field-pool code) actually gets
+  drafted onto real Junior rosters here, island-wide, on Draft Day itself.
+
+  Draft order: leagues go in their existing draftOrder (Kolsati, Northern, Eastern —
+  Kolsati picks its whole 3 rounds before Northern gets a look, matching the existing
+  "Kolsati drafts first and gets the best" design). Within a league, teams pick in
+  reverse-standings order (worst record first) using THIS season's running standings —
+  there's no season-archival system yet to pull a true "prior season" order from, so
+  this is the practical stand-in; falls back to random order before any games have been
+  played. Every round is best-fighter-available from the declared pool.
+*/
+
+// Worst-to-best team order within one league. Falls back to random if no games have
+// been played yet this season (win% ties at 0-0 across the board).
+function resolveTeamDraftOrder(leagueId){
+  const league = getJrLeague(leagueId);
+  const standings = ensureStandings(leagueId);
+  const indices = league.teams.map((_,i)=> i);
+  const anyGamesPlayed = standings.some(s=> (s.wins+s.losses) > 0);
+  if(!anyGamesPlayed){
+    for(let i=indices.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [indices[i],indices[j]]=[indices[j],indices[i]]; }
+    return indices;
+  }
+  return [...indices].sort((a,b)=>{
+    const wa = standings[a], wb = standings[b];
+    const pctA = (wa.wins+wa.losses) ? wa.wins/(wa.wins+wa.losses) : 0.5;
+    const pctB = (wb.wins+wb.losses) ? wb.wins/(wb.wins+wb.losses) : 0.5;
+    return pctA - pctB; // ascending win% = worst team first
+  });
+}
+
+// Places a real drafted fighter (a genuine Juvenile-pool prospect, not a generated
+// placeholder) into a team roster slot — same pattern as setPlayerIntoRoster, but for
+// an NPC: stores the live fighter object directly rather than a fighterId lookup, since
+// drafted prospects aren't tracked in the player's own roster.
+function draftFighterIntoRoster(leagueId, teamIndex, fighter){
+  ensureTeamRoster(leagueId, teamIndex);
+  const s = loadJrState();
+  const key = teamRosterKey(leagueId, teamIndex);
+  const slots = s.rosters[key];
+  const wClass = weightClassOf(fighter.weightLb);
+  let slot = slots.find(sl=> sl.weightClass===wClass && !sl.isPlayer && !sl.isDraftedProspect);
+  if(!slot) slot = slots.find(sl=> !sl.isPlayer && !sl.isDraftedProspect) || slots[0];
+  slot.isPlayer = false;
+  slot.isDraftedProspect = true;
+  slot.name = fighter.name;
+  slot.fighterId = null;
+  slot.fighter = fighter;
+  s.rosters[key] = slots;
+  saveJrState(s);
+}
+
+// The real engine. Call once per island-year on Draft Day (gated by the calendar at
+// the call site, not in here) — gathers every fighter who declared this cycle across
+// every province's Juvenile pool, runs the full 3-league x 3-round draft, assigns
+// picks onto real team rosters, and removes drafted fighters from the Juvenile pool.
+// Returns a results/board structure shaped like runDraftForFighter's so the same
+// Draft Day screen can display both a player pick (if any) and the full NPC board.
+function runJuniorDraftDayBulk(cycleYear){
+  const pools = loadFieldPools();
+  const declared = [];
+  Object.keys(pools.juvenile || {}).forEach(provinceId=>{
+    pools.juvenile[provinceId].forEach(f=>{
+      if(f.juniorDraftDeclaredYear === cycleYear && f.juniorDraftDeclaration === 'declared'){
+        declared.push(f);
+      }
+    });
+  });
+  declared.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats)); // best-available pool, island-wide
+  const available = [...declared];
+  const board = {};
+  const results = [];
+
+  [...JR_LEAGUES].sort((a,b)=> a.draftOrder-b.draftOrder).forEach(league=>{
+    const order = resolveTeamDraftOrder(league.id);
+    board[league.id] = [];
+    for(let r=0; r<3; r++){
+      const roundPicks = [];
+      order.forEach(teamIndex=>{
+        const prospect = available.shift(); // best remaining fighter, island-wide
+        if(!prospect){ roundPicks.push(null); return; }
+        draftFighterIntoRoster(league.id, teamIndex, prospect);
+        results.push({ leagueId: league.id, round: r+1, teamIndex, fighterId: prospect.id, name: prospect.name });
+        roundPicks.push({ team: jrTeamName(league.id, teamIndex), name: prospect.name, isPlayer:false, fighterId: prospect.id });
+      });
+      board[league.id].push(roundPicks);
+    }
+  });
+
+  // Drafted fighters come off the Juvenile board entirely — remove by id from every
+  // province's pool in one pass.
+  const draftedIds = new Set(results.map(r=> r.fighterId));
+  Object.keys(pools.juvenile || {}).forEach(provinceId=>{
+    pools.juvenile[provinceId] = pools.juvenile[provinceId].filter(f=> !draftedIds.has(f.id));
+  });
+  saveFieldPools(pools);
+
+  return { results, board, totalDeclared: declared.length, totalDrafted: results.length };
+}
+
+/* ============================ JUNIOR PLAYOFFS ============================ */
+/*
+  Two stages, matching resolveJuniorPlayoffSubPhase's calendar split:
+  1. LEAGUE PLAYOFFS (jrLeaguePlayoffStart -> jrLeaguePlayoffEnd, 2 weeks): each of the
+     3 leagues independently runs a top-4 single-elim bracket (1v4, 2v3, then the final)
+     to crown a league champion. A host TEAM is picked from the qualifiers via
+     pickLeaguePlayoffHost (weighted rotation, imported from the fight_pit calendar
+     module) purely for venue/hometown-edge purposes — hosting never grants a bracket
+     spot, only qualifying teams play.
+  2. ISLAND CHAMPIONSHIP (jrIslandChampStart -> jrIslandChampEnd, 2 weeks): the 3 league
+     champions plus a HOST CITY (any Junior team, chosen via a May bid — see
+     pickIslandChampionshipHost) meet in a 4-team single-elim: Host vs #1 seed in one
+     semi, #2 vs #3 in the other, winners meet in the final. If the host team happens to
+     also be a league champion by the time this runs, its host-slot passes to the next
+     best non-champion team island-wide (the host CITY still gets credit for hosting;
+     it just doesn't occupy two bracket seats).
+*/
+const JR_PLAYOFF_QUALIFIER_COUNT = 4;
+
+// Top 4 by this season's win% — ties broken by raw win count, then random (stable
+// enough for a bracket cut; a real tiebreaker system is more than this needs right now).
+function getPlayoffQualifiers(leagueId){
+  const league = getJrLeague(leagueId);
+  const standings = ensureStandings(leagueId);
+  const withPct = league.teams.map((_,i)=>{
+    const rec = standings[i];
+    const pct = (rec.wins+rec.losses) ? rec.wins/(rec.wins+rec.losses) : 0;
+    return { teamIndex:i, pct, wins:rec.wins };
+  });
+  withPct.sort((a,b)=> (b.pct-a.pct) || (b.wins-a.wins) || (Math.random()-0.5));
+  return withPct.slice(0, JR_PLAYOFF_QUALIFIER_COUNT).map(t=>t.teamIndex);
+}
+
+// Resolves (and persists) this league's playoff host exactly once per cycle, from the
+// set of teams that actually qualified.
+// Pre-determined BEFORE the season, from every team in the league — not conditioned on
+// qualifying. This is a rotation (weighted toward stronger programs, recency-penalized),
+// not a bid like the Island Championship's; it just needs to be locked in before
+// playoffs need a venue. Resolved once per cycle at Junior's season-open day.
+function resolveLeaguePlayoffHostPreSeason(leagueId, cycleYear){
+  const s = loadJrState();
+  if(!s.lastHostedYear) s.lastHostedYear = {};
+  if(!s.leaguePlayoffHost) s.leaguePlayoffHost = {};
+  const league = getJrLeague(leagueId);
+  const allTeams = league.teams.map((_,teamIndex)=> ({ leagueId, teamIndex }));
+  const allTime = ensureAllTimeStandings(leagueId);
+  const picked = pickLeaguePlayoffHost(allTeams, allTime, s.lastHostedYear, cycleYear);
+  const teamIndex = picked ? picked.teamIndex : 0;
+  s.lastHostedYear[`${leagueId}_${teamIndex}`] = cycleYear;
+  s.leaguePlayoffHost[leagueId] = { cycleYear, teamIndex };
+  saveJrState(s);
+  return teamIndex;
+}
+
+// Idempotent per-cycle trigger for host selection — gated at Junior's season-open day
+// (well before playoffs, matching "pre-determine... rotates year to year").
+function ensureLeaguePlayoffHostsForYear(cycleYear){
+  const s = loadJrState();
+  if(getCurrentDay() < tierKeyDates(cycleYear).juniorOpen) return;
+  JR_LEAGUES.forEach(league=>{
+    const existing = s.leaguePlayoffHost && s.leaguePlayoffHost[league.id];
+    if(existing && existing.cycleYear === cycleYear) return;
+    resolveLeaguePlayoffHostPreSeason(league.id, cycleYear);
+  });
+}
+
+// One playoff game — same 5-weight-class aggregate as the regular season
+// (simulateAiTeamGame), but doesn't touch regular-season standings, and always gives
+// the host team's fighters the hometown-arena edge regardless of which side of the
+// bracket they're on.
+function simulatePlayoffGame(leagueId, teamAIdx, teamBIdx, hostTeamIdx){
+  const slotsA = ensureTeamRoster(leagueId, teamAIdx);
+  const slotsB = ensureTeamRoster(leagueId, teamBIdx);
+  const aIsHost = teamAIdx === hostTeamIdx;
+  const lineupB = aiPickLineup(slotsB, null);
+  const lineupA = aiPickLineup(slotsA, lineupB);
+  let scoreA = 0, scoreB = 0;
+  WEIGHT_CLASSES.forEach(wc=>{
+    const fA = lineupA[wc], fB = lineupB[wc];
+    if(!fA || !fB) return;
+    const bout = simulateBout(fA, fB, { arena:{floor:'championship court'}, hometownPit: aIsHost ? true : false });
+    if(bout.winner.id === fA.id) scoreA++; else scoreB++;
+  });
+  return { winnerIdx: scoreA >= scoreB ? teamAIdx : teamBIdx, scoreA, scoreB };
+}
+
+// Runs one league's entire playoff bracket top to bottom — call once per cycle, gated
+// at the call site by the calendar (jrLeaguePlayoffStart). The host was already locked
+// in back at season-open (ensureLeaguePlayoffHostsForYear) — this just reads it; if for
+// some reason it's missing (an old save, or the season-open trigger never fired), it
+// falls back to resolving one on the spot rather than crashing.
+function runLeaguePlayoffs(leagueId, cycleYear){
+  const qualifiers = getPlayoffQualifiers(leagueId); // [1st,2nd,3rd,4th] seed order
+  const s0 = loadJrState();
+  const preResolved = s0.leaguePlayoffHost && s0.leaguePlayoffHost[leagueId];
+  const hostTeamIdx = (preResolved && preResolved.cycleYear === cycleYear)
+    ? preResolved.teamIndex
+    : resolveLeaguePlayoffHostPreSeason(leagueId, cycleYear);
+  const semiA = simulatePlayoffGame(leagueId, qualifiers[0], qualifiers[3], hostTeamIdx); // 1 vs 4
+  const semiB = simulatePlayoffGame(leagueId, qualifiers[1], qualifiers[2], hostTeamIdx); // 2 vs 3
+  const final = simulatePlayoffGame(leagueId, semiA.winnerIdx, semiB.winnerIdx, hostTeamIdx);
+  const result = {
+    cycleYear, qualifiers, hostTeamIdx,
+    semis: [
+      { a: qualifiers[0], b: qualifiers[3], ...semiA },
+      { a: qualifiers[1], b: qualifiers[2], ...semiB },
+    ],
+    final: { a: semiA.winnerIdx, b: semiB.winnerIdx, ...final },
+    championTeamIdx: final.winnerIdx,
+  };
+  const s = loadJrState();
+  if(!s.leaguePlayoffs) s.leaguePlayoffs = {};
+  s.leaguePlayoffs[leagueId] = result;
+  saveJrState(s);
+  return result;
+}
+
+// Idempotent per-cycle trigger — safe to call every render, only actually runs once
+// the calendar hits jrLeaguePlayoffStart, and only once per league per cycle.
+function ensureLeaguePlayoffsRunForYear(cycleYear){
+  const s = loadJrState();
+  if(getCurrentDay() < tierKeyDates(cycleYear).jrLeaguePlayoffStart) return;
+  JR_LEAGUES.forEach(league=>{
+    const existing = s.leaguePlayoffs && s.leaguePlayoffs[league.id];
+    if(existing && existing.cycleYear === cycleYear) return;
+    runLeaguePlayoffs(league.id, cycleYear);
+  });
+}
+
+/* ---------------------------- ISLAND CHAMPIONSHIP ---------------------------- */
+
+// Any Junior team, from any league, can bid to host — this runs in May, long before
+// anyone knows who the eventual 3 league champions even are, so it can't be scoped to
+// "qualifying" teams the way the per-league host pick is.
+function allJuniorTeamsFlat(){
+  const flat = [];
+  JR_LEAGUES.forEach(league=> league.teams.forEach((_,teamIndex)=> flat.push({ leagueId: league.id, teamIndex })));
+  return flat;
+}
+
+// Same weighted-rotation shape as pickLeaguePlayoffHost, just pooling every team
+// island-wide instead of one league's qualifiers.
+function pickIslandChampionshipHost(cycleYear){
+  const s = loadJrState();
+  if(!s.islandChampHostHistory) s.islandChampHostHistory = {};
+  const allTeams = allJuniorTeamsFlat();
+  const weighted = allTeams.map(t=>{
+    const allTime = ensureAllTimeStandings(t.leagueId);
+    const rec = allTime[t.teamIndex] || { wins:0, losses:0 };
+    const winPct = (rec.wins+rec.losses) ? rec.wins/(rec.wins+rec.losses) : 0.5;
+    const key = `${t.leagueId}_${t.teamIndex}`;
+    const yearsSince = s.islandChampHostHistory[key] ? Math.min(cycleYear - s.islandChampHostHistory[key], 5) : 5;
+    const weight = Math.max(0.05, winPct) * (yearsSince/5);
+    return { ...t, weight };
+  });
+  const total = weighted.reduce((sum,t)=> sum+t.weight, 0);
+  let roll = Math.random()*total;
+  let picked = weighted[weighted.length-1];
+  for(const t of weighted){ roll -= t.weight; if(roll <= 0){ picked = t; break; } }
+  s.islandChampHostHistory[`${picked.leagueId}_${picked.teamIndex}`] = cycleYear;
+  s.islandChampHost = { cycleYear, leagueId: picked.leagueId, teamIndex: picked.teamIndex };
+  saveJrState(s);
+  return s.islandChampHost;
+}
+
+function ensureIslandChampHostForYear(cycleYear){
+  const s = loadJrState();
+  if(s.islandChampHost && s.islandChampHost.cycleYear === cycleYear) return s.islandChampHost;
+  if(getCurrentDay() < tierKeyDates(cycleYear).jrChampHostAnnounced) return null;
+  return pickIslandChampionshipHost(cycleYear);
+}
+
+// Seeds the 3 league champions #1-#3 by this season's win% (not raw wins — the 3
+// leagues have different team counts and round-robin lengths, so win% is the only fair
+// cross-league comparison).
+function seedIslandChampionshipTeams(cycleYear){
+  const s = loadJrState();
+  const champs = JR_LEAGUES.map(league=>{
+    const lp = s.leaguePlayoffs && s.leaguePlayoffs[league.id];
+    if(!lp || lp.cycleYear !== cycleYear) return null;
+    const standings = ensureStandings(league.id);
+    const rec = standings[lp.championTeamIdx];
+    const pct = (rec.wins+rec.losses) ? rec.wins/(rec.wins+rec.losses) : 0;
+    return { leagueId: league.id, teamIndex: lp.championTeamIdx, pct };
+  }).filter(Boolean);
+  champs.sort((a,b)=> b.pct-a.pct);
+  return champs; // [#1, #2, #3]
+}
+
+// Runs the full 4-team Island Championship: Host vs #1 in one semi, #2 vs #3 in the
+// other. If the host also won its own league (so it's already one of the 3 seeds), its
+// host slot passes to the next-best non-champion team island-wide — the host city
+// still gets hosting credit, it just doesn't occupy two bracket seats.
+function runIslandChampionship(cycleYear){
+  const host = ensureIslandChampHostForYear(cycleYear);
+  const seeds = seedIslandChampionshipTeams(cycleYear);
+  if(!host || seeds.length < 3) return null;
+
+  const hostIsAlsoChamp = seeds.some(c=> c.leagueId===host.leagueId && c.teamIndex===host.teamIndex);
+  let hostSlot = host;
+  if(hostIsAlsoChamp){
+    const champKeys = new Set(seeds.map(c=> `${c.leagueId}_${c.teamIndex}`));
+    const allTeams = allJuniorTeamsFlat().filter(t=> !champKeys.has(`${t.leagueId}_${t.teamIndex}`));
+    let best = null, bestPct = -1;
+    allTeams.forEach(t=>{
+      const standings = ensureStandings(t.leagueId);
+      const rec = standings[t.teamIndex];
+      const pct = (rec.wins+rec.losses) ? rec.wins/(rec.wins+rec.losses) : 0;
+      if(pct > bestPct){ bestPct = pct; best = t; }
+    });
+    hostSlot = best || host;
+  }
+
+  // Cross-league team match — both sides borrow simulatePlayoffGame's per-weight-class
+  // aggregate, but since the two teams are in different leagues (different roster
+  // pools), we resolve it directly here instead of routing through one league's helper.
+  function crossLeagueGame(teamA, teamB, hostTeam){
+    const slotsA = ensureTeamRoster(teamA.leagueId, teamA.teamIndex);
+    const slotsB = ensureTeamRoster(teamB.leagueId, teamB.teamIndex);
+    const aIsHost = teamA.leagueId===hostTeam.leagueId && teamA.teamIndex===hostTeam.teamIndex;
+    const lineupB = aiPickLineup(slotsB, null);
+    const lineupA = aiPickLineup(slotsA, lineupB);
+    let scoreA=0, scoreB=0;
+    WEIGHT_CLASSES.forEach(wc=>{
+      const fA = lineupA[wc], fB = lineupB[wc];
+      if(!fA || !fB) return;
+      const bout = simulateBout(fA, fB, { arena:{floor:'championship court'}, hometownPit: aIsHost });
+      if(bout.winner.id===fA.id) scoreA++; else scoreB++;
+    });
+    return { winner: scoreA>=scoreB ? teamA : teamB, scoreA, scoreB };
+  }
+
+  const semiA = crossLeagueGame(hostSlot, seeds[0], hostSlot); // Host vs #1
+  const semiB = crossLeagueGame(seeds[1], seeds[2], hostSlot); // #2 vs #3
+  const final = crossLeagueGame(semiA.winner, semiB.winner, hostSlot);
+
+  const result = {
+    cycleYear, host, hostSlot, hostIsAlsoChamp, seeds,
+    semis: [
+      { a: hostSlot, b: seeds[0], winner: semiA.winner, scoreA: semiA.scoreA, scoreB: semiA.scoreB },
+      { a: seeds[1], b: seeds[2], winner: semiB.winner, scoreA: semiB.scoreA, scoreB: semiB.scoreB },
+    ],
+    final: { a: semiA.winner, b: semiB.winner, winner: final.winner, scoreA: final.scoreA, scoreB: final.scoreB },
+    champion: final.winner,
+  };
+  const s = loadJrState();
+  s.islandChampionship = result;
+  saveJrState(s);
+  return result;
+}
+
+// Idempotent per-cycle trigger for the Island Championship stage.
+function ensureIslandChampionshipRunForYear(cycleYear){
+  const s = loadJrState();
+  if(s.islandChampionship && s.islandChampionship.cycleYear === cycleYear) return;
+  if(getCurrentDay() < tierKeyDates(cycleYear).jrIslandChampStart) return;
+  runIslandChampionship(cycleYear);
+}
+
 function pickStarter(slots, weightClass){
   const candidates = slots.filter(sl=> sl.weightClass===weightClass);
   let best = null, bestOvr = -1;
@@ -940,9 +1808,34 @@ function growJuniorStats(f, playerWon, method, oppOVR){
 // from an earlier design pass — Junior now drafts straight out of Juvenile, and Amateur
 // is the older 18+ money league that sits between Junior and Pro. An amateurLeagueId
 // check is intentionally NOT required here anymore.)
+//
+// Also gated by the calendar now — Draft Day is a fixed date (May 15, from
+// tierKeyDates), not "whenever the player clicks in." Age/rights eligibility can be
+// true well before that; the button just stays disabled with an explanatory status
+// until the actual day arrives.
+function currentIslandYear(){
+  return resolveTierSeason('juvenile', getCurrentDay()).cycleYear;
+}
 function isDraftEligible(f){
   const petitionedEarly = f.juvenilePetitionStatus === 'approved-pending-draft';
-  return !!f.juvenileHomeProvinceId && (petitionedEarly || (f.age >= 14 && f.age <= 17)) && !f.juniorTeamId;
+  const ageOk = petitionedEarly || (f.age >= 14 && f.age <= 17);
+  const draftDayArrived = getCurrentDay() >= tierKeyDates(currentIslandYear()).juniorDraftDay;
+  return !!f.juvenileHomeProvinceId && ageOk && !f.juniorTeamId && draftDayArrived;
+}
+
+// Runs the island-wide NPC bulk draft exactly once per cycle, the moment Draft Day
+// arrives — guarded so revisiting the screen later in the cycle doesn't re-draft
+// everyone. Safe to call liberally (e.g. every time the select screen renders); it
+// no-ops instantly once already resolved for the current year.
+function ensureNpcDraftRunForYear(){
+  const cycleYear = currentIslandYear();
+  const s = loadJrState();
+  if(s.npcDraftResolvedYear === cycleYear) return;
+  if(getCurrentDay() < tierKeyDates(cycleYear).juniorDraftDay) return;
+  runJuniorDraftDayBulk(cycleYear);
+  const s2 = loadJrState();
+  s2.npcDraftResolvedYear = cycleYear;
+  saveJrState(s2);
 }
 
 function getFighterScouting(f){
@@ -1270,12 +2163,19 @@ function render(){
 }
 
 function renderSelect(){
+  ensureNpcDraftRunForYear(); // resolves the NPC bulk draft the moment Draft Day arrives, once per cycle
+  const cycleYearNow = currentIslandYear();
+  ensureLeaguePlayoffHostsForYear(cycleYearNow);
+  ensureLeaguePlayoffsRunForYear(cycleYearNow);
+  ensureIslandChampionshipRunForYear(cycleYearNow);
   const roster = getRoster();
   if(!roster.length){
     return `<div class="empty-note">No fighters saved yet. Build one in the Character Creator and develop them through Amateur in the Fight Pit first — Junior League scouts only watch active Amateur fighters aged 14-17.</div>`;
   }
   const rows = roster.map(f=>{
     const prov = PROVINCES.find(p=>p.id===f.provinceId);
+    const ageBandOk = f.juvenilePetitionStatus === 'approved-pending-draft' || (f.age >= 14 && f.age <= 17);
+    const draftDayArrived = getCurrentDay() >= tierKeyDates(currentIslandYear()).juniorDraftDay;
     let status, canAct = false;
     if(f.juniorTeamId){
       status = `Signed — ${jrTeamName(f.juniorLeagueId, f.juniorTeamId)}`;
@@ -1287,8 +2187,10 @@ function renderSelect(){
       canAct = true;
     } else if(!f.amateurLeagueId){
       status = 'Not Amateur-Active';
-    } else if(f.age < 14 || f.age > 17){
+    } else if(!ageBandOk){
       status = `Not Draft Age (currently ${f.age})`;
+    } else if(!draftDayArrived){
+      status = `Draft eligible — Draft Day is ${formatCalendarDateShort(tierKeyDates(currentIslandYear()).juniorDraftDay)}`;
     } else {
       status = 'Not Eligible';
     }
