@@ -511,6 +511,365 @@ const JUVENILE_SEASON_WEEKS = 16;
 const JUVENILE_SEASON_START_DAY = 1;
 const JUVENILE_SEASON_END_DAY = JUVENILE_SEASON_START_DAY + JUVENILE_SEASON_WEEKS*7 - 1;
 
+/* ============================ TIER SEASON CALENDAR ============================ */
+/*
+  Each tier runs its own annual regular-season + playoff window, anchored to a real
+  calendar month/day — Juvenile always opens May 1, and every other tier's dates are
+  offsets from that, chosen so the ENTIRE island year (every draft, deadline, and
+  championship across all four tiers) lands inside May 1 - Dec 25, never spilling into
+  the next calendar year. Deliberately stateless/derived: given any day number,
+  resolveTierSeason() recomputes which cycle-year and phase that day falls in from
+  scratch. No stored season-state to drift out of sync or need migrating.
+
+  Junior's playoffWeeks (4) covers TWO stages, not one bracket: 2 weeks of each of the
+  3 leagues running its own playoff to crown a league champion, then 2 weeks for the
+  4-team Iron Island Championship (the 3 league champs + a bid-won host city).
+  resolveJuniorPlayoffSubPhase() below tells you which of those two stages a given day
+  falls in once resolveTierSeason says Junior's phase is 'playoffs'.
+*/
+const TIER_SEASON_CONFIG = {
+  juvenile: { startMonth: 5, startDay: 1,  regularWeeks: 16, playoffWeeks: 0 },
+  junior:   { startMonth: 5, startDay: 29, regularWeeks: 16, playoffWeeks: 4 },
+  amateur:  { startMonth: 6, startDay: 1,  regularWeeks: 14, playoffWeeks: 2 },
+  pro:      { startMonth: 8, startDay: 1,  regularWeeks: 18, playoffWeeks: 3 },
+};
+
+// Day number (same 1-based convention as getCurrentDay/dateForDay) for a given real
+// calendar year/month/day — the bridge between "June 1, 1959" and the island clock.
+function dayForCalendarDate(year, month, dayOfMonth){
+  const d = new Date(year, month-1, dayOfMonth);
+  return Math.round((d - GAME_EPOCH) / 86400000) + 1;
+}
+
+// Resolves which annual cycle a tier is in for a given day, and what phase of that
+// cycle it's in: 'regular' (weekly cards happening), 'playoffs' (bracket underway),
+// or 'dead-days' (season's over, next one hasn't started — the window where the
+// player gets the stay/off-season/advance-to-next-season choice).
+function resolveTierSeason(tierKey, todayDay){
+  const cfg = TIER_SEASON_CONFIG[tierKey];
+  if(!cfg) return null;
+  const todayDate = dateForDay(todayDay);
+  let year = todayDate.getFullYear();
+  let startDay = dayForCalendarDate(year, cfg.startMonth, cfg.startDay);
+  if(todayDay < startDay){
+    year -= 1;
+    startDay = dayForCalendarDate(year, cfg.startMonth, cfg.startDay);
+  }
+  const regularEndDay = startDay + cfg.regularWeeks*7 - 1;
+  const playoffEndDay = regularEndDay + cfg.playoffWeeks*7;
+  const nextStartDay = dayForCalendarDate(year+1, cfg.startMonth, cfg.startDay);
+  let phase = 'regular';
+  if(todayDay > playoffEndDay) phase = 'dead-days';
+  else if(todayDay > regularEndDay) phase = 'playoffs';
+  return { tierKey, cycleYear: year, startDay, regularEndDay, playoffEndDay, nextStartDay, phase };
+}
+
+// The island-wide "advance to next season" action always means "fast-forward to the
+// next Juvenile opening day" — that's the anchor for the whole game year, even if
+// you're looking at Pro's dead-days when you trigger it.
+function nextJuvenileOpeningDay(fromDay){
+  const s = resolveTierSeason('juvenile', fromDay);
+  return s.phase === 'dead-days' ? s.nextStartDay : dayForCalendarDate(s.cycleYear+1, TIER_SEASON_CONFIG.juvenile.startMonth, TIER_SEASON_CONFIG.juvenile.startDay);
+}
+
+// Once Junior's overall phase is 'playoffs' (a 4-week window), this tells you which
+// half you're in: the first 2 weeks are each league running its own bracket, the
+// second 2 weeks are the 4-team Iron Island Championship.
+function resolveJuniorPlayoffSubPhase(todayDay){
+  const s = resolveTierSeason('junior', todayDay);
+  if(s.phase !== 'playoffs') return null;
+  const leaguePOEnd = s.regularEndDay + 2*7;
+  return todayDay <= leaguePOEnd ? 'league-playoffs' : 'island-championship';
+}
+
+// Every named date on the island calendar for a given island-year, all derived from
+// that year's Juvenile May 1 opener. This is the single source of truth other screens
+// (Home Hub, newspaper, etc) should read from rather than re-deriving offsets by hand.
+function tierKeyDates(cycleYear){
+  const may1 = dayForCalendarDate(cycleYear, 5, 1);
+  const jrDraft = may1 + 14;
+  const jrOpen = jrDraft + 14;
+  const amOpen = may1 + 31;
+  const proOpen = dayForCalendarDate(cycleYear, 8, 1);
+  const juvRegEnd = may1 + 16*7 - 1;
+  const amRegEnd = amOpen + 14*7 - 1;
+  const jrRegEnd = jrOpen + 16*7 - 1;
+  const jrLeaguePOEnd = jrRegEnd + 2*7;
+  const jrChampEnd = jrRegEnd + 4*7;
+  const proRegEnd = proOpen + 18*7 - 1;
+  return {
+    cycleYear,
+    juvenileOpen: may1,
+    juvenileRegEnd: juvRegEnd,
+    jrChampHostBidDue: may1,
+    jrChampHostAnnounced: may1 + 7,
+    juniorDraftDeclareDeadline: may1,
+    juniorDraftDay: jrDraft,
+    juniorOpen: jrOpen,
+    juniorTradeDeadline: jrOpen + 10*7,
+    juniorRegEnd: jrRegEnd,
+    jrLeaguePlayoffStart: jrRegEnd + 1,
+    jrLeaguePlayoffEnd: jrLeaguePOEnd,
+    jrIslandChampStart: jrLeaguePOEnd + 1,
+    jrIslandChampEnd: jrChampEnd,
+    amateurOpen: amOpen,
+    amateurTradeDeadline: amOpen + 8*7,
+    amateurRegEnd: amRegEnd,
+    amateurPlayoffStart: amRegEnd + 1,
+    amateurPlayoffEnd: amRegEnd + 2*7,
+    proDraftDeclareDeadline: may1 + 24,
+    proDraftDay: may1 + 35,
+    proOpen: proOpen,
+    proTradeDeadline: proOpen + 12*7,
+    proRegEnd: proRegEnd,
+    proPlayoffStart: proRegEnd + 1,
+    proPlayoffEnd: proRegEnd + 3*7,
+  };
+}
+
+// Weighted rotation for which QUALIFYING team hosts its league's own playoff bracket.
+// Hosting is a venue perk, not a playoff-entry mechanic — it's picked from teams that
+// already qualified. Weighted toward "better programs" (all-time win% is the proxy
+// until there's a real arena/prestige stat) with a recency penalty so the same team
+// doesn't host every single year. lastHostedYear is a { teamKey: year } map the caller
+// persists between cycles (teamKey = `${leagueId}_${teamIndex}`).
+function pickLeaguePlayoffHost(qualifyingTeams, allTimeStandings, lastHostedYear, cycleYear){
+  if(!qualifyingTeams.length) return null;
+  const weighted = qualifyingTeams.map(t=>{
+    const rec = allTimeStandings[t.teamIndex] || { wins:0, losses:0 };
+    const winPct = (rec.wins + rec.losses) ? rec.wins/(rec.wins+rec.losses) : 0.5;
+    const key = `${t.leagueId}_${t.teamIndex}`;
+    const yearsSinceHosted = lastHostedYear[key] ? Math.min(cycleYear - lastHostedYear[key], 5) : 5;
+    // Recency penalty tapers back in over 5 years so a strong program isn't locked
+    // out forever after one turn, but can't host back-to-back either.
+    const weight = Math.max(0.05, winPct) * (yearsSinceHosted / 5);
+    return { ...t, weight };
+  });
+  const total = weighted.reduce((s,t)=> s+t.weight, 0);
+  let roll = Math.random() * total;
+  for(const t of weighted){ roll -= t.weight; if(roll <= 0) return t; }
+  return weighted[weighted.length-1];
+}
+/* ============================ OFF-SEASON & DRAFT DECLARATION TRIGGERS ============================ */
+/*
+  "Silent" island-wide triggers — calendar-driven effects that fire without their own
+  screen (at least for now). Off-season conditioning/decline apply once a tier's
+  off-season is actively engaged (the "advance to off-season" choice, not just idly
+  sitting in dead-days). Draft declarations are a snapshot-on-a-date mechanic: the
+  eligible pool and each fighter's in/out decision are both resolved on the deadline day.
+*/
+
+// Prime-age assumption (not previously specified) — flagging it here since it's new:
+// 24-29 is a fighter's physical prime, decline starts at 30 and compounds the further
+// past it they get. Only matters for Amateur/Pro fighters since Juvenile/Junior top out
+// at 20.
+const PRIME_AGE_START = 24;
+const PRIME_AGE_END = 29;
+const DECLINE_START_AGE = 30;
+
+// Extra height/weight tick on top of the normal age-based growth curve — a real
+// off-season training camp, not just another birthday passing. Only fires for
+// still-developing fighters (under 22); grown adults don't get taller in the off-season.
+function applyOffSeasonConditioning(f){
+  if(!f.age || f.age >= 22) return;
+  const buildMult = { lean:0.9, athletic:1.0, stocky:1.15 }[(f.appearance && f.appearance.build) || 'athletic'] || 1.0;
+  f.heightIn = (f.heightIn || 60) + rand(0,1);
+  f.weightLb = (f.weightLb || 100) + Math.round(rand(2,6) * buildMult);
+}
+
+// A real training camp — more generous than the small in-season growth ticks — bumps
+// 2-3 stats toward the tier ceiling.
+function applyOffSeasonTrainingBonus(f){
+  if(!f.stats) return;
+  const ceiling = bandCeiling(f.age||18, f.talentTier||'normal');
+  const statKeys = ['speed','quickness','toughness','power','agility'];
+  const shuffled = [...statKeys].sort(()=> Math.random()-0.5);
+  const bumpCount = rand(2,3);
+  for(let i=0;i<bumpCount;i++){
+    const key = shuffled[i];
+    if(f.stats[key] < ceiling) f.stats[key] = clamp(f.stats[key] + rand(1,3), 1, ceiling);
+  }
+}
+
+// Past-prime decline — chance and magnitude both grow the further past 30 a fighter
+// gets. Only ever touches Amateur/Pro fighters since nobody in Juvenile/Junior is old
+// enough to trigger it.
+function applyPastPrimeDecline(f){
+  if(!f.age || f.age < DECLINE_START_AGE || !f.stats) return;
+  const yearsPastPrime = f.age - DECLINE_START_AGE;
+  const declineChance = clamp(0.15 + yearsPastPrime*0.08, 0.15, 0.85);
+  if(Math.random() > declineChance) return;
+  const key = pick(Object.keys(f.stats));
+  const amount = 1 + Math.floor(yearsPastPrime/3);
+  f.stats[key] = clamp(f.stats[key] - amount, 1, 99);
+}
+
+// Runs all three off-season effects on a fighter in one pass — the function the
+// "advance to off-season" action should call per-fighter once it's wired to a screen.
+function applyOffSeasonToFighter(f){
+  applyOffSeasonConditioning(f);
+  applyOffSeasonTrainingBonus(f);
+  applyPastPrimeDecline(f);
+}
+
+// The Juvenile→Junior draft-eligible pool as of the May 1 snapshot day — ages 14-17,
+// not already attached to a Junior team or Amateur league. Matches the existing Draft
+// Watch eligibility window (draftWatchHtml above).
+function juniorDraftEligiblePool(fighters){
+  return fighters.filter(f=> f.age >= 14 && f.age <= 17 && !f.juniorTeamId && !f.amateurLeagueId);
+}
+
+// Age 17 is mandatory — it's the fighter's final eligible year, so staying isn't an
+// option (they'd age out with nowhere to go). 14-16 is a real choice; NPCs default to
+// declaring once they're far enough along their growth curve, using the same
+// pctOfCeiling threshold Projected Path already reads. The player's own fighter should
+// get an actual prompt once that screen exists — this just determines the pool + the
+// NPC-side default so the mechanic isn't silently absent while the UI catches up.
+function resolveJuniorDraftDeclaration(f){
+  if(f.age === 17) return 'declared';
+  return growthOutlook(f).pctOfCeiling >= 55 ? 'declared' : 'stayed';
+}
+
+// The Junior/Amateur→Pro draft-eligible pool as of the May 25 declare deadline (draft
+// itself is June 5). Two source pools: Junior players (mandatory declare at 20, since
+// that's when they age out of Junior) and Amateur fighters (any year, once they've built
+// a real case).
+function proDraftEligiblePool(fighters){
+  return fighters.filter(f=> f.age >= 18 && (f.juniorTeamId || f.amateurLeagueId));
+}
+
+function resolveProDraftDeclaration(f){
+  if(f.juniorTeamId && f.age >= 20) return 'declared';
+  return growthOutlook(f).pctOfCeiling >= 70 ? 'declared' : 'stayed'; // Pro bar is higher than Junior's
+}
+
+/* ============================ FREE AGENT POOL ============================ */
+/*
+  A shared island-wide holding pool for fighters who are off every league/team's books
+  but haven't retired. Two intended feed sources so far: Junior fighters who age out
+  (21st year) without a Pro roster spot, and future Pro/Junior roster cuts once those
+  release flows exist. Amateur teams draw from this pool to fill roster spots that
+  aren't already claimed by a Pro affiliate assignment (see AMATEUR TEAM ROSTERS below).
+  Deliberately NOT a permanent parking lot — see processFAWalkAway further down for how
+  the pool stays fresh instead of just growing forever.
+*/
+const FA_POOL_KEY = 'iifl_free_agent_pool_v1';
+function loadFAPool(){
+  try{ const raw = localStorage.getItem(FA_POOL_KEY); return raw ? JSON.parse(raw) : []; }
+  catch(err){ return []; }
+}
+function saveFAPool(pool){
+  try{ localStorage.setItem(FA_POOL_KEY, JSON.stringify(pool)); return true; }
+  catch(err){ console.error('IIFL FA pool save failed:', err); return false; }
+}
+function addToFAPool(f, entryDay, reason){
+  const pool = loadFAPool();
+  if(pool.some(x=>x.id===f.id)) return pool;
+  pool.push({ ...f, faEntryDay: entryDay, faReason: reason });
+  saveFAPool(pool);
+  return pool;
+}
+function removeFromFAPoolInPlace(pool, fighterId){
+  const idx = pool.findIndex(f=>f.id===fighterId);
+  if(idx>=0) pool.splice(idx,1);
+}
+
+// Junior fighters age out after 20 — the 21st year they're no longer Junior-eligible.
+// If they never landed a Pro roster spot (proTeamId still unset — inert until Pro
+// League exists, but the check is written for when it does), they fall into the FA
+// pool instead of just disappearing. Call this wherever Junior rosters get processed
+// for aging (iifl_junior_league.html's own roster loop — not yet wired there).
+function processJuniorAgeOut(f, today){
+  if(!f.age || f.age < 21 || !f.juniorTeamId) return false;
+  f.juniorTeamId = null;
+  if(!f.proTeamId) addToFAPool(f, today, 'aged-out-of-junior');
+  return true;
+}
+
+// Keeps the FA pool from bloating with fighters nobody wants forever. A full island
+// year of grace before the clock even starts, then rising odds each year after that a
+// sitting fighter just walks away from the sport for good — same "compounds the longer
+// it drags on" shape as past-prime decline. Call this once per island-year (e.g. when
+// the off-season is engaged) rather than every day.
+const FA_WALKAWAY_GRACE_DAYS = 365;
+function processFAWalkAway(today){
+  const pool = loadFAPool();
+  const staying = [];
+  let walkedAway = 0;
+  pool.forEach(f=>{
+    const daysSitting = today - (f.faEntryDay || today);
+    if(daysSitting < FA_WALKAWAY_GRACE_DAYS){ staying.push(f); return; }
+    const yearsPastGrace = (daysSitting - FA_WALKAWAY_GRACE_DAYS) / 365;
+    const walkChance = clamp(0.05 + yearsPastGrace*0.10, 0.05, 0.6);
+    if(Math.random() < walkChance) walkedAway += 1;
+    else staying.push(f);
+  });
+  if(walkedAway) saveFAPool(staying);
+  return walkedAway;
+}
+
+
+/* ============================ CAREER-STAGE MAINTENANCE ============================ */
+/*
+  The remaining silent, calendar-driven upkeep triggers: roster cutdown, Amateur
+  re-commitment windows, retirement (an actual end-of-career roll, building on the
+  past-prime decline above), weight class reclassification after growth, and a light
+  off-season injury check.
+*/
+
+// Junior teams need a finalized roster before the season opens — this is the day that
+// "locks" it (3 days before Junior's own opener, so there's a short gap to react to
+// any last-minute Pro affiliate movement once that exists). Pro's own cutdown day is
+// intentionally left out of tierKeyDates until Pro League has real rosters to cut.
+function juniorRosterCutdownDay(cycleYear){
+  return tierKeyDates(cycleYear).juniorOpen - 3;
+}
+
+// amateurLeagueId was originally a one-time commitment (see ensureFighterDefaults) —
+// this gives fighters a real yearly window to request a league change instead of being
+// locked in for the whole career. Reuses the Amateur trade-deadline date rather than
+// inventing a third date this close to it.
+function amateurRecommitmentDay(cycleYear){
+  return tierKeyDates(cycleYear).amateurTradeDeadline;
+}
+
+// An actual career-ending roll, building on applyPastPrimeDecline — once a veteran's
+// average stat has fallen far enough below where it peaked, there's a rising chance
+// each off-season they call it. peakAvgStat needs to be tracked on the fighter
+// (highest avgStat ever recorded) for this to mean anything; falls back to a flat
+// age-based chance if that history isn't there yet.
+function checkRetirement(f){
+  if(!f.age || f.age < DECLINE_START_AGE || !f.stats) return false;
+  const avgStat = (f.stats.speed+f.stats.quickness+f.stats.toughness+f.stats.power+f.stats.agility)/5;
+  if(!f.peakAvgStat || avgStat > f.peakAvgStat) f.peakAvgStat = avgStat;
+  const declineFromPeak = f.peakAvgStat ? clamp(1 - avgStat/f.peakAvgStat, 0, 1) : 0;
+  const ageFactor = clamp((f.age - DECLINE_START_AGE) * 0.02, 0, 0.4);
+  const retireChance = clamp(declineFromPeak*0.6 + ageFactor, 0, 0.9);
+  return Math.random() < retireChance;
+}
+
+// Re-derives weight class from current weightLb — call after off-season growth so a
+// fighter who's physically outgrown their old class actually shows it, rather than
+// weightClass silently going stale until the next fight recalculates it incidentally.
+function reclassifyWeightClass(f){
+  const next = weightClassOf(f.weightLb);
+  const changed = f.weightClass !== next;
+  f.weightClass = next;
+  return changed;
+}
+
+// Lightweight off-season injury check — small chance of a minor, temporary setback
+// (a stat dip that regrows via normal training rather than a lingering "out X weeks"
+// system). Flagged as a first pass; a real injury system with recovery timelines and
+// missed-game tracking is bigger scope than the calendar layer alone should decide.
+function checkOffSeasonInjury(f){
+  if(!f.stats || Math.random() > 0.08) return false;
+  const key = pick(Object.keys(f.stats));
+  f.stats[key] = clamp(f.stats[key] - rand(2,5), 1, 99);
+  f.offSeasonInjuryNote = `Nagging injury during camp — ${key} took a hit, should recover with normal training.`;
+  return true;
+}
+
 function loadClock(){
   try{ const raw = localStorage.getItem(CLOCK_KEY); return raw ? JSON.parse(raw) : { day: 1 }; }
   catch(err){ return { day: 1 }; }
