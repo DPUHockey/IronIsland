@@ -1050,6 +1050,7 @@ const FEMALE_TRAITS = [
 ];
 
 let mateCandidates = null; // transient, regenerated each time "Find a Mate" is clicked
+let editingAge = false; // transient — toggles the inline Age correction control
 
 function generateMateCandidates(f){
   const list = [];
@@ -1301,7 +1302,15 @@ function renderApp(){
         <div class="glance-grid">
           <div class="glance-chip"><div class="gc-label">Tier</div><div class="gc-value">${tier}</div></div>
           <div class="glance-chip"><div class="gc-label">Record</div><div class="gc-value">${rec.wins}-${rec.losses}</div></div>
-          <div class="glance-chip"><div class="gc-label">Age</div><div class="gc-value">${playable.age || '?'}</div></div>
+          <div class="glance-chip">
+            <div class="gc-label">Age</div>
+            ${editingAge ? `
+              <div style="display:flex; gap:4px; align-items:center; margin-top:3px;">
+                <input type="number" id="age-correction-input" value="${playable.age||12}" min="1" max="99" style="width:50px; background:var(--bg-panel); border:1px solid var(--line); color:var(--bone); font-family:var(--mono); font-size:13px; padding:2px 4px;">
+                <button class="btn btn-small" id="btn-save-age" style="padding:2px 8px; font-size:9px;">Save</button>
+              </div>
+            ` : `<div class="gc-value" id="btn-edit-age" style="cursor:pointer;">${playable.age || '?'} <span style="opacity:0.5; font-size:9px;">✎ fix</span></div>`}
+          </div>
           <div class="glance-chip"><div class="gc-label">Weight Class</div><div class="gc-value">${playable.weightLb ? weightClassOf(playable.weightLb) : '—'}</div></div>
           <div class="glance-chip"><div class="gc-label">Home Province</div><div class="gc-value">${homeProvince ? homeProvince.name : '—'}</div></div>
           <div class="glance-chip"><div class="gc-label">Provincial Rank</div><div class="gc-value">${rank ? `#${rank.rank} of ${rank.outOf}` : '—'}</div></div>
@@ -1375,7 +1384,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-switch-save">Switch or Start Another Game →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V8 · 2026-07-16</div>
+        <div class="version-badge">HOME · V9 · 2026-07-16</div>
       </footer>
     </div>
   `;
@@ -1449,7 +1458,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V8 · 2026-07-16</div>
+        <div class="version-badge">HOME · V9 · 2026-07-16</div>
       </footer>
     </div>
   `;
@@ -1549,6 +1558,23 @@ function wireEvents(cycleYear, roster, playable){
   if(haveChildBtn) haveChildBtn.onclick = ()=>{
     haveChildForFighter(playable);
     saveRoster(roster);
+    renderApp();
+  };
+
+  const editAgeBtn = document.getElementById('btn-edit-age');
+  if(editAgeBtn) editAgeBtn.onclick = ()=>{ editingAge = true; renderApp(); };
+
+  const saveAgeBtn = document.getElementById('btn-save-age');
+  if(saveAgeBtn) saveAgeBtn.onclick = ()=>{
+    const input = document.getElementById('age-correction-input');
+    const newAge = parseInt(input.value, 10);
+    if(newAge && newAge > 0 && newAge < 100){
+      playable.age = newAge;
+      playable.birthDay = birthDayForAge(newAge, getCurrentDay());
+      playable.ageSystemVersion = 2; // locks this in as authoritative — nothing will re-guess it again
+      saveRoster(roster);
+    }
+    editingAge = false;
     renderApp();
   };
 
