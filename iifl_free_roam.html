@@ -413,7 +413,7 @@ const PROVINCES = [
   { flag:'Provincial%20Flags/sherwood.jpg', id:'sherwood', name:'Sherwood Province', color:'#A0623B', pit:'Frontenac Fight House', primary:['wrestler','catch'], secondary:['brawler'] },
   { flag:'Provincial%20Flags/gazon.jpg', id:'gazon', name:'Gazon Province', color:'#C8943F', pit:'The Dust Circle', primary:['boxer'], secondary:[] },
   { flag:'Provincial%20Flags/ditiero.jpg', id:'ditiero', name:'Di Tiero Province', color:'#7C5491', pit:"Big Jim's Fightin' Pit", primary:['karate'], secondary:['brawler'] },
-  { flag:'Provincial%20Flags/carpathia.jpg', id:'carpathia', name:'Targu Banshea Province', color:'#5B4070', pit:'The Hollow Ring', primary:['sambo','judo'], secondary:['catch'] },
+  { flag:'Provincial%20Flags/carpathia.jpg', id:'carpathia', name:'The Province of Targu', color:'#5B4070', pit:'The Hollow Ring', primary:['sambo','judo'], secondary:['catch'] },
   { flag:'Provincial%20Flags/northeast.jpg', id:'northeast', name:'Northeast Territory', color:'#9C4242', pit:'Dojo Reach', primary:['karate','judo'], secondary:['mma'] },
   { flag:'Provincial%20Flags/bay.jpg', id:'bay', name:'White Bay Province', color:'#6E8C9C', pit:'The Fairground Ring', primary:['wrestler','catch'], secondary:[] },
 ];
@@ -1189,6 +1189,7 @@ function generateAmateurFieldFighter(division, weightClass, province, leagueId){
   opp.provinceId = province.id;
   opp.leagueId = leagueId;
   opp.age = age;
+  opp.birthDay = birthDayForAge(age, getCurrentDay());
   return opp;
 }
 
@@ -1204,6 +1205,7 @@ function generateJuvenileFieldFighter(weightClass, province, hometown){
   const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
   const opp = finalizeOpponent(stats, avgOvr, weightClass, province, age, hometown);
   opp.age = age;
+  opp.birthDay = birthDayForAge(age, getCurrentDay());
   opp.talentTier = tier;
   opp.weightClass = weightClassOf(opp.weightLb);
   opp.provinceId = province.id;
@@ -1392,14 +1394,21 @@ function runJuvenileLeagueNight(pools, provinceId, day){
   if(!pool || pool.length < 2) return;
   Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
     // Not everybody fights every week — roughly 40% of a settlement's roster is on any
-    // given week's card. Paired within weight class, closest-age-first, so the pairing
-    // is at least a plausible matchup instead of whoever landed next to each other.
-    const participants = group.filter(()=> Math.random() < 0.4);
+    // given week's card, and each fighter is further capped to a season-length budget of
+    // League Night appearances per year so a deep pool doesn't let the same kids fight
+    // every single week for years straight.
+    const participants = group.filter(f=>{
+      if(Math.random() >= 0.4 || juvenileFightsRemaining(f) <= 0) return false;
+      ensureJuvenileYearWindow(f, day);
+      return (f.juvenileLeagueEntriesThisYear||0) < Math.round(JUVENILE_LEAGUE_ENTRIES_PER_YEAR * juvenilePaceMultiplier(f));
+    });
     ['Light','Middle','Heavy'].forEach(wc=>{
       const classGroup = participants.filter(f=> f.weightClass===wc).sort((a,b)=> a.age-b.age);
       for(let i=0;i+1<classGroup.length;i+=2){
         const { winner, loser } = quickSimBout(classGroup[i], classGroup[i+1]);
         winner.record.wins += 1; loser.record.losses += 1;
+        winner.juvenileLeagueEntriesThisYear = (winner.juvenileLeagueEntriesThisYear||0) + 1;
+        loser.juvenileLeagueEntriesThisYear = (loser.juvenileLeagueEntriesThisYear||0) + 1;
         logNpcBout(winner, loser, 'Juvenile', `${settlement} — League Night (${wc}weight)`, day);
         applyNpcGrowthTick(winner);
         if(Math.random() < 0.5) applyNpcGrowthTick(loser);
@@ -1413,7 +1422,11 @@ function runJuvenileTournamentDay(pools, provinceId, day){
   if(!pool || pool.length < 4) return;
   Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
     ['Light','Middle','Heavy'].forEach(wc=>{
-      const classGroup = group.filter(f=> f.weightClass===wc);
+      const classGroup = group.filter(f=>{
+        if(f.weightClass!==wc || juvenileFightsRemaining(f) <= 0) return false;
+        ensureJuvenileYearWindow(f, day);
+        return (f.juvenileTournamentEntriesThisYear||0) < Math.round(JUVENILE_TOURNAMENT_ENTRIES_PER_YEAR * juvenilePaceMultiplier(f));
+      });
       let size;
       if(classGroup.length >= 16) size = 16;
       else if(classGroup.length >= 8) size = 8;
@@ -1421,6 +1434,7 @@ function runJuvenileTournamentDay(pools, provinceId, day){
       else return; // not enough in this weight class this week — skip, don't force a mismatch
       // Age-sorted seeding so the bracket isn't a coin-flip 12-vs-17 matchup in round one.
       let field = [...classGroup].sort((a,b)=> a.age-b.age).slice(0, size);
+      field.forEach(f=>{ f.juvenileTournamentEntriesThisYear = (f.juvenileTournamentEntriesThisYear||0) + 1; }); // one entry per bracket appearance, not per round
       let runnerUp = null;
       while(field.length > 1){
         const isFinal = field.length === 2;
@@ -1464,13 +1478,18 @@ function runJuvenileFiestaDay(pools, provinceId, day, poolOverride, resultsBuffe
   if(!pool || pool.length < 4) return;
   Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
     ['Light','Middle','Heavy'].forEach(wc=>{
-      const classGroup = group.filter(f=> f.weightClass===wc);
+      const classGroup = group.filter(f=>{
+        if(f.weightClass!==wc || juvenileFightsRemaining(f) <= 0) return false;
+        ensureJuvenileYearWindow(f, day);
+        return (f.juvenileTournamentEntriesThisYear||0) < Math.round(JUVENILE_TOURNAMENT_ENTRIES_PER_YEAR * juvenilePaceMultiplier(f)); // shared budget with Tuesday, per design
+      });
       let size;
       if(classGroup.length >= 16) size = 16;
       else if(classGroup.length >= 8) size = 8;
       else if(classGroup.length >= 4) size = 4;
       else return; // not enough for a bracket this week in this class
       let field = [...classGroup].sort(()=>Math.random()-0.5).slice(0, size);
+      field.forEach(f=>{ f.juvenileTournamentEntriesThisYear = (f.juvenileTournamentEntriesThisYear||0) + 1; });
       let runnerUp = null;
       while(field.length > 1){
         const isFinal = field.length === 2;
@@ -1587,6 +1606,7 @@ function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, even
   while(field.length < size && classListAvailable.length){
     field.push(classListAvailable.shift()); // still OVR-sorted, so this is "next best available"
   }
+  field.forEach(f=>{ f.juvenileInviteEntriesThisYear = (f.juvenileInviteEntriesThisYear||0) + 1; });
   if(!field.length) return field;
   let remaining = [...field];
   let runnerUp = null;
@@ -1655,7 +1675,10 @@ function runWednesdayEvents(pools, day){
   Object.values(pools.juvenile).forEach(list=>{
     list.forEach(f=>{
       const bucket = byClassBand[f.weightClass];
-      if(bucket) bucket[ageBandOf(f.age)].push(f);
+      if(!bucket || juvenileFightsRemaining(f) <= 0) return;
+      ensureJuvenileYearWindow(f, day);
+      if((f.juvenileInviteEntriesThisYear||0) >= Math.round(JUVENILE_INVITE_ENTRIES_PER_YEAR * juvenilePaceMultiplier(f))) return;
+      bucket[ageBandOf(f.age)].push(f);
     });
   });
   Object.values(byClassBand).forEach(bands=> Object.values(bands).forEach(arr=> arr.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats))));
@@ -1811,6 +1834,7 @@ function runJuvenileIntake(pools, provinceId, day){
     const hometown = loc ? pick(loc.hometownPool) : undefined;
     const f = finalizeOpponent(stats, avgOvr, weightClass, province, age, hometown);
     f.age = age;
+    f.birthDay = birthDayForAge(age, day);
     f.talentTier = tier;
     f.weightClass = weightClassOf(f.weightLb);
     f.provinceId = province.id;
@@ -1838,6 +1862,17 @@ function repairOrphanedHometowns(pools){
   if(changed) saveFieldPools(pools);
 }
 
+function syncJuvenilePoolAges(pools, today){
+  PROVINCES.forEach(p=>{
+    const pool = pools.juvenile[p.id];
+    if(!pool) return;
+    pools.juvenile[p.id] = pool.filter(f=>{
+      syncFighterAge(f, today);
+      return f.age < 18;
+    });
+  });
+}
+
 function catchUpJuvenileSimulation(){
   // Retroactively cleans up orphaned pre-save-system data for saves that already
   // existed before cleanupLegacyFlatKeys() was added to createNewSave() — otherwise
@@ -1855,6 +1890,7 @@ function catchUpJuvenileSimulation(){
   pruneRoamStateProactively();
   repairOrphanedHometowns(pools);
   const today = getCurrentDay();
+  syncJuvenilePoolAges(pools, today);
   // A fighter locked out after a failed early-draft petition still ages toward natural
   // eligibility over real time, even though they can't fight to trigger normal age-up.
   try{
@@ -1905,10 +1941,20 @@ function addTempBoost(stats, amount){
 const JUVENILE_CAREER_FIGHT_CAP = 75;
 const JUVENILE_INVITE_ENTRIES_PER_YEAR = 4;
 const JUVENILE_TOURNAMENT_ENTRIES_PER_YEAR = 4; // Tuesday Local Tournament + Wednesday Fiesta combined
+const JUVENILE_LEAGUE_ENTRIES_PER_YEAR = 10; // Monday League Night — roughly matches a player's own season length (9)
 const DAYS_PER_JUVENILE_YEAR = 63; // a season's nominal length — reused as "how long is a year" for calendar-based aging
 
 function juvenileFightsRemaining(f){
-  return Math.max(0, JUVENILE_CAREER_FIGHT_CAP - (f.juvenileCareerFights || 0));
+  const totalFights = Math.max(f.juvenileCareerFights || 0, f.record ? (f.record.wins||0)+(f.record.losses||0) : 0);
+  return Math.max(0, JUVENILE_CAREER_FIGHT_CAP - totalFights);
+}
+
+// How aggressively a Juvenile NPC chases fights — mirrors fight_pit.html exactly.
+function juvenilePaceMultiplier(f){
+  const pct = growthOutlook(f).pctOfCeiling;
+  if(pct >= 55) return 1.6;
+  if(pct >= 35) return 1.0;
+  return 0.55;
 }
 
 function ensureJuvenileYearWindow(f, today){
@@ -1916,20 +1962,15 @@ function ensureJuvenileYearWindow(f, today){
     f.juvenileYearResetDay = today;
     f.juvenileInviteEntriesThisYear = 0;
     f.juvenileTournamentEntriesThisYear = 0;
+    f.juvenileLeagueEntriesThisYear = 0;
   }
 }
 
-// A fighter locked out after a failed/denied early-draft petition still needs to age up
-// toward natural eligibility (14) over real calendar time — normally aging up requires
-// completing a season of fights, which a locked-out fighter can't do anymore.
+// A fighter locked out after a failed/denied early-draft petition stays locked until
+// they naturally reach 14 — age itself is now handled everywhere by syncFighterAge
+// (birthday-based), so this just clears the lockout flag once that happens.
 function ageLockedJuvenileIfDue(f, today){
   if(!f.juvenilePetitionStatus || f.juvenilePetitionStatus === 'approved-pending-draft') return;
-  if(f.age >= 14){ f.juvenilePetitionStatus = null; return; }
-  if(!f.juvenileLockoutStartDay) f.juvenileLockoutStartDay = today;
-  while(f.age < 14 && today - f.juvenileLockoutStartDay >= DAYS_PER_JUVENILE_YEAR){
-    f.age += 1;
-    f.juvenileLockoutStartDay += DAYS_PER_JUVENILE_YEAR;
-  }
   if(f.age >= 14) f.juvenilePetitionStatus = null;
 }
 
@@ -2265,10 +2306,23 @@ function saveRoster(list){
   try{ localStorage.setItem(sk(ROSTER_KEY), JSON.stringify(list)); return true; }
   catch(err){ console.error('IIFL roster save failed:', err); return false; }
 }
+// Birthdays — the single source of truth for age from here on (mirrors fight_pit.html).
+// Replaces the earlier calendar catch-up hack in advanceDay with the real mechanism:
+// every fighter has a birthDay, age is always derived from it via syncFighterAge.
+function birthDayForAge(age, today){
+  return Math.max(1, today - (age*365) - Math.floor(Math.random()*365));
+}
+function ageFromBirthday(birthDay, today){ return Math.max(0, Math.floor((today-birthDay)/365)); }
+function syncFighterAge(f, today){
+  if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
+  f.age = ageFromBirthday(f.birthDay, today);
+}
+
 function ensureFighterDefaults(f){
   if(!f.record) f.record = { wins:0, losses:0 };
   if(!f.fightLog) f.fightLog = [];
   if(!f.age) f.age = 12;
+  syncFighterAge(f, getCurrentDay());
   if(!f.talentTier) f.talentTier = 'normal';
   if(f.wallet === undefined) f.wallet = 10; // starting bankroll
   if(f.fame === undefined) f.fame = 0;
@@ -2973,6 +3027,7 @@ function advanceDay(){
   state.period = 'Morning';
   state.movesRemaining = MOVES_PER_PERIOD;
   relocateEventSquares();
+  getRoster(); // touches every fighter through ensureFighterDefaults, which syncs age from birthday
 }
 function spendMove(){
   state.movesRemaining -= 1;
@@ -5045,8 +5100,33 @@ function wireEvents(){
   };
 }
 
+// Lets the Home Hub's "click a province, click a city" flow drop the player straight
+// onto the streets of that city instead of the fighter-select screen — only kicks in
+// once the one-time NPC-selection onboarding for this save is already done, so a brand
+// new save still goes through that setup first.
+function tryAutoEnterFromUrl(){
+  const params = new URLSearchParams(window.location.search);
+  const cityParam = params.get('city');
+  const provinceParam = params.get('province');
+  if(!cityParam && !provinceParam) return false;
+  const roster = getRoster();
+  const playable = roster.find(f=>f.isPlayable) || roster[0];
+  if(!playable) return false;
+  const reg = loadSaveRegistry();
+  const activeSave = reg.saves.find(s=> s.id === reg.activeSaveId);
+  if(!activeSave || !activeSave.npcSelectionConfirmed) return false;
+  state.fighterId = playable.id;
+  state.provinceId = provinceParam ? decodeURIComponent(provinceParam) : (playable.pitMemberships&&playable.pitMemberships[0] ? playable.pitMemberships[0].provinceId : playable.provinceId);
+  state.settlementName = cityParam ? decodeURIComponent(cityParam) : playable.settlement;
+  const grid = ensureCityGrid(state.provinceId, state.settlementName);
+  state.position = { ...grid.startCell };
+  state.screen = 'city-walk';
+  return true;
+}
+
+tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V42 · 2026-07-15</div>
+<div class="version-badge">FREE ROAM · V43 · 2026-07-16</div>
 </body>
 </html>
