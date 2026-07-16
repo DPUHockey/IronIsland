@@ -318,6 +318,22 @@ function sk(baseKey){
 // catalog the player actually controls; npcFighterIds are the others they've chosen to
 // bring into THIS world (opt-in per save, never automatic — see CREATED_FIGHTERS_KEY).
 // Both get cloned from the catalog into this save's own roster as independent copies.
+// Every key this game used BEFORE the save-namespacing system existed. Once any save
+// has been created, sk() always resolves to a namespaced key — these flat versions
+// become permanently orphaned (never read again) but don't disappear on their own,
+// which means they just sit there eating quota for nothing. Cleared out the moment a
+// save is created, since by then anything worth keeping has already been cloned into
+// that save's own namespaced copy.
+const LEGACY_FLAT_KEYS = [
+  'iifl_roster_v1', 'iifl_clock_v1', 'iifl_field_fighters_v3',
+  'iifl_invite_registry_v1', 'iifl_juvenile_results_log_v1',
+  'iifl_league_status_v1', 'iifl_free_agent_pool_v1',
+  'iifl_amateur_team_state_v1', 'iifl_free_roam_v1', 'iifl_junior_league_v1',
+];
+function cleanupLegacyFlatKeys(){
+  LEGACY_FLAT_KEYS.forEach(k=>{ try{ localStorage.removeItem(k); }catch(err){} });
+}
+
 function createNewSave(name, playableFighterId, npcFighterIds){
   const reg = loadSaveRegistry();
   const id = 'save_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7);
@@ -341,6 +357,7 @@ function createNewSave(name, playableFighterId, npcFighterIds){
     .map(f => ({ ...f, isPlayable: f.id === playableFighterId }));
   localStorage.setItem(`iifl_save_${id}__${ROSTER_KEY}`, JSON.stringify(clonedRoster));
 
+  cleanupLegacyFlatKeys();
   return id;
 }
 
@@ -1614,11 +1631,11 @@ function pickWeightedPitLocation(provinceId){
 // Cap is 1.5x each province's own healthy target, so there's real headroom for organic
 // growth/variety without it running away.
 function provincePoolCap(provinceId){
-  // Was target*1.5 with only a floor (no ceiling) — see iifl_free_roam.html for the
-  // full explanation. A hard ceiling here doesn't cost real gameplay depth, it just
-  // stops the pool from growing far past what pit rosters/leaderboards ever display.
+  // 100-250/province, worked back from real capacity math — see iifl_free_roam.html
+  // for the full turnover/draft-depth reasoning. Clears the draft pipeline's actual
+  // need (~425 island-wide) with real margin, plus enough volume for pit variety.
   const target = pitLocationsForProvince(provinceId).reduce((s,l)=> s + l.perClass*3, 0);
-  return Math.min(120, Math.max(60, Math.round(target * 0.5)));
+  return Math.min(250, Math.max(100, Math.round(target * 0.5)));
 }
 function enforceProvincePoolCap(pools, provinceId, capOverride){
   const pool = pools.juvenile[provinceId];
@@ -1686,6 +1703,12 @@ function repairOrphanedHometowns(pools){
 }
 
 function catchUpJuvenileSimulation(){
+  // Retroactively cleans up orphaned pre-save-system data for saves that already
+  // existed before cleanupLegacyFlatKeys() was added to createNewSave() — otherwise
+  // this quota-eating dead weight only ever gets cleared for BRAND NEW saves, leaving
+  // anyone with an existing save stuck. Safe once a save is active: sk() always
+  // resolves to the namespaced keys at that point, so the flat ones are guaranteed unused.
+  if(getActiveSaveId()) cleanupLegacyFlatKeys();
   const pools = loadFieldPools();
   if(!pools.juvenile) pools.juvenile = {};
   PROVINCES.forEach(p=> seedJuvenilePoolInPlace(pools, p.id));
@@ -2164,15 +2187,37 @@ function processFAWalkAway(today){
   Affiliate-assigned players fill roster spots first; whatever's left over gets filled
   by scouring the FA pool, favoring the strongest fighters sitting there.
 */
+/*
+  NEW Amateur structure (replaces the old 9-circuit AMATEUR_LEAGUES for team/roster
+  purposes — that array still exists below for now since a lot of matchmaking/offer
+  code still points at it, but it's superseded here and due for a full removal once
+  the schedule/standings/Game Day layer for these 8 teams gets built, the same way
+  Junior League's mechanics did). One team per province, matching Junior League's
+  geographic spread instead of Kolsati having two circuits and other provinces having
+  none dedicated.
+*/
+const AMATEUR_TEAMS = [
+  { id:'kolsati_am', city:'Kolsati', nickname:'Grinders', provinceId:'kolsati' },
+  { id:'sherwood_am', city:'Frontenac City', nickname:'Ironsides', provinceId:'sherwood' },
+  { id:'ditiero_am', city:'Di Tiero', nickname:'Revelers', provinceId:'ditiero' },
+  { id:'carpathia_am', city:'Bukovene', nickname:'Shadowmen', provinceId:'carpathia' },
+  { id:'northeast_am', city:'Santorino', nickname:'Samurai', provinceId:'northeast' },
+  { id:'bay_am', city:'Charleston', nickname:'Privateers', provinceId:'bay' },
+  { id:'alexandretta_am', city:'Williamsburg', nickname:'Yeomen', provinceId:'alexandretta' },
+  { id:'gazon_am', city:'Gazon Main', nickname:'Drifters', provinceId:'gazon' },
+];
+function getAmateurTeam(id){ return AMATEUR_TEAMS.find(t=>t.id===id); }
+function amateurTeamName(id){ const t = getAmateurTeam(id); return t ? `${t.city} ${t.nickname}` : 'Unknown Team'; }
+
 const AMATEUR_TEAM_STATE_KEY = 'iifl_amateur_team_state_v1';
-const AMATEUR_ROSTER_SIZE = 8;
+const AMATEUR_ROSTER_SIZE = 12; // was 8 -- confirmed team-league spec, one league, 8 franchises, 12 spots each
 const AMATEUR_MAX_AFFILIATES = 2;
 function loadAmateurTeamState(){
   try{
     const raw = localStorage.getItem(sk(AMATEUR_TEAM_STATE_KEY));
     const state = raw ? JSON.parse(raw) : {};
-    AMATEUR_LEAGUES.forEach(l=>{
-      if(!state[l.id]) state[l.id] = { affiliateProTeamIds: [], rosterFighterIds: [] };
+    AMATEUR_TEAMS.forEach(t=>{
+      if(!state[t.id]) state[t.id] = { affiliateProTeamIds: [], affiliateFighterIds: [], rosterFighterIds: [] };
     });
     return state;
   }catch(err){ console.error('IIFL amateur team state load failed:', err); return {}; }
@@ -2181,19 +2226,24 @@ function saveAmateurTeamState(state){
   try{ localStorage.setItem(sk(AMATEUR_TEAM_STATE_KEY), JSON.stringify(state)); return true; }
   catch(err){ console.error('IIFL amateur team state save failed:', err); return false; }
 }
-function amateurRosterOpenSlots(leagueId){
+function amateurRosterOpenSlots(teamId){
   const state = loadAmateurTeamState();
-  const teamState = state[leagueId];
+  const teamState = state[teamId];
   if(!teamState) return 0;
-  return Math.max(0, AMATEUR_ROSTER_SIZE - teamState.rosterFighterIds.length);
+  const affiliateCount = (teamState.affiliateFighterIds||[]).length;
+  return Math.max(0, AMATEUR_ROSTER_SIZE - affiliateCount - teamState.rosterFighterIds.length);
 }
-// Fills whatever's left of an Amateur team's roster (after affiliate assignments, once
-// those exist) by pulling the strongest available fighters out of the FA pool.
-function fillAmateurRosterFromFA(leagueId){
+// Fills whatever's left of an Amateur team's roster (after Pro-affiliate prospect
+// assignments occupy their spots, once Pro League exists) by pulling the strongest
+// available fighters out of the FA pool — which is where both undrafted Junior
+// graduates (aged out at 21, or a future declared-but-unpicked Pro draft case) and
+// general releases already land, via processJuniorAgeOut/addToFAPool.
+function fillAmateurRosterFromFA(teamId){
   const state = loadAmateurTeamState();
-  const teamState = state[leagueId];
+  const teamState = state[teamId];
   if(!teamState) return [];
-  const openSlots = AMATEUR_ROSTER_SIZE - teamState.rosterFighterIds.length;
+  const affiliateCount = (teamState.affiliateFighterIds||[]).length;
+  const openSlots = AMATEUR_ROSTER_SIZE - affiliateCount - teamState.rosterFighterIds.length;
   if(openSlots <= 0) return [];
   const pool = loadFAPool();
   if(!pool.length) return [];
@@ -4129,6 +4179,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V39 · 2026-07-15</div>
+<div class="version-badge">FIGHT PIT · V42 · 2026-07-15</div>
 </body>
 </html>
