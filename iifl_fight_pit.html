@@ -473,10 +473,15 @@ function applyPendingGrowth(f){
 // eligibility, growth curves, and everything else that reads f.age now stays correct
 // regardless of how time passes. birthDayForAge picks a random day-of-year offset so
 // birthdays spread out naturally instead of clustering on day 1.
+// A real 365-day calendar year. The whole island calendar recurs annually on this
+// same cadence (nextJuvenileOpeningDay jumps to cycleYear+1's May 1, same month/day
+// every year) — so a fighter's age should follow the same real-year clock everything
+// else on the island already runs on, not an invented shorter unit.
+const DAYS_PER_FIGHTER_YEAR = 365;
 function birthDayForAge(age, today){
-  return Math.max(1, today - (age*365) - Math.floor(Math.random()*365));
+  return Math.max(1, today - (age*DAYS_PER_FIGHTER_YEAR) - Math.floor(Math.random()*DAYS_PER_FIGHTER_YEAR));
 }
-function ageFromBirthday(birthDay, today){ return Math.max(0, Math.floor((today-birthDay)/365)); }
+function ageFromBirthday(birthDay, today){ return Math.max(0, Math.floor((today-birthDay)/DAYS_PER_FIGHTER_YEAR)); }
 function syncFighterAge(f, today){
   if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
   f.age = ageFromBirthday(f.birthDay, today);
@@ -1833,7 +1838,7 @@ const JUVENILE_CAREER_FIGHT_CAP = 75;
 const JUVENILE_INVITE_ENTRIES_PER_YEAR = 4;
 const JUVENILE_TOURNAMENT_ENTRIES_PER_YEAR = 4; // Tuesday Local Tournament + Wednesday Fiesta combined
 const JUVENILE_LEAGUE_ENTRIES_PER_YEAR = 10; // Monday League Night — roughly matches a player's own season length (9)
-const DAYS_PER_JUVENILE_YEAR = 63; // a season's nominal length — reused as "how long is a year" for calendar-based aging
+const DAYS_PER_JUVENILE_YEAR = 365; // a real calendar year — matches DAYS_PER_FIGHTER_YEAR, so entry-budget resets track the same year the fighter actually ages on
 
 function juvenileFightsRemaining(f){
   // juvenileCareerFights was only ever incremented for the player's own fighter — every
