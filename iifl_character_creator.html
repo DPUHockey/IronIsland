@@ -2592,6 +2592,7 @@ function wireEvents(){
       name: state.name,
       age: f.age,
       birthDay: Math.max(1, today - (f.age*365) - Math.floor(Math.random()*365)), // real calendar year, matches DAYS_PER_FIGHTER_YEAR everywhere else
+      ageSystemVersion: 2,
       talentTier: f.talentTier,
       provinceId: f.province.id,
       settlement: state.settlement,
@@ -2676,6 +2677,6 @@ function updateNextBasicsDisabled(){
 
 render();
 </script>
-<div class="version-badge">CHARACTER CREATOR · V18 · 2026-07-15</div>
+<div class="version-badge">CHARACTER CREATOR · V19 · 2026-07-16</div>
 </body>
 </html>
