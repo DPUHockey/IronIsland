@@ -482,9 +482,36 @@ function birthDayForAge(age, today){
   return Math.max(1, today - (age*DAYS_PER_FIGHTER_YEAR) - Math.floor(Math.random()*DAYS_PER_FIGHTER_YEAR));
 }
 function ageFromBirthday(birthDay, today){ return Math.max(0, Math.floor((today-birthDay)/DAYS_PER_FIGHTER_YEAR)); }
+
+// Any birthDay already saved on a fighter was computed under the OLD, buggy 63-day
+// "year" — reinterpreting that same stored number under the new 365-day divisor
+// collapses their apparent age toward zero, since way less real time appears to have
+// passed than the old system assumed. This repairs it once per fighter (ageSystemVersion
+// gates it so it never re-runs and re-guesses on an already-fixed fighter). entryDay is
+// real ground truth where available — juvenile intake always starts a fighter at exactly
+// 11 — so it's used first. Everything else (mainly the player's own fighter, and anyone
+// already past Juvenile) falls back to a rough fights-played estimate rather than trusting
+// the already-corrupted age field, which could just re-lock-in "2" forever.
+function estimateAgeFallback(f){
+  const totalFights = f.record ? (f.record.wins||0)+(f.record.losses||0) : 0;
+  if(f.juniorTeamId || f.amateurLeagueId){
+    return Math.min(35, Math.max(14, 16 + Math.round(totalFights / 12)));
+  }
+  return Math.min(18, Math.max(11, 11 + Math.round(totalFights / 7)));
+}
 function syncFighterAge(f, today){
-  if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
-  f.age = ageFromBirthday(f.birthDay, today);
+  if(f.ageSystemVersion === 2){
+    if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
+    f.age = ageFromBirthday(f.birthDay, today);
+    return;
+  }
+  if(f.entryDay){
+    f.age = 11 + Math.floor((today - f.entryDay) / DAYS_PER_FIGHTER_YEAR);
+  } else {
+    f.age = estimateAgeFallback(f);
+  }
+  f.birthDay = birthDayForAge(f.age, today);
+  f.ageSystemVersion = 2;
 }
 
 function ensureFighterDefaults(f){
@@ -1076,6 +1103,7 @@ function generateAmateurFieldFighter(division, weightClass, province, leagueId){
   opp.leagueId = leagueId;
   opp.age = age;
   opp.birthDay = birthDayForAge(age, getCurrentDay());
+  opp.ageSystemVersion = 2;
   return opp;
 }
 
@@ -1091,7 +1119,9 @@ function generateJuvenileFieldFighter(weightClass, province, hometown){
   const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
   const opp = finalizeOpponent(stats, avgOvr, weightClass, province, age, hometown);
   opp.age = age;
+  f.ageSystemVersion = 2;
   opp.birthDay = birthDayForAge(age, getCurrentDay());
+  opp.ageSystemVersion = 2;
   opp.talentTier = tier;
   opp.weightClass = weightClassOf(opp.weightLb); // derive from the real BMI-based weight, not the pre-picked target
   opp.provinceId = province.id;
@@ -1217,7 +1247,7 @@ function drawFromProvinceLeaguePools(provinceId, weightClass, divisionWeights){
 
 function drawJuvenileFromFieldPool(provinceId, weightClass, playerAge){
   const pools = ensureJuvenileFieldPoolForProvince(provinceId);
-  const pool = pools.juvenile[provinceId];
+  const pool = pools.juvenile[provinceId].filter(f=> juvenileFightsRemaining(f) > 0);
   const closeAge = pool.filter(f=> Math.abs(f.age-playerAge)<=1);
   const narrowPool = closeAge.filter(f=> f.weightClass===weightClass);
   const useNarrow = narrowPool.length > 0 && Math.random() < 0.55;
@@ -1720,8 +1750,10 @@ function runJuvenileIntake(pools, provinceId, day){
     const loc = pickWeightedPitLocation(province.id);
     const hometown = loc ? pick(loc.hometownPool) : undefined;
     const f = finalizeOpponent(stats, avgOvr, weightClass, province, age, hometown);
+    f.ageSystemVersion = 2;
     f.age = age;
     f.birthDay = birthDayForAge(age, day);
+    f.ageSystemVersion = 2;
     f.talentTier = tier;
     f.weightClass = weightClassOf(f.weightLb); // derive from the real BMI-based weight, not the pre-picked target
     f.provinceId = province.id;
@@ -4258,6 +4290,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V42 · 2026-07-15</div>
+<div class="version-badge">FIGHT PIT · V44 · 2026-07-16</div>
 </body>
 </html>
