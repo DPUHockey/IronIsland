@@ -1159,6 +1159,56 @@ function syncFighterAge(f, today){
   f.ageSystemVersion = 2;
 }
 
+// Test-mode reset: spins up a brand new, fully independent save (fresh clock, fresh
+// roster, and every lazily-created system — field pools, roam state, results log —
+// starts empty automatically the first time this save's namespace touches them, since
+// nothing exists under a new save id yet). Nothing about any OLD save is touched or
+// deleted; this just creates one more and switches to it. The player fighter is
+// auto-generated with reasonable defaults (no quiz) and named Johnny2, Johnny3, etc. —
+// counter is global, not save-namespaced, so it keeps incrementing across resets.
+const TEST_PLAYER_COUNTER_KEY = 'iifl_test_player_counter_v1';
+function nextTestPlayerName(){
+  let n = parseInt(localStorage.getItem(TEST_PLAYER_COUNTER_KEY) || '1', 10) + 1;
+  localStorage.setItem(TEST_PLAYER_COUNTER_KEY, String(n));
+  return `Johnny${n}`;
+}
+function resetIslandForTesting(){
+  const today = 1; // every fresh save starts at Day 1 (May 1, 1958) — see createNewSave
+  const province = PROVINCES[Math.floor(Math.random()*PROVINCES.length)];
+  const settlements = SETTLEMENT_DATA[province.id] || [];
+  const settlement = settlements.length ? settlements[Math.floor(Math.random()*settlements.length)].name : province.name;
+  const name = nextTestPlayerName();
+  const age = 11;
+  const fighter = {
+    id: 'fighter_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+    name, age,
+    birthDay: birthDayForAge(age, today),
+    ageSystemVersion: 2,
+    talentTier: 'prospect',
+    provinceId: province.id,
+    settlement,
+    heightIn: 58, weightLb: 85,
+    stats: { speed:50, quickness:50, toughness:50, power:50, agility:50 },
+    potential: 65, injury: 30, superstar: false,
+    primaryDisc: 'MMA', secondaryDisc: null, trait: null,
+    createdAt: new Date().toISOString(),
+    mate: null, spouse: null, children: [],
+    appearance: { skin:'#C68642', hair:'#2B1B12', build:'athletic' },
+    childrenIds: [], parentId: null, parentName: null,
+    pitMemberships: [], record: { wins:0, losses:0 }, fightLog: [],
+  };
+  const catalog = loadCreatedFighters();
+  catalog.unshift(fighter);
+  saveCreatedFighters(catalog);
+
+  const saveId = createNewSave(`${name}'s Island`, fighter.id, []);
+  const reg = loadSaveRegistry();
+  const save = reg.saves.find(s=> s.id === saveId);
+  if(save) save.npcSelectionConfirmed = true; // skip onboarding — this is a test save
+  saveSaveRegistry(reg);
+  return name;
+}
+
 function renderApp(){
   if(!getActiveSaveId()){ renderSaveSelectScreen(); return; }
   const today = getCurrentDay();
@@ -1382,9 +1432,11 @@ function renderApp(){
       <section>
         <div class="section-label">Other Saves</div>
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-switch-save">Switch or Start Another Game →</button></div>
+        <div class="empty-note" style="padding:10px 0 0;">Testing something? Get a completely fresh island — new clock, new field pools, new everything — with a fresh auto-generated player.</div>
+        <div class="btn-row"><span></span><button class="btn btn-small" id="btn-reset-island">🔄 Reset Island (Test Mode) →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V9 · 2026-07-16</div>
+        <div class="version-badge">HOME · V10 · 2026-07-16</div>
       </footer>
     </div>
   `;
@@ -1458,7 +1510,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V9 · 2026-07-16</div>
+        <div class="version-badge">HOME · V10 · 2026-07-16</div>
       </footer>
     </div>
   `;
@@ -1558,6 +1610,12 @@ function wireEvents(cycleYear, roster, playable){
   if(haveChildBtn) haveChildBtn.onclick = ()=>{
     haveChildForFighter(playable);
     saveRoster(roster);
+    renderApp();
+  };
+
+  const resetIslandBtn = document.getElementById('btn-reset-island');
+  if(resetIslandBtn) resetIslandBtn.onclick = ()=>{
+    const name = resetIslandForTesting();
     renderApp();
   };
 
