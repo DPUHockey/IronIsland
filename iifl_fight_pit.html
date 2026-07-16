@@ -1354,7 +1354,12 @@ function loadResultsLog(){
 }
 function saveResultsLog(log){
   try{ localStorage.setItem(sk(RESULTS_LOG_KEY), JSON.stringify(log)); }
-  catch(err){ console.error('IIFL results log save failed:', err); }
+  catch(err){
+    console.error('IIFL results log save failed, trimming and retrying:', err);
+    const trimmed = log.slice(0, Math.floor(log.length/2));
+    try{ localStorage.setItem(sk(RESULTS_LOG_KEY), JSON.stringify(trimmed)); }
+    catch(err2){ console.error('IIFL results log save still failing after trim:', err2); }
+  }
 }
 function logNotableResult(entry){
   const log = loadResultsLog();
@@ -1474,7 +1479,7 @@ function flushResultsLog(newEntries){
   if(!newEntries.length) return;
   const log = loadResultsLog();
   const merged = newEntries.concat(log);
-  if(merged.length > 3000) merged.length = 3000;
+  if(merged.length > 600) merged.length = 600;
   saveResultsLog(merged);
 }
 
@@ -1609,8 +1614,11 @@ function pickWeightedPitLocation(provinceId){
 // Cap is 1.5x each province's own healthy target, so there's real headroom for organic
 // growth/variety without it running away.
 function provincePoolCap(provinceId){
+  // Was target*1.5 with only a floor (no ceiling) — see iifl_free_roam.html for the
+  // full explanation. A hard ceiling here doesn't cost real gameplay depth, it just
+  // stops the pool from growing far past what pit rosters/leaderboards ever display.
   const target = pitLocationsForProvince(provinceId).reduce((s,l)=> s + l.perClass*3, 0);
-  return Math.max(100, Math.round(target * 1.5));
+  return Math.min(120, Math.max(60, Math.round(target * 0.5)));
 }
 function enforceProvincePoolCap(pools, provinceId, capOverride){
   const pool = pools.juvenile[provinceId];
@@ -4121,6 +4129,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V38 · 2026-07-15</div>
+<div class="version-badge">FIGHT PIT · V39 · 2026-07-15</div>
 </body>
 </html>
