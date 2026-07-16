@@ -305,7 +305,7 @@ const PROVINCES = [
   { flag:'Provincial%20Flags/sherwood.jpg', id:'sherwood', name:'Sherwood Province', color:'#A0623B' },
   { flag:'Provincial%20Flags/gazon.jpg', id:'gazon', name:'Gazon Province', color:'#C8943F' },
   { flag:'Provincial%20Flags/ditiero.jpg', id:'ditiero', name:'Di Tiero Province', color:'#7C5491' },
-  { flag:'Provincial%20Flags/carpathia.jpg', id:'carpathia', name:'Targu Banshea Province', color:'#5B4070' },
+  { flag:'Provincial%20Flags/carpathia.jpg', id:'carpathia', name:'The Province of Targu', color:'#5B4070' },
   { flag:'Provincial%20Flags/northeast.jpg', id:'northeast', name:'Northeast Territory', color:'#9C4242' },
   { flag:'Provincial%20Flags/bay.jpg', id:'bay', name:'White Bay Province', color:'#6E8C9C' },
 ];
@@ -892,6 +892,13 @@ const JR_LEAGUES = [
   },
 ];
 function getJrLeague(id){ return JR_LEAGUES.find(l=>l.id===id); }
+
+const JR_LEAGUE_DESCRIPTIONS = {
+  kolsati_jr: "The island's flagship junior circuit — 16 clubs out of Kolsati District and Di Tiero Province. Toughest league to get drafted into, and the highest bar for staying on a roster.",
+  northern_jr: "A 12-club league spanning Sherwood, Alexandretta, and White Bay Province — a real step up from Amateur ball, with a bit more breathing room than Ironbound.",
+  eastern_jr: "12 clubs across the Northeast Territory, The Province of Targu, and Gazon Province. The most common entry point for first-time draftees on the eastern side of the island.",
+};
+
 function jrTeam(leagueId, teamIndex){ const l = getJrLeague(leagueId); return l ? l.teams[teamIndex] : null; }
 function jrTeamCity(leagueId, teamIndex){ const t = jrTeam(leagueId, teamIndex); return t ? t.city : 'Unknown'; }
 function jrTeamNickname(leagueId, teamIndex){ const t = jrTeam(leagueId, teamIndex); return t ? t.nickname : 'Team'; }
@@ -974,10 +981,20 @@ function saveRoster(list){
   try{ localStorage.setItem(sk(ROSTER_KEY), JSON.stringify(list)); return true; }
   catch(err){ console.error('IIFL roster save failed:', err); return false; }
 }
+function birthDayForAge(age, today){
+  return Math.max(1, today - (age*365) - Math.floor(Math.random()*365));
+}
+function ageFromBirthday(birthDay, today){ return Math.max(0, Math.floor((today-birthDay)/365)); }
+function syncFighterAge(f, today){
+  if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
+  f.age = ageFromBirthday(f.birthDay, today);
+}
+
 function ensureFighterDefaults(f){
   if(!f.record) f.record = { wins:0, losses:0 };
   if(!f.fightLog) f.fightLog = [];
   if(!f.age) f.age = 12;
+  syncFighterAge(f, getCurrentDay());
   if(f.juniorTeamId === undefined) f.juniorTeamId = null;
   if(f.juniorLeagueId === undefined) f.juniorLeagueId = null;
   if(!f.juniorRightsHolders) f.juniorRightsHolders = []; // [{leagueId, teamIndex}] exclusive re-sign rights after a decline
@@ -993,7 +1010,7 @@ function reconcileRecord(f){
   const losses = f.fightLog.filter(e=>e.result==='L').length;
   f.record = { wins, losses };
 }
-function getRoster(){ return loadRoster().map(ensureFighterDefaults); }
+function getRoster(){ const roster = loadRoster().map(ensureFighterDefaults); saveRoster(roster); return roster; }
 function getFighterById(id){ return getRoster().find(f=> f.id === id); }
 function updateFighter(id, mutateFn){
   const roster = loadRoster().map(ensureFighterDefaults);
@@ -1981,7 +1998,8 @@ function rightsStillActive(f){
 /* ============================ STATE ============================ */
 
 const state = {
-  screen: 'select', // select -> draft-day -> offers -> roster -> season-hub -> game-day-preview -> set-lineup -> fight-card -> game-result -> standings
+  screen: 'overview', // overview -> league-detail  |  select -> draft-day -> offers -> roster -> season-hub -> game-day-preview -> set-lineup -> fight-card -> game-result -> standings
+  viewLeagueId: null,
   fighterId: null,
   draftResult: null, // { results, board }
   pendingOffers: [], // [{leagueId, round, teamIndex, rightsOnly}]
@@ -2229,7 +2247,9 @@ const app = document.getElementById('app');
 
 function render(){
   let title='FIGHTER SELECT', sub='JUNIOR LEAGUE DRAFT', body='';
-  if(state.screen==='select'){ body = renderSelect(); }
+  if(state.screen==='overview'){ body = renderOverview(); title='JUNIOR LEAGUE'; sub='THREE LEAGUES, EIGHT PROVINCES'; }
+  else if(state.screen==='league-detail'){ body = renderLeagueDetail(); const l = getJrLeague(state.viewLeagueId); title = l ? l.name.toUpperCase() : 'LEAGUE'; sub='FRANCHISES & STANDINGS'; }
+  else if(state.screen==='select'){ body = renderSelect(); }
   else if(state.screen==='draft-day'){ body = renderDraftDay(); title='DRAFT DAY'; }
   else if(state.screen==='offers'){ body = renderOffers(); title='DRAFT RESULTS'; }
   else if(state.screen==='no-offers'){ body = renderNoOffers(); title='DRAFT RESULTS'; }
@@ -2249,6 +2269,70 @@ function render(){
     <div class="panel">${body}</div>
   `;
   wireEvents();
+}
+
+// The old default screen — a straight-to-draft fighter list — is still here and still
+// works, just demoted to something you reach on purpose (via "My Draft Status" on the
+// overview) instead of being the first thing you see whether or not you have anyone
+// draft-eligible.
+function renderOverview(){
+  const roster = getRoster();
+  const leagueCards = JR_LEAGUES.map(league=>{
+    const standings = ensureStandings(league.id);
+    const gamesPlayed = standings.some(s=> (s.wins+s.losses) > 0);
+    const provinceNames = league.provinces.map(pid=> (PROVINCES.find(p=>p.id===pid)||{}).name || pid).join(', ');
+    return `
+      <div class="fighter-row" style="align-items:flex-start; flex-direction:column; gap:8px;">
+        <div style="display:flex; justify-content:space-between; width:100%; align-items:baseline;">
+          <div class="fr-name">${league.name}</div>
+          <div class="fr-meta">${league.teams.length} franchises</div>
+        </div>
+        <div class="fr-meta" style="line-height:1.5;">${JR_LEAGUE_DESCRIPTIONS[league.id] || ''}</div>
+        <div class="fr-meta">Provinces: ${provinceNames}${gamesPlayed ? '' : ' · Season not yet underway'}</div>
+        <div class="btn-row" style="width:100%;"><span></span><button class="btn btn-small btn-primary" data-view-league="${league.id}">View League →</button></div>
+      </div>
+    `;
+  }).join('');
+
+  let draftLine = 'No fighters saved yet.';
+  if(roster.length){
+    const mine = roster.find(f=> f.isPlayable) || roster[0];
+    if(mine.juniorTeamId){ draftLine = `${mine.name} is signed with ${jrTeamName(mine.juniorLeagueId, mine.juniorTeamId)}.`; }
+    else if(mine.age >= 14 && mine.age <= 17 && mine.amateurLeagueId){ draftLine = `${mine.name} is Junior Draft eligible.`; }
+    else if(mine.age < 14){ draftLine = `${mine.name} is age ${mine.age} — Junior Draft opens at 14.`; }
+    else { draftLine = `${mine.name} isn't currently draft-eligible.`; }
+  }
+
+  return `
+    <div class="section-label">The Three Leagues</div>
+    <div class="fighter-grid">${leagueCards}</div>
+    <div class="section-label" style="margin-top:22px;">Your Draft Status</div>
+    <div class="empty-note" style="padding:0 0 12px;">${draftLine}</div>
+    <div class="btn-row"><span></span><button class="btn" id="go-to-draft-select">My Fighters &amp; Draft Status →</button></div>
+  `;
+}
+
+function renderLeagueDetail(){
+  const league = getJrLeague(state.viewLeagueId);
+  if(!league) return `<div class="empty-note">League not found.</div><button class="btn" id="back-to-overview">← All Leagues</button>`;
+  const standings = ensureStandings(league.id);
+  const rows = league.teams.map((t,i)=>{
+    const prov = PROVINCES.find(p=> p.id === t.provinceId);
+    const rec = standings[i];
+    return `
+      <div class="pick-row">
+        <span class="pick-team clickable-name" data-open-team="${league.id}|${i}">${t.city} ${t.nickname}</span>
+        <span class="fr-meta">${prov ? prov.name : ''}</span>
+        <span class="pick-fighter">${rec.wins}-${rec.losses}</span>
+      </div>
+    `;
+  }).join('');
+  return `
+    <div class="empty-note" style="padding:0 0 14px;">${JR_LEAGUE_DESCRIPTIONS[league.id] || ''}</div>
+    <div class="section-label">Franchises &amp; Standings</div>
+    ${rows}
+    <div class="btn-row" style="margin-top:16px;"><button class="btn" id="back-to-overview">← All Leagues</button><span></span></div>
+  `;
 }
 
 function renderSelect(){
@@ -2671,6 +2755,14 @@ function renderStandings(){
 /* ============================ EVENTS ============================ */
 
 function wireEvents(){
+  document.querySelectorAll('[data-view-league]').forEach(btn=>{
+    btn.onclick = ()=>{ state.viewLeagueId = btn.dataset.viewLeague; state.screen = 'league-detail'; render(); };
+  });
+  const backToOverview = document.getElementById('back-to-overview');
+  if(backToOverview) backToOverview.onclick = ()=>{ state.screen = 'overview'; render(); };
+  const goToDraftSelect = document.getElementById('go-to-draft-select');
+  if(goToDraftSelect) goToDraftSelect.onclick = ()=>{ state.screen = 'select'; render(); };
+
   document.querySelectorAll('[data-select-fighter]').forEach(btn=>{
     btn.onclick = ()=>{
       state.fighterId = btn.dataset.selectFighter;
