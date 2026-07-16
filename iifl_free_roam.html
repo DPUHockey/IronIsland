@@ -3939,41 +3939,22 @@ function renderNewspaper(){
 }
 
 function renderLeagueStandings(){
-  const data = ensureLeagueStandings(getCurrentDay());
   const tabs = [
     { id:'pro', label:'Pro' }, { id:'junior', label:'Junior' },
     { id:'amateur', label:'Amateur' }, { id:'juvenile', label:'Juvenile' },
   ];
   const tabsHtml = tabs.map(t=>`<button class="standings-tab ${state.standingsTier===t.id?'active':''}" data-standings-tab="${t.id}">${t.label}</button>`).join('');
 
-  const tierData = state.standingsTier === 'juvenile' ? realJuvenileStandings(10) : data[state.standingsTier];
   let body;
-  if(state.standingsTier === 'pro' || state.standingsTier === 'junior'){
-    const teamRows = tierData.teams.map((t,i)=>`
-      <div class="team-standings-row">
-        <span class="tsr-rank">${i+1}</span>
-        <span>${t.name}</span>
-        <span class="tsr-record">${t.wins}-${t.losses}</span>
-      </div>
-    `).join('');
-    const weightBlocks = WEIGHT_CLASSES_5.map(wc=>{
-      const list = tierData.topByWeight[wc];
-      const rows = list.map((f,i)=>`
-        <div class="team-standings-row">
-          <span class="tsr-rank">${i+1}</span>
-          <span>${f.name} <span style="color:var(--muted); font-family:var(--mono); font-size:10px;">— ${f.team}</span></span>
-          <span class="tsr-record">${f.wins}-${f.losses}</span>
-        </div>
-      `).join('');
-      return `<div class="weight-tier-block"><div class="wtb-label">${wc}weight — Top 5</div>${rows}</div>`;
-    }).join('');
-    body = `
-      <div class="section-label">Standings</div>
-      ${teamRows}
-      <div class="section-label" style="margin-top:20px;">Top Fighters by Weight Class</div>
-      ${weightBlocks}
-    `;
-  } else if(state.standingsTier === 'juvenile'){
+  // Pro/Junior/Amateur standings used to be entirely made-up team names and records,
+  // disconnected from the real Ironbound/Northgate/Tidewater Junior teams and the real
+  // 8-team Amateur league — cleared out rather than shown as fake stats. Wire these up
+  // once each tier has real season data (Junior standings already exist in
+  // iifl_junior_league.html's own state; Amateur's schedule/standings don't exist yet).
+  if(state.standingsTier === 'pro' || state.standingsTier === 'junior' || state.standingsTier === 'amateur'){
+    body = `<p style="opacity:0.6; padding:20px 0;">${tabs.find(t=>t.id===state.standingsTier).label} League standings aren't tracked here yet — check back once that tier has real season data.</p>`;
+  } else {
+    const tierData = realJuvenileStandings(10);
     const rows = tierData.map((f,i)=>{
       const prov = PROVINCES.find(p=>p.id===f.provinceId);
       return `
@@ -3988,22 +3969,10 @@ function renderLeagueStandings(){
       <div class="section-label">Island-Wide Top 10 — Real, Live Standings</div>
       ${rows || '<div class="empty-note">No registered Juvenile fighters found.</div>'}
     `;
-  } else {
-    const rows = tierData.map((f,i)=>`
-      <div class="team-standings-row" style="grid-template-columns:28px 1fr auto;">
-        <span class="tsr-rank">${i+1}</span>
-        <span>${f.name}<br><span style="color:var(--muted); font-family:var(--mono); font-size:10px;">${f.style} · ${f.hometown} · ${f.homePit}</span></span>
-        <span class="tsr-record">${f.wins}-${f.losses}</span>
-      </div>
-    `).join('');
-    body = `
-      <div class="section-label">Island-Wide Top 10</div>
-      ${rows}
-    `;
   }
 
   return `
-    <p style="font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-bottom:14px;">${formatCalendarDate(getCurrentDay())} · ${state.standingsTier==='juvenile' ? 'Real standings — updates live as the season plays out.' : 'Rankings, made up for now — not synced to live league play yet.'}</p>
+    <p style="font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-bottom:14px;">${formatCalendarDate(getCurrentDay())} · ${state.standingsTier==='juvenile' ? 'Real standings — updates live as the season plays out.' : 'Not tracked yet.'}</p>
     <div class="standings-tabs">${tabsHtml}</div>
     ${body}
     <div class="btn-row" style="margin-top:16px;"><button class="btn" id="back-to-newspaper">← Back to Paper</button><span></span></div>
@@ -5078,6 +5047,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V41 · 2026-07-15</div>
+<div class="version-badge">FREE ROAM · V42 · 2026-07-15</div>
 </body>
 </html>
