@@ -1190,6 +1190,7 @@ function generateAmateurFieldFighter(division, weightClass, province, leagueId){
   opp.leagueId = leagueId;
   opp.age = age;
   opp.birthDay = birthDayForAge(age, getCurrentDay());
+  opp.ageSystemVersion = 2;
   return opp;
 }
 
@@ -1205,7 +1206,9 @@ function generateJuvenileFieldFighter(weightClass, province, hometown){
   const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
   const opp = finalizeOpponent(stats, avgOvr, weightClass, province, age, hometown);
   opp.age = age;
+  f.ageSystemVersion = 2;
   opp.birthDay = birthDayForAge(age, getCurrentDay());
+  opp.ageSystemVersion = 2;
   opp.talentTier = tier;
   opp.weightClass = weightClassOf(opp.weightLb);
   opp.provinceId = province.id;
@@ -1331,7 +1334,7 @@ function drawFromProvinceLeaguePools(provinceId, weightClass, divisionWeights){
 
 function drawJuvenileFromFieldPool(provinceId, weightClass, playerAge){
   const pools = ensureJuvenileFieldPoolForProvince(provinceId);
-  const pool = pools.juvenile[provinceId];
+  const pool = pools.juvenile[provinceId].filter(f=> juvenileFightsRemaining(f) > 0);
   const closeAge = pool.filter(f=> Math.abs(f.age-playerAge)<=1);
   const narrowPool = closeAge.filter(f=> f.weightClass===weightClass);
   const useNarrow = narrowPool.length > 0 && Math.random() < 0.55;
@@ -1833,8 +1836,10 @@ function runJuvenileIntake(pools, provinceId, day){
     const loc = pickWeightedPitLocation(province.id);
     const hometown = loc ? pick(loc.hometownPool) : undefined;
     const f = finalizeOpponent(stats, avgOvr, weightClass, province, age, hometown);
+    f.ageSystemVersion = 2;
     f.age = age;
     f.birthDay = birthDayForAge(age, day);
+    f.ageSystemVersion = 2;
     f.talentTier = tier;
     f.weightClass = weightClassOf(f.weightLb);
     f.provinceId = province.id;
@@ -2318,9 +2323,32 @@ function birthDayForAge(age, today){
   return Math.max(1, today - (age*DAYS_PER_FIGHTER_YEAR) - Math.floor(Math.random()*DAYS_PER_FIGHTER_YEAR));
 }
 function ageFromBirthday(birthDay, today){ return Math.max(0, Math.floor((today-birthDay)/DAYS_PER_FIGHTER_YEAR)); }
+
+// Repairs birthDay values saved under the OLD 63-day-year system, which collapse to a
+// near-zero apparent age once reinterpreted under the 365-day divisor. entryDay is real
+// ground truth where available (juvenile intake always starts at exactly 11); everything
+// else falls back to a rough fights-played estimate rather than trusting the already-
+// corrupted age field. Gated by ageSystemVersion so it only ever runs once per fighter.
+function estimateAgeFallback(f){
+  const totalFights = f.record ? (f.record.wins||0)+(f.record.losses||0) : 0;
+  if(f.juniorTeamId || f.amateurLeagueId){
+    return Math.min(35, Math.max(14, 16 + Math.round(totalFights / 12)));
+  }
+  return Math.min(18, Math.max(11, 11 + Math.round(totalFights / 7)));
+}
 function syncFighterAge(f, today){
-  if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
-  f.age = ageFromBirthday(f.birthDay, today);
+  if(f.ageSystemVersion === 2){
+    if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
+    f.age = ageFromBirthday(f.birthDay, today);
+    return;
+  }
+  if(f.entryDay){
+    f.age = 11 + Math.floor((today - f.entryDay) / DAYS_PER_FIGHTER_YEAR);
+  } else {
+    f.age = estimateAgeFallback(f);
+  }
+  f.birthDay = birthDayForAge(f.age, today);
+  f.ageSystemVersion = 2;
 }
 
 function ensureFighterDefaults(f){
@@ -2510,7 +2538,7 @@ function hashId(str){
 function attachLiveRosters(metas, provinceId, settlementName){
   catchUpJuvenileSimulation();
   const pools = loadFieldPools();
-  const pool = (pools.juvenile[provinceId] || []).filter(f=> f.hometown === settlementName);
+  const pool = (pools.juvenile[provinceId] || []).filter(f=> f.hometown === settlementName && juvenileFightsRemaining(f) > 0);
   const buckets = metas.map(()=>[]);
   pool.forEach(f=>{
     const idx = hashId(f.id) % metas.length;
@@ -5132,6 +5160,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V43 · 2026-07-16</div>
+<div class="version-badge">FREE ROAM · V45 · 2026-07-16</div>
 </body>
 </html>
