@@ -1434,7 +1434,11 @@ function flushResultsLog(newEntries){
   if(!newEntries.length) return;
   const log = loadResultsLog();
   const merged = newEntries.concat(log);
-  if(merged.length > 3000) merged.length = 3000;
+  // Was 3000 — cut down as part of the same quota fix as provincePoolCap. Nothing
+  // reads more than a handful of recent results at once (newspapers, standings), so
+  // this doesn't lose any real functionality, just stops the log from being one of the
+  // bigger contributors to the total localStorage footprint.
+  if(merged.length > 600) merged.length = 600;
   saveResultsLog(merged);
 }
 
@@ -1488,7 +1492,12 @@ function loadResultsLog(){
 }
 function saveResultsLog(log){
   try{ localStorage.setItem(sk(RESULTS_LOG_KEY), JSON.stringify(log)); }
-  catch(err){ console.error('IIFL results log save failed:', err); }
+  catch(err){
+    console.error('IIFL results log save failed, trimming and retrying:', err);
+    const trimmed = log.slice(0, Math.floor(log.length/2));
+    try{ localStorage.setItem(sk(RESULTS_LOG_KEY), JSON.stringify(trimmed)); }
+    catch(err2){ console.error('IIFL results log save still failing after trim:', err2); }
+  }
 }
 function logNotableResult(entry){
   const log = loadResultsLog();
@@ -1718,8 +1727,16 @@ function pickWeightedPitLocation(provinceId){
 // Cap is 1.5x each province's own healthy target, so there's real headroom for organic
 // growth/variety without it running away.
 function provincePoolCap(provinceId){
+  // Was target*1.5 with only a floor (no ceiling) — for a populous province like
+  // Kolsati that meant 700-800+ standing NPCs, and a fully-topped-up pool across all 8
+  // provinces measured out to ~1.6MB of JSON, which combined with everything else this
+  // save writes (results log, roam state, roster) was blowing well past the browser's
+  // localStorage quota and causing every single save write to silently fail. Pit
+  // rosters and leaderboards only ever need a few dozen fighters visible at once — a
+  // hard ceiling here doesn't cost any real gameplay depth, it just stops the pool from
+  // growing far past what anything actually displays.
   const target = pitLocationsForProvince(provinceId).reduce((s,l)=> s + l.perClass*3, 0);
-  return Math.max(100, Math.round(target * 1.5));
+  return Math.min(120, Math.max(60, Math.round(target * 0.5)));
 }
 function enforceProvincePoolCap(pools, provinceId, capOverride){
   const pool = pools.juvenile[provinceId];
@@ -2321,19 +2338,19 @@ function pruneRoamStateForSpace(s){
   if(s.pitTournaments){
     Object.keys(s.pitTournaments).forEach(key=>{
       const day = parseInt(key.split('|').pop(), 10);
-      if(!isNaN(day) && today - day > 14) delete s.pitTournaments[key];
+      if(!isNaN(day) && today - day > 7) delete s.pitTournaments[key];
     });
   }
   if(s.newspapers){
     Object.keys(s.newspapers).forEach(key=>{
       const day = parseInt(key.split('|').pop(), 10);
-      if(!isNaN(day) && today - day > 30) delete s.newspapers[key];
+      if(!isNaN(day) && today - day > 14) delete s.newspapers[key];
     });
   }
   if(s.grids){
     const keys = Object.keys(s.grids);
-    if(keys.length > 40){
-      keys.slice(0, keys.length-40).forEach(k=> delete s.grids[k]);
+    if(keys.length > 20){
+      keys.slice(0, keys.length-20).forEach(k=> delete s.grids[k]);
     }
   }
 }
@@ -5042,6 +5059,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V37 · 2026-07-15</div>
+<div class="version-badge">FREE ROAM · V38 · 2026-07-15</div>
 </body>
 </html>
