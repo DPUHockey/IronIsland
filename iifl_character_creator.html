@@ -865,7 +865,7 @@ const PROVINCES = [
   { flag:'Provincial%20Flags/ditiero.jpg', id:'ditiero', name:'Di Tiero Province', desc:'New Orleans — Mardi Gras, party capital, the islands', color:'#7C5491',
     primary:['karate'], secondary:['brawler'],
     settlements:['Di Tiero','Alibar','Marsh Landing','Bayou Verte','Port Maray','South Bender','Saint Roque','Cane Hollow','Bellechasse','Lantern Cay','Buradam','Driftwood Key','Bantha','Suli\' Ba','Crayfish Bend','Bakii'] },
-  { flag:'Provincial%20Flags/carpathia.jpg', id:'carpathia', name:'Targu Banshea Province', desc:'Isolated, spooky, lonely mountains', color:'#5B4070',
+  { flag:'Provincial%20Flags/carpathia.jpg', id:'carpathia', name:'The Province of Targu', desc:'Isolated, spooky, lonely mountains', color:'#5B4070',
     primary:['sambo'], secondary:['judo'],
     settlements:['Bukovene','Corsuva','Ravenshade','Sorrow\'s Pass','Greywatch','Bargo Pass','Drovna','Hollowmere','Castle Reach','Kessel Vorn','Vyrholm','White Sands','Mikini','South Port','Ludus','Pice','Balchik','Thornfall','Purovest','Wraithwood','Varna','Slanik'] },
   { flag:'Provincial%20Flags/northeast.jpg', id:'northeast', name:'Northeast Territory', desc:'Japan — strict rules, fierce home advantage', color:'#9C4242',
@@ -2586,10 +2586,12 @@ function wireEvents(){
     const statusEl = document.getElementById('save-status');
     const f = fighterCache;
     if(!f){ return; }
+    const today = getCurrentDay();
     const record = {
       id: 'fighter_' + Date.now() + '_' + Math.floor(Math.random()*1000),
       name: state.name,
       age: f.age,
+      birthDay: Math.max(1, today - (f.age*365) - Math.floor(Math.random()*365)),
       talentTier: f.talentTier,
       provinceId: f.province.id,
       settlement: state.settlement,
