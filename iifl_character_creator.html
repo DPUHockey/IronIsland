@@ -1044,6 +1044,124 @@ const QUESTIONS = [
   ]},
 ];
 
+/*
+  The COMPANION WALK — a new stage that plays BEFORE the existing per-province recruiter
+  cutscene below (CUTSCENES). This is the "before meeting the fight recruiter, our hero
+  is walking with a friend" scene: a shared arc (not bespoke per province, for scope)
+  with two per-province inserts — extra detail on the home province, and a couple of
+  real local settlements/things-to-do — so it still feels personalized without needing
+  eight fully independent scripts. Ends with the friend splitting off and handing things
+  to the recruiter, at which point startCutscene() below picks up exactly as it already did.
+*/
+const HOME_PROVINCE_DETAIL = {
+  alexandretta: "This whole province is old money and older stone — castle towns that have stood since before anyone remembers why. Folks here take fighting seriously in a quiet way: no showboating, just technique passed down like a family trade.",
+  kolsati: "Kolsati doesn't sleep, and neither does the fight scene. Every block's got somebody training for something — the big arenas here pull crowds you wouldn't believe. If you want to get noticed, this is where noticing happens.",
+  sherwood: "Sherwood's the kind of place where everybody's cousin fights, or used to, or is thinking about it. Quiet streets, loud gyms. The whole province turns out for a good card.",
+  gazon: "Gazon doesn't have much — no big arenas, no fancy training centers. What it has is boxers, and it makes them hard. Out here, fighting isn't a hobby. It's closer to a way of getting by.",
+  ditiero: "Di Tiero never really stops celebrating, and somehow the fighting scene grew up right alongside the music and the parades. Half the pits here double as parties. The other half are dead serious.",
+  carpathia: "Carpathia's a strange, quiet province — mountain fog, isolated villages, more legend than fact. People up here train alone, mostly, which is either why the fighters that come out of it are so unpredictable, or why nobody quite trusts them.",
+  northeast: "The Northeast runs on discipline. Strict rules, real structure, and a home-turf advantage that visiting fighters talk about for years after. You don't just learn to fight here — you learn to carry yourself.",
+  bay: "White Bay's about as close to old-fashioned small-town charm as the island gets — friendly streets, everybody-knows-everybody. Doesn't mean the fighters are soft. Sometimes it just means nobody sees the punch coming.",
+};
+
+const HOME_PROVINCE_THINGS_TO_DO = {
+  alexandretta: "There's a market in {settlement} most mornings, and old Tomkins keeps the Forge Pit going near the chapel most nights of the week.",
+  kolsati: "{settlement}'s never quiet — food carts running all hours, trains rattling overhead, and somebody's always got a card running down at the Concrete Ring.",
+  sherwood: "Corner store, a diner that's been open since forever, and the Frontenac Fight House a short walk from just about anywhere in {settlement}.",
+  gazon: "Not much to {settlement} besides the well and the road out — but the Dust Circle's past the well, and that's where everybody worth knowing ends up sooner or later.",
+  ditiero: "There's music somewhere in {settlement} pretty much any hour you care to listen, and Big Jim's Fightin' Pit is never far from wherever that music's coming from.",
+  carpathia: "{settlement}'s the kind of place where the fog doesn't burn off till noon — but there's a circuit of pits scattered through the villages if you know who to ask.",
+  northeast: "{settlement} runs on a schedule — dojo hours, training hours, quiet hours. Dojo Reach is the one everybody trains toward eventually.",
+  bay: "{settlement}'s got a fairground that still runs most weekends, and the Fairground Ring right alongside it — half the town shows up just to watch.",
+};
+
+function buildCompanionWalkBeats(record){
+  const homeDetail = HOME_PROVINCE_DETAIL[record.provinceId] || '';
+  const thingsToDo = (HOME_PROVINCE_THINGS_TO_DO[record.provinceId] || '').replace(/{settlement}/g, record.settlement);
+  const provinceLines = PROVINCES.map(p=> `${p.name} — ${p.desc}`).join('; ');
+
+  return [
+    { speaker:'narrator', text:"The morning {name} turns thirteen — or twelve, or eleven, however the years landed — starts like any other. Except a friend's already waiting outside, grinning, like they know something {name} doesn't." },
+    { speaker:'guide', text:"C'mon, walk with me a minute. There's something you should hear before you go do whatever it is you're about to go do." },
+    { speaker:'narrator', text:"They fall into step together, {settlement} waking up slow around them." },
+    { speaker:'guide', text:"You know what people say about this island, right? Iron Island — fighter's paradise, if you've got the stomach for it. Every province's got pits. Every city, every little nothing town. You're tough enough, you can make a real living just fighting." },
+    { speaker:'guide', text:"It starts young — like you. Juvenile fighters, all of us, scrapping in the local pits, building a record. But if you're good, teams take notice. There's Junior Leagues that'll flat-out draft you, fourteen through seventeen — put you on a real roster, real schedule, teammates and all." },
+    { speaker:'guide', text:"After that it gets serious. There's the Iron Island Federal League — amateur, but don't let the word fool you, it pays real money. And word is there's a Pro league starting up soon — the Iron Island Professional Fight League. They say a guy can get rich fighting Pro, if he's got what it takes." },
+    { speaker:'guide', text:`Whole island's split into eight provinces, each one its own world: ${provinceLines}.` },
+    { speaker:'guide', text: homeDetail },
+    { speaker:'narrator', text: thingsToDo },
+    { speaker:'narrator', text:"They walk a while longer, not saying much — the kind of quiet that doesn't need filling." },
+    { speaker:'guide', text:"Anyway. This is about where I peel off. You know where to find me. Go on — go see what they make of you." },
+    { speaker:'narrator', text:"{name}'s friend claps a hand on their shoulder, then heads off down a side street, already half-swallowed by the morning crowd. Up ahead, someone's waiting — someone who's clearly been doing this a long time." },
+  ];
+}
+
+function startCompanionWalk(record){
+  state.screen = 'companion-walk';
+  state.companionRecord = record;
+  state.companionBeat = 0;
+  render();
+}
+
+function renderCompanionWalkScreen(){
+  const record = state.companionRecord;
+  const province = PROVINCES.find(p=>p.id===record.provinceId);
+  const beats = buildCompanionWalkBeats(record);
+  const beatIdx = state.companionBeat;
+  const atEnd = beatIdx >= beats.length;
+
+  let body;
+  if(atEnd){
+    startCutscene(record); // hand off straight to the existing recruiter scene
+    return;
+  } else {
+    const beat = beats[beatIdx];
+    const isGuide = beat.speaker === 'guide';
+    const speakerLabel = isGuide ? 'A Friend' : 'Narrator';
+    const dots = beats.map((_,i)=> `<div class="beat-dot ${i===beatIdx?'active':''}"></div>`).join('');
+
+    body = `
+      <div class="cutscene-wrap">
+        <div class="cutscene-scene" style="--scene-color:${province.color}">
+          <div class="scene-emblem">${province.name}</div>
+          <div class="scene-figures">
+            ${buildSilhouetteLG(record.appearance)}
+            ${buildSilhouetteLG(GUIDE_APPEARANCE)}
+          </div>
+        </div>
+        <div class="cutscene-dialogue">
+          <div class="speaker-name ${isGuide?'':'narrator'}">${speakerLabel}</div>
+          <div class="dialogue-text" key="${beatIdx}">${fillTemplate(beat.text, record)}</div>
+          <div class="cutscene-controls">
+            <div class="beat-dots">${dots}</div>
+            <div style="display:flex; gap:10px;">
+              <button class="btn" id="skip-companion">Skip</button>
+              <button class="btn btn-primary" id="next-companion-beat">${beatIdx===beats.length-1?'Continue':'Next →'}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  app.innerHTML = `
+    <div class="ticket-header">
+      <div>
+        <div class="ticket-eyebrow">Iron Island · Fight League</div>
+        <div class="ticket-title">${record.name}'S LAST QUIET MORNING</div>
+      </div>
+      <div class="ticket-sub">${province.name.toUpperCase()}</div>
+    </div>
+    <div class="panel">${body}</div>
+  `;
+
+  const nextBtn = document.getElementById('next-companion-beat');
+  if(nextBtn) nextBtn.onclick = ()=>{ state.companionBeat += 1; render(); };
+
+  const skipBtn = document.getElementById('skip-companion');
+  if(skipBtn) skipBtn.onclick = ()=>{ state.companionBeat = beats.length; render(); };
+}
+
 const CUTSCENES = {
   alexandretta: { guideName:'Old Tomkins', beats:[
     { speaker:'narrator', text:"The door creaks shut behind {name} as he steps out into {settlement}'s morning fog, his breath fogging in the cold English air." },
@@ -1265,11 +1383,100 @@ function computeFighter(){
   pushing it live. Swap this layer for Firebase later if you want the
   roster synced across devices/coaches, same as Minooka/RefPicker.
 */
+/* ============================ SAVE REGISTRY ============================ */
+/*
+  Every game save is a fully independent world: its own clock, its own roster, its own
+  field pools, its own fight results — nothing shared between saves except this registry
+  itself and the global created-fighters catalog (see CREATED_FIGHTERS_KEY below). A
+  fighter built in the Character Creator doesn't belong to any save until it's actually
+  added to one; from that point on each save tracks its own evolving copy independently
+  (Karza's career in "IronOne" and Karza's career in some other save, if he were ever
+  added to two, would diverge completely — they're snapshots, not live-shared records).
+
+  sk() is the mechanism: every existing storage key in every file gets wrapped with it
+  at the point of use, so `localStorage.getItem(sk(CLOCK_KEY))` becomes
+  `localStorage.getItem(sk(CLOCK_KEY))` and now transparently reads/writes the ACTIVE
+  save's own copy of that data. No stored key's declaration or meaning changes — only
+  which save's namespace it's actually reading/writing.
+*/
+const SAVE_REGISTRY_KEY = 'iifl_save_registry_v1';
+const CREATED_FIGHTERS_KEY = 'iifl_created_fighters_v1'; // global catalog, NOT save-namespaced
+
+function loadSaveRegistry(){
+  try{
+    const raw = localStorage.getItem(SAVE_REGISTRY_KEY);
+    return raw ? JSON.parse(raw) : { saves: [], activeSaveId: null };
+  }catch(err){ console.error('IIFL save registry load failed:', err); return { saves: [], activeSaveId: null }; }
+}
+function saveSaveRegistry(reg){
+  try{ localStorage.setItem(SAVE_REGISTRY_KEY, JSON.stringify(reg)); return true; }
+  catch(err){ console.error('IIFL save registry save failed:', err); return false; }
+}
+function getActiveSaveId(){ return loadSaveRegistry().activeSaveId; }
+function getActiveSave(){
+  const reg = loadSaveRegistry();
+  return reg.saves.find(s=> s.id === reg.activeSaveId) || null;
+}
+function setActiveSaveId(saveId){
+  const reg = loadSaveRegistry();
+  reg.activeSaveId = saveId;
+  saveSaveRegistry(reg);
+}
+
+// The wrapper every storage key gets threaded through. Falls back to the raw base key
+// when no save is active yet (e.g. mid-creation, or old data from before this system
+// existed) rather than silently losing access to it.
+function sk(baseKey){
+  const sid = getActiveSaveId();
+  return sid ? `iifl_save_${sid}__${baseKey}` : baseKey;
+}
+
+// Creates a brand new, fully independent save: fresh clock at Day 1 (May 1, 1958),
+// no records, no roster. playableFighterId is the one fighter from the created-fighters
+// catalog the player actually controls; npcFighterIds are the others they've chosen to
+// bring into THIS world (opt-in per save, never automatic — see CREATED_FIGHTERS_KEY).
+// Both get cloned from the catalog into this save's own roster as independent copies.
+function createNewSave(name, playableFighterId, npcFighterIds){
+  const reg = loadSaveRegistry();
+  const id = 'save_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7);
+  reg.saves.push({
+    id, name, createdAt: Date.now(),
+    playableFighterId, npcFighterIds: npcFighterIds || [],
+  });
+  reg.activeSaveId = id;
+  saveSaveRegistry(reg);
+
+  // Fresh clock for this save, independent of every other save's timeline.
+  localStorage.setItem(`iifl_save_${id}__${CLOCK_KEY}`, JSON.stringify({ day: 1 }));
+
+  // Clone the chosen fighters out of the global catalog into this save's own roster —
+  // from here on they're this save's copies, not the catalog's.
+  const catalog = loadCreatedFighters();
+  const allIds = [playableFighterId, ...(npcFighterIds || [])].filter(Boolean);
+  const clonedRoster = allIds
+    .map(fid => catalog.find(f=> f.id === fid))
+    .filter(Boolean)
+    .map(f => ({ ...f, isPlayable: f.id === playableFighterId }));
+  localStorage.setItem(`iifl_save_${id}__${ROSTER_KEY}`, JSON.stringify(clonedRoster));
+
+  return id;
+}
+
+function loadCreatedFighters(){
+  try{ const raw = localStorage.getItem(CREATED_FIGHTERS_KEY); return raw ? JSON.parse(raw) : []; }
+  catch(err){ console.error('IIFL created-fighters catalog load failed:', err); return []; }
+}
+function saveCreatedFighters(list){
+  try{ localStorage.setItem(CREATED_FIGHTERS_KEY, JSON.stringify(list)); return true; }
+  catch(err){ console.error('IIFL created-fighters catalog save failed:', err); return false; }
+}
+
+
 const ROSTER_KEY = 'iifl_roster_v1';
 
 function loadRoster(){
   try{
-    const raw = localStorage.getItem(ROSTER_KEY);
+    const raw = localStorage.getItem(sk(ROSTER_KEY));
     return raw ? JSON.parse(raw) : [];
   }catch(err){
     console.error('IIFL roster load failed:', err);
@@ -1279,7 +1486,7 @@ function loadRoster(){
 
 function saveRoster(list){
   try{
-    localStorage.setItem(ROSTER_KEY, JSON.stringify(list));
+    localStorage.setItem(sk(ROSTER_KEY), JSON.stringify(list));
     return true;
   }catch(err){
     console.error('IIFL roster save failed:', err);
@@ -1288,9 +1495,29 @@ function saveRoster(list){
 }
 
 function addFighterToRoster(fighterRecord){
+  // Every created fighter goes into the global catalog first — the "create fighters
+  // whenever you want" pool, independent of any specific game save. Still also writes
+  // into the currently-active save's roster (via sk()) so the rest of this file's
+  // existing flow (recruiter cutscene, roster screen) keeps working unchanged.
+  const catalog = loadCreatedFighters();
+  catalog.unshift(fighterRecord);
+  saveCreatedFighters(catalog);
+
   const roster = loadRoster();
   roster.unshift(fighterRecord);
   return saveRoster(roster);
+}
+
+const PENDING_SAVE_KEY = 'iifl_pending_save_v1'; // global, set by Home Hub's New Game flow
+function checkAndFinalizePendingSave(record){
+  try{
+    const raw = localStorage.getItem(PENDING_SAVE_KEY);
+    if(!raw) return null;
+    const pending = JSON.parse(raw);
+    const saveId = createNewSave(pending.name, record.id, pending.npcFighterIds || []);
+    localStorage.removeItem(PENDING_SAVE_KEY);
+    return saveId;
+  }catch(err){ console.error('IIFL pending save finalize failed:', err); return null; }
 }
 
 function deleteFighterFromRoster(id){
@@ -1413,7 +1640,7 @@ function projectAdultSize(f){
 const CLOCK_KEY = 'iifl_clock_v1';
 const GAME_EPOCH = new Date(1958, 2, 3); // Monday, March 3 1958 = Day 1, island-wide
 function loadClock(){
-  try{ const raw = localStorage.getItem(CLOCK_KEY); return raw ? JSON.parse(raw) : { day: 1 }; }
+  try{ const raw = localStorage.getItem(sk(CLOCK_KEY)); return raw ? JSON.parse(raw) : { day: 1 }; }
   catch(err){ return { day: 1 }; }
 }
 function getCurrentDay(){ return loadClock().day; }
@@ -1660,6 +1887,7 @@ document.addEventListener('click', (e)=>{
 
 function render(){
   if(state.screen === 'roster'){ renderRosterScreen(); return; }
+  if(state.screen === 'companion-walk'){ renderCompanionWalkScreen(); return; }
   if(state.screen === 'cutscene'){ renderCutsceneScreen(); return; }
 
   const idx = state.step;
@@ -1825,12 +2053,14 @@ function renderCutsceneScreen(){
 
   let body;
   if(atEnd){
+    const finalizedSaveId = checkAndFinalizePendingSave(record);
     body = `
       <div class="stub-screen">
         <h2>To Be Continued…</h2>
         <p>${record.name} is on the ground in ${record.settlement}, ${province.name}. Time to see what the streets have for you — find a fight pit, hear what the locals say, make a name.</p>
         <div class="btn-row" style="justify-content:center; gap:12px;">
           <button class="btn" id="end-to-roster">Return to Roster</button>
+          <button class="btn" id="end-to-home-hub">Go to Home Hub</button>
           <button class="btn btn-primary" id="end-to-free-roam">Walk the City →</button>
         </div>
       </div>
@@ -1888,6 +2118,11 @@ function renderCutsceneScreen(){
     state.cutsceneFighter = null;
     state.cutsceneBeat = 0;
     render();
+  };
+
+  const homeHubBtn = document.getElementById('end-to-home-hub');
+  if(homeHubBtn) homeHubBtn.onclick = ()=>{
+    window.location.href = 'iifl_home.html';
   };
 
   const roamBtn = document.getElementById('end-to-free-roam');
@@ -2399,7 +2634,7 @@ function wireEvents(){
   if(gotoRosterBtn) gotoRosterBtn.onclick = ()=>{ state.screen = 'roster'; render(); };
 
   const beginStoryBtn = document.getElementById('begin-story-btn');
-  if(beginStoryBtn) beginStoryBtn.onclick = ()=>{ if(lastConfirmedRecord) startCutscene(lastConfirmedRecord); };
+  if(beginStoryBtn) beginStoryBtn.onclick = ()=>{ if(lastConfirmedRecord) startCompanionWalk(lastConfirmedRecord); };
 
   const revealNameInput = document.getElementById('reveal-name-input');
   if(revealNameInput) revealNameInput.oninput = (e)=>{
@@ -2439,6 +2674,6 @@ function updateNextBasicsDisabled(){
 
 render();
 </script>
-<div class="version-badge">CHARACTER CREATOR · V17 · 2026-07-15</div>
+<div class="version-badge">CHARACTER CREATOR · V18 · 2026-07-15</div>
 </body>
 </html>
