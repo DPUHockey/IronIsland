@@ -265,6 +265,94 @@
 <div id="modal-root"></div>
 
 <script>
+/* ============================ SAVE REGISTRY ============================ */
+/*
+  Every game save is a fully independent world: its own clock, its own roster, its own
+  field pools, its own fight results — nothing shared between saves except this registry
+  itself and the global created-fighters catalog (see CREATED_FIGHTERS_KEY below). A
+  fighter built in the Character Creator doesn't belong to any save until it's actually
+  added to one; from that point on each save tracks its own evolving copy independently
+  (Karza's career in "IronOne" and Karza's career in some other save, if he were ever
+  added to two, would diverge completely — they're snapshots, not live-shared records).
+
+  sk() is the mechanism: every existing storage key in every file gets wrapped with it
+  at the point of use, so `localStorage.getItem(sk(CLOCK_KEY))` becomes
+  `localStorage.getItem(sk(CLOCK_KEY))` and now transparently reads/writes the ACTIVE
+  save's own copy of that data. No stored key's declaration or meaning changes — only
+  which save's namespace it's actually reading/writing.
+*/
+const SAVE_REGISTRY_KEY = 'iifl_save_registry_v1';
+const CREATED_FIGHTERS_KEY = 'iifl_created_fighters_v1'; // global catalog, NOT save-namespaced
+
+function loadSaveRegistry(){
+  try{
+    const raw = localStorage.getItem(SAVE_REGISTRY_KEY);
+    return raw ? JSON.parse(raw) : { saves: [], activeSaveId: null };
+  }catch(err){ console.error('IIFL save registry load failed:', err); return { saves: [], activeSaveId: null }; }
+}
+function saveSaveRegistry(reg){
+  try{ localStorage.setItem(SAVE_REGISTRY_KEY, JSON.stringify(reg)); return true; }
+  catch(err){ console.error('IIFL save registry save failed:', err); return false; }
+}
+function getActiveSaveId(){ return loadSaveRegistry().activeSaveId; }
+function getActiveSave(){
+  const reg = loadSaveRegistry();
+  return reg.saves.find(s=> s.id === reg.activeSaveId) || null;
+}
+function setActiveSaveId(saveId){
+  const reg = loadSaveRegistry();
+  reg.activeSaveId = saveId;
+  saveSaveRegistry(reg);
+}
+
+// The wrapper every storage key gets threaded through. Falls back to the raw base key
+// when no save is active yet (e.g. mid-creation, or old data from before this system
+// existed) rather than silently losing access to it.
+function sk(baseKey){
+  const sid = getActiveSaveId();
+  return sid ? `iifl_save_${sid}__${baseKey}` : baseKey;
+}
+
+// Creates a brand new, fully independent save: fresh clock at Day 1 (May 1, 1958),
+// no records, no roster. playableFighterId is the one fighter from the created-fighters
+// catalog the player actually controls; npcFighterIds are the others they've chosen to
+// bring into THIS world (opt-in per save, never automatic — see CREATED_FIGHTERS_KEY).
+// Both get cloned from the catalog into this save's own roster as independent copies.
+function createNewSave(name, playableFighterId, npcFighterIds){
+  const reg = loadSaveRegistry();
+  const id = 'save_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7);
+  reg.saves.push({
+    id, name, createdAt: Date.now(),
+    playableFighterId, npcFighterIds: npcFighterIds || [],
+  });
+  reg.activeSaveId = id;
+  saveSaveRegistry(reg);
+
+  // Fresh clock for this save, independent of every other save's timeline.
+  localStorage.setItem(`iifl_save_${id}__${CLOCK_KEY}`, JSON.stringify({ day: 1 }));
+
+  // Clone the chosen fighters out of the global catalog into this save's own roster —
+  // from here on they're this save's copies, not the catalog's.
+  const catalog = loadCreatedFighters();
+  const allIds = [playableFighterId, ...(npcFighterIds || [])].filter(Boolean);
+  const clonedRoster = allIds
+    .map(fid => catalog.find(f=> f.id === fid))
+    .filter(Boolean)
+    .map(f => ({ ...f, isPlayable: f.id === playableFighterId }));
+  localStorage.setItem(`iifl_save_${id}__${ROSTER_KEY}`, JSON.stringify(clonedRoster));
+
+  return id;
+}
+
+function loadCreatedFighters(){
+  try{ const raw = localStorage.getItem(CREATED_FIGHTERS_KEY); return raw ? JSON.parse(raw) : []; }
+  catch(err){ console.error('IIFL created-fighters catalog load failed:', err); return []; }
+}
+function saveCreatedFighters(list){
+  try{ localStorage.setItem(CREATED_FIGHTERS_KEY, JSON.stringify(list)); return true; }
+  catch(err){ console.error('IIFL created-fighters catalog save failed:', err); return false; }
+}
+
 /* ============================ SHARED DATA ============================ */
 
 const ROSTER_KEY = 'iifl_roster_v1';
@@ -328,11 +416,11 @@ function weightedPick(weights){
 /* ============================ ROSTER STORAGE ============================ */
 
 function loadRoster(){
-  try{ const raw = localStorage.getItem(ROSTER_KEY); return raw ? JSON.parse(raw) : []; }
+  try{ const raw = localStorage.getItem(sk(ROSTER_KEY)); return raw ? JSON.parse(raw) : []; }
   catch(err){ console.error('IIFL roster load failed:', err); return []; }
 }
 function saveRoster(list){
-  try{ localStorage.setItem(ROSTER_KEY, JSON.stringify(list)); return true; }
+  try{ localStorage.setItem(sk(ROSTER_KEY), JSON.stringify(list)); return true; }
   catch(err){ console.error('IIFL roster save failed:', err); return false; }
 }
 /*
@@ -654,10 +742,10 @@ function resolveProDraftDeclaration(f){
 }
 
 function loadClock(){
-  try{ const raw = localStorage.getItem(CLOCK_KEY); return raw ? JSON.parse(raw) : { day: 1 }; }
+  try{ const raw = localStorage.getItem(sk(CLOCK_KEY)); return raw ? JSON.parse(raw) : { day: 1 }; }
   catch(err){ return { day: 1 }; }
 }
-function saveClock(c){ try{ localStorage.setItem(CLOCK_KEY, JSON.stringify(c)); }catch(err){} }
+function saveClock(c){ try{ localStorage.setItem(sk(CLOCK_KEY), JSON.stringify(c)); }catch(err){} }
 function getCurrentDay(){ return loadClock().day; }
 function advanceClockByDays(n){ const c = loadClock(); c.day = Math.max(1, c.day + n); saveClock(c); return c.day; }
 function dateForDay(day){ const d = new Date(GAME_EPOCH); d.setDate(d.getDate() + (day-1)); return d; }
@@ -867,11 +955,11 @@ const INVITE_SPONSOR_NAMES = [
 ];
 const INVITE_REGISTRY_KEY = 'iifl_invite_registry_v1';
 function loadInviteRegistry(){
-  try{ const raw = localStorage.getItem(INVITE_REGISTRY_KEY); return raw ? JSON.parse(raw) : {}; }
+  try{ const raw = localStorage.getItem(sk(INVITE_REGISTRY_KEY)); return raw ? JSON.parse(raw) : {}; }
   catch(err){ return {}; }
 }
 function saveInviteRegistry(reg){
-  try{ localStorage.setItem(INVITE_REGISTRY_KEY, JSON.stringify(reg)); }catch(err){}
+  try{ localStorage.setItem(sk(INVITE_REGISTRY_KEY), JSON.stringify(reg)); }catch(err){}
 }
 function ordinal(n){
   const suf = ['th','st','nd','rd'], v = n % 100;
@@ -906,20 +994,20 @@ const JUVENILE_AGE_WEIGHTS = { 11:0.20, 12:0.19, 13:0.16, 14:0.13, 15:0.11, 16:0
 
 function loadFieldPools(){
   try{
-    const raw = localStorage.getItem(FIELD_KEY);
+    const raw = localStorage.getItem(sk(FIELD_KEY));
     return raw ? JSON.parse(raw) : { amateur:{}, juvenile:{} };
   }catch(err){ console.error('IIFL field pool load failed:', err); return { amateur:{}, juvenile:{} }; }
 }
 function saveFieldPools(pools){
-  try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
+  try{ localStorage.setItem(sk(FIELD_KEY), JSON.stringify(pools)); return true; }
   catch(err){
     console.error('IIFL field pool save failed, attempting cleanup:', err);
     if(typeof PROVINCES !== 'undefined' && typeof enforceProvincePoolCap === 'function'){
       PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 150));
-      try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
+      try{ localStorage.setItem(sk(FIELD_KEY), JSON.stringify(pools)); return true; }
       catch(err2){
         PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 40));
-        try{ localStorage.setItem(FIELD_KEY, JSON.stringify(pools)); return true; }
+        try{ localStorage.setItem(sk(FIELD_KEY), JSON.stringify(pools)); return true; }
         catch(err3){ console.error('IIFL field pool save still failing after aggressive cleanup:', err3); return false; }
       }
     }
@@ -1261,11 +1349,11 @@ function runJuvenileFiestaDay(pools, provinceId, day, poolOverride, resultsBuffe
 // something only visible if you happened to be standing in that specific pit.
 const RESULTS_LOG_KEY = 'iifl_juvenile_results_log_v1';
 function loadResultsLog(){
-  try{ const raw = localStorage.getItem(RESULTS_LOG_KEY); return raw ? JSON.parse(raw) : []; }
+  try{ const raw = localStorage.getItem(sk(RESULTS_LOG_KEY)); return raw ? JSON.parse(raw) : []; }
   catch(err){ return []; }
 }
 function saveResultsLog(log){
-  try{ localStorage.setItem(RESULTS_LOG_KEY, JSON.stringify(log)); }
+  try{ localStorage.setItem(sk(RESULTS_LOG_KEY), JSON.stringify(log)); }
   catch(err){ console.error('IIFL results log save failed:', err); }
 }
 function logNotableResult(entry){
@@ -1968,14 +2056,14 @@ function leaguesInProvince(provinceId){ return AMATEUR_LEAGUES.filter(l=>l.provi
 const LEAGUE_STATUS_KEY = 'iifl_league_status_v1';
 function loadLeagueStatus(){
   try{
-    const raw = localStorage.getItem(LEAGUE_STATUS_KEY);
+    const raw = localStorage.getItem(sk(LEAGUE_STATUS_KEY));
     const status = raw ? JSON.parse(raw) : {};
     AMATEUR_LEAGUES.forEach(l=>{ if(status[l.id] === undefined) status[l.id] = { active:true }; });
     return status;
   }catch(err){ console.error('IIFL league status load failed:', err); return {}; }
 }
 function saveLeagueStatus(status){
-  try{ localStorage.setItem(LEAGUE_STATUS_KEY, JSON.stringify(status)); return true; }
+  try{ localStorage.setItem(sk(LEAGUE_STATUS_KEY), JSON.stringify(status)); return true; }
   catch(err){ console.error('IIFL league status save failed:', err); return false; }
 }
 function isLeagueActive(id){ const s = loadLeagueStatus(); return s[id] ? s[id].active : true; }
@@ -2005,11 +2093,11 @@ function maybeFoldLeague(id){
 */
 const FA_POOL_KEY = 'iifl_free_agent_pool_v1';
 function loadFAPool(){
-  try{ const raw = localStorage.getItem(FA_POOL_KEY); return raw ? JSON.parse(raw) : []; }
+  try{ const raw = localStorage.getItem(sk(FA_POOL_KEY)); return raw ? JSON.parse(raw) : []; }
   catch(err){ return []; }
 }
 function saveFAPool(pool){
-  try{ localStorage.setItem(FA_POOL_KEY, JSON.stringify(pool)); return true; }
+  try{ localStorage.setItem(sk(FA_POOL_KEY), JSON.stringify(pool)); return true; }
   catch(err){ console.error('IIFL FA pool save failed:', err); return false; }
 }
 function addToFAPool(f, entryDay, reason){
@@ -2073,7 +2161,7 @@ const AMATEUR_ROSTER_SIZE = 8;
 const AMATEUR_MAX_AFFILIATES = 2;
 function loadAmateurTeamState(){
   try{
-    const raw = localStorage.getItem(AMATEUR_TEAM_STATE_KEY);
+    const raw = localStorage.getItem(sk(AMATEUR_TEAM_STATE_KEY));
     const state = raw ? JSON.parse(raw) : {};
     AMATEUR_LEAGUES.forEach(l=>{
       if(!state[l.id]) state[l.id] = { affiliateProTeamIds: [], rosterFighterIds: [] };
@@ -2082,7 +2170,7 @@ function loadAmateurTeamState(){
   }catch(err){ console.error('IIFL amateur team state load failed:', err); return {}; }
 }
 function saveAmateurTeamState(state){
-  try{ localStorage.setItem(AMATEUR_TEAM_STATE_KEY, JSON.stringify(state)); return true; }
+  try{ localStorage.setItem(sk(AMATEUR_TEAM_STATE_KEY), JSON.stringify(state)); return true; }
   catch(err){ console.error('IIFL amateur team state save failed:', err); return false; }
 }
 function amateurRosterOpenSlots(leagueId){
@@ -4033,6 +4121,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V36 · 2026-07-15</div>
+<div class="version-badge">FIGHT PIT · V38 · 2026-07-15</div>
 </body>
 </html>
