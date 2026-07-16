@@ -981,10 +981,15 @@ function saveRoster(list){
   try{ localStorage.setItem(sk(ROSTER_KEY), JSON.stringify(list)); return true; }
   catch(err){ console.error('IIFL roster save failed:', err); return false; }
 }
+// A real 365-day calendar year. The whole island calendar recurs annually on this
+// same cadence (nextJuvenileOpeningDay jumps to cycleYear+1's May 1, same month/day
+// every year) — so a fighter's age should follow the same real-year clock everything
+// else on the island already runs on, not an invented shorter unit.
+const DAYS_PER_FIGHTER_YEAR = 365;
 function birthDayForAge(age, today){
-  return Math.max(1, today - (age*365) - Math.floor(Math.random()*365));
+  return Math.max(1, today - (age*DAYS_PER_FIGHTER_YEAR) - Math.floor(Math.random()*DAYS_PER_FIGHTER_YEAR));
 }
-function ageFromBirthday(birthDay, today){ return Math.max(0, Math.floor((today-birthDay)/365)); }
+function ageFromBirthday(birthDay, today){ return Math.max(0, Math.floor((today-birthDay)/DAYS_PER_FIGHTER_YEAR)); }
 function syncFighterAge(f, today){
   if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
   f.age = ageFromBirthday(f.birthDay, today);
