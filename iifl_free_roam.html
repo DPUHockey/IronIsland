@@ -3014,7 +3014,10 @@ function render(){
   app.innerHTML = `
     <div class="ticket-header">
       <div><div class="ticket-eyebrow">Iron Island · Fight League</div><div class="ticket-title">${title}</div></div>
-      <div class="ticket-sub">${sub}</div>
+      <div style="display:flex; align-items:center; gap:14px;">
+        <div class="ticket-sub">${sub}</div>
+        <a href="iifl_home.html" style="font-family:var(--label); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--brass); border:1px solid var(--brass); padding:6px 12px; text-decoration:none; white-space:nowrap;">🏠 Home Hub</a>
+      </div>
     </div>
     <div class="calendar-banner">
       <span>Today: <b>${formatCalendarDate(getCurrentDay())}</b> · ${eventNameForDay(getCurrentDay())}</span>
@@ -5039,6 +5042,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V36 · 2026-07-15</div>
+<div class="version-badge">FREE ROAM · V37 · 2026-07-15</div>
 </body>
 </html>
