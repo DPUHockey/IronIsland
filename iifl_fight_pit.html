@@ -1119,7 +1119,6 @@ function generateJuvenileFieldFighter(weightClass, province, hometown){
   const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
   const opp = finalizeOpponent(stats, avgOvr, weightClass, province, age, hometown);
   opp.age = age;
-  f.ageSystemVersion = 2;
   opp.birthDay = birthDayForAge(age, getCurrentDay());
   opp.ageSystemVersion = 2;
   opp.talentTier = tier;
@@ -1750,7 +1749,6 @@ function runJuvenileIntake(pools, provinceId, day){
     const loc = pickWeightedPitLocation(province.id);
     const hometown = loc ? pick(loc.hometownPool) : undefined;
     const f = finalizeOpponent(stats, avgOvr, weightClass, province, age, hometown);
-    f.ageSystemVersion = 2;
     f.age = age;
     f.birthDay = birthDayForAge(age, day);
     f.ageSystemVersion = 2;
@@ -4290,6 +4288,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V44 · 2026-07-16</div>
+<div class="version-badge">FIGHT PIT · V45 · 2026-07-16</div>
 </body>
 </html>
