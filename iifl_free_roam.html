@@ -351,6 +351,22 @@ function sk(baseKey){
 // catalog the player actually controls; npcFighterIds are the others they've chosen to
 // bring into THIS world (opt-in per save, never automatic — see CREATED_FIGHTERS_KEY).
 // Both get cloned from the catalog into this save's own roster as independent copies.
+// Every key this game used BEFORE the save-namespacing system existed. Once any save
+// has been created, sk() always resolves to a namespaced key — these flat versions
+// become permanently orphaned (never read again) but don't disappear on their own,
+// which means they just sit there eating quota for nothing. Cleared out the moment a
+// save is created, since by then anything worth keeping has already been cloned into
+// that save's own namespaced copy.
+const LEGACY_FLAT_KEYS = [
+  'iifl_roster_v1', 'iifl_clock_v1', 'iifl_field_fighters_v3',
+  'iifl_invite_registry_v1', 'iifl_juvenile_results_log_v1',
+  'iifl_league_status_v1', 'iifl_free_agent_pool_v1',
+  'iifl_amateur_team_state_v1', 'iifl_free_roam_v1', 'iifl_junior_league_v1',
+];
+function cleanupLegacyFlatKeys(){
+  LEGACY_FLAT_KEYS.forEach(k=>{ try{ localStorage.removeItem(k); }catch(err){} });
+}
+
 function createNewSave(name, playableFighterId, npcFighterIds){
   const reg = loadSaveRegistry();
   const id = 'save_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7);
@@ -374,6 +390,7 @@ function createNewSave(name, playableFighterId, npcFighterIds){
     .map(f => ({ ...f, isPlayable: f.id === playableFighterId }));
   localStorage.setItem(`iifl_save_${id}__${ROSTER_KEY}`, JSON.stringify(clonedRoster));
 
+  cleanupLegacyFlatKeys();
   return id;
 }
 
@@ -1731,12 +1748,20 @@ function provincePoolCap(provinceId){
   // Kolsati that meant 700-800+ standing NPCs, and a fully-topped-up pool across all 8
   // provinces measured out to ~1.6MB of JSON, which combined with everything else this
   // save writes (results log, roam state, roster) was blowing well past the browser's
-  // localStorage quota and causing every single save write to silently fail. Pit
-  // rosters and leaderboards only ever need a few dozen fighters visible at once — a
-  // hard ceiling here doesn't cost any real gameplay depth, it just stops the pool from
-  // growing far past what anything actually displays.
+  // real localStorage limit (~5MB, confirmed empirically) and causing every single
+  // save write to silently fail.
+  //
+  // 100-250/province, worked back from actual capacity math rather than just "what
+  // seemed safe": Junior's 40 teams x 10 roster spots turn over ~25%/year (mandatory
+  // exit at 21) = ~100 new draftees needed annually island-wide. A real draft (not
+  // just "everyone declared gets picked") wants ~1.7x that many declaring, and 14-17
+  // year olds are ~40% of the standing Juvenile population by age distribution — so
+  // the draft pipeline alone only needs ~425 total island-wide (~53/province average).
+  // This range clears that with real margin AND gives enough volume for pit variety /
+  // tournament brackets, which was always the bigger driver of pool size than the
+  // draft pipeline specifically.
   const target = pitLocationsForProvince(provinceId).reduce((s,l)=> s + l.perClass*3, 0);
-  return Math.min(120, Math.max(60, Math.round(target * 0.5)));
+  return Math.min(250, Math.max(100, Math.round(target * 0.5)));
 }
 function enforceProvincePoolCap(pools, provinceId, capOverride){
   const pool = pools.juvenile[provinceId];
@@ -1814,6 +1839,12 @@ function repairOrphanedHometowns(pools){
 }
 
 function catchUpJuvenileSimulation(){
+  // Retroactively cleans up orphaned pre-save-system data for saves that already
+  // existed before cleanupLegacyFlatKeys() was added to createNewSave() — otherwise
+  // this quota-eating dead weight only ever gets cleared for BRAND NEW saves, leaving
+  // anyone with an existing save stuck. Safe once a save is active: sk() always
+  // resolves to the namespaced keys at that point, so the flat ones are guaranteed unused.
+  if(getActiveSaveId()) cleanupLegacyFlatKeys();
   const pools = loadFieldPools();
   if(!pools.juvenile) pools.juvenile = {};
   PROVINCES.forEach(p=> seedJuvenilePoolInPlace(pools, p.id));
@@ -5059,6 +5090,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V38 · 2026-07-15</div>
+<div class="version-badge">FREE ROAM · V40 · 2026-07-15</div>
 </body>
 </html>
