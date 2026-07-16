@@ -166,7 +166,7 @@
 </style>
 </head>
 <body>
-<div class="map-bg"><img src="iron_island_map.jpg" alt="Iron Island"><div class="map-title-overlay"><div class="mt-main">IRON ISLAND</div><div class="mt-sub">EIGHT PROVINCES &middot; ONE ISLAND &middot; NO EASY ROADS</div></div><div class="map-hotspot" data-province="sherwood" style="left:48.8%; top:20.4%; --hc:#A0623B;"><div class="hotspot-label">Sherwood Province</div></div><div class="map-hotspot" data-province="carpathia" style="left:70.6%; top:72.7%; --hc:#5B4070;"><div class="hotspot-label">Targu Province</div></div><div class="map-hotspot" data-province="kolsati" style="left:30.0%; top:70.4%; --hc:#5E7A93;"><div class="hotspot-label">Kolsati District</div></div><div class="map-hotspot" data-province="bay" style="left:50.0%; top:50.4%; --hc:#6E8C9C;"><div class="hotspot-label">White Bay Province</div></div><div class="map-hotspot" data-province="ditiero" style="left:51.2%; top:78.2%; --hc:#7C5491;"><div class="hotspot-label">Di Tiero Province</div></div><div class="map-hotspot" data-province="northeast" style="left:70.0%; top:23.8%; --hc:#9C4242;"><div class="hotspot-label">Northeast Territory</div></div><div class="map-hotspot" data-province="alexandretta" style="left:29.4%; top:32.7%; --hc:#5C7C5E;"><div class="hotspot-label">Alexandretta Province</div></div><div class="map-hotspot" data-province="gazon" style="left:59.4%; top:22.1%; --hc:#C8943F;"><div class="hotspot-label">Gazon Province</div></div></div>
+<div class="map-bg"><img src="iron_island_map.jpg" alt="Iron Island"><div class="map-title-overlay"><div class="mt-main">IRON ISLAND</div><div class="mt-sub">EIGHT PROVINCES &middot; ONE ISLAND &middot; NO EASY ROADS</div></div><div class="map-hotspot" data-province="sherwood" style="left:48.8%; top:20.4%; --hc:#A0623B;"><div class="hotspot-label">Sherwood Province</div></div><div class="map-hotspot" data-province="carpathia" style="left:70.6%; top:72.7%; --hc:#5B4070;"><div class="hotspot-label">The Province of Targu</div></div><div class="map-hotspot" data-province="kolsati" style="left:30.0%; top:70.4%; --hc:#5E7A93;"><div class="hotspot-label">Kolsati District</div></div><div class="map-hotspot" data-province="bay" style="left:50.0%; top:50.4%; --hc:#6E8C9C;"><div class="hotspot-label">White Bay Province</div></div><div class="map-hotspot" data-province="ditiero" style="left:51.2%; top:78.2%; --hc:#7C5491;"><div class="hotspot-label">Di Tiero Province</div></div><div class="map-hotspot" data-province="northeast" style="left:70.0%; top:23.8%; --hc:#9C4242;"><div class="hotspot-label">Northeast Territory</div></div><div class="map-hotspot" data-province="alexandretta" style="left:29.4%; top:32.7%; --hc:#5C7C5E;"><div class="hotspot-label">Alexandretta Province</div></div><div class="map-hotspot" data-province="gazon" style="left:59.4%; top:22.1%; --hc:#C8943F;"><div class="hotspot-label">Gazon Province</div></div></div>
 <div class="app" id="app"></div>
 
 <script>
@@ -559,7 +559,7 @@ const PROVINCES = [
   { flag:'Provincial%20Flags/sherwood.jpg', id:'sherwood', name:'Sherwood Province', color:'#A0623B', pit:'Frontenac Fight House' },
   { flag:'Provincial%20Flags/gazon.jpg', id:'gazon', name:'Gazon Province', color:'#C8943F', pit:'The Dust Circle' },
   { flag:'Provincial%20Flags/ditiero.jpg', id:'ditiero', name:'Di Tiero Province', color:'#7C5491', pit:"Big Jim's Fightin' Pit" },
-  { flag:'Provincial%20Flags/carpathia.jpg', id:'carpathia', name:'Targu Province', color:'#5B4070', pit:'The Hollow Ring' },
+  { flag:'Provincial%20Flags/carpathia.jpg', id:'carpathia', name:'The Province of Targu', color:'#5B4070', pit:'The Hollow Ring' },
   { flag:'Provincial%20Flags/northeast.jpg', id:'northeast', name:'Northeast Territory', color:'#9C4242', pit:'Dojo Reach' },
   { flag:'Provincial%20Flags/bay.jpg', id:'bay', name:'White Bay Province', color:'#6E8C9C', pit:'The Fairground Ring' },
 ];
@@ -988,14 +988,6 @@ function checkOffSeasonInjury(f){
 /* =========================================================================
    HOME HUB — rendering and event wiring
 ========================================================================= */
-const MODES = [
-  { key:'creator', href:'iifl_character_creator.html', icon:'🥊', tc:'#C9A23C', title:'Character Creator', desc:'Start a new fighter, or manage rosters.' },
-  { key:'fightpit', href:'iifl_fight_pit.html', icon:'🏟️', tc:'#A6342A', title:'Fight Pit', desc:'Juvenile & Amateur season fights.' },
-  { key:'freeroam', href:'iifl_free_roam.html', icon:'🚶', tc:'#5E7A93', title:'Free Roam', desc:'Walk the city, visit pits, read the paper.' },
-  { key:'junior', href:'iifl_junior_league.html', icon:'🏆', tc:'#8E7228', title:'Junior League', desc:'Draft, team season, playoffs.' },
-  { key:'exhibition', href:'iifl_fight_engine.html', icon:'⚔️', tc:'#8B8070', title:'Exhibition', desc:'One-off fights, any matchup.' },
-];
-
 function phaseLabel(phase){
   if(phase==='regular') return 'In Season';
   if(phase==='playoffs') return 'Playoffs';
@@ -1040,23 +1032,61 @@ function provincialRank(f){
 }
 
 /* ============================ FAMILY (mate / children) ============================ */
-const FAMILY_FIRST_NAMES = ['Dot','Marge','Vi','Peg','Ruth','Alma','Frannie','Gale','Nell','June','Sal','Roz','Trudy','Iris','Bev','Lorraine','Connie','Edie','Mavis','Pearl','Walt','Gus','Hank','Mickey','Lou','Sid','Ray','Duke','Chet','Earl'];
+const MIN_MARRIAGE_AGE = 17;
+const FEMALE_FIRST_NAMES = ['Dot','Marge','Vi','Peg','Ruth','Alma','Frannie','Gale','Nell','June','Sal','Roz','Trudy','Iris','Bev','Lorraine','Connie','Edie','Mavis','Pearl','Dolores','Shirley','Norma','Wanda','Eileen'];
+const CHILD_FIRST_NAMES = ['Bobby','Tommy','Frankie','Jimmy','Sally','Betty','Patty','Donny','Kenny','Ronnie','Peggy','Sandy','Mikey','Terry','Debbie'];
 const FAMILY_LAST_NAMES = ['Kowalczyk','Beauchamp','Dunmore','Pelletier','Ostrowski','Vachon','Callaghan','Sudbury','Marchetti','Whitlock','Trudeau','Novak','Fitchett','Delacroix','Hartigan'];
-function randomFamilyName(){
-  return `${FAMILY_FIRST_NAMES[Math.floor(Math.random()*FAMILY_FIRST_NAMES.length)]} ${FAMILY_LAST_NAMES[Math.floor(Math.random()*FAMILY_LAST_NAMES.length)]}`;
+
+// Physical/athletic archetypes for mate candidates — the "lean" is what a child stands
+// to inherit, so this is the hook that actually lets a choice here shape a future fighter.
+const FEMALE_TRAITS = [
+  { label:'Tall & Rangy', lean:'reach', heightRange:[68,74], bio:'Grew up taller than most of the boys in her class.' },
+  { label:'Compact & Scrappy', lean:'quickness', heightRange:[59,63], bio:'Small, fast, and never backed down from a scrap.' },
+  { label:'Stocky & Powerful', lean:'power', heightRange:[61,65], bio:"Built strong — hauled feed sacks before she could drive." },
+  { label:'Lean & Fast', lean:'speed', heightRange:[64,68], bio:'All legs and lungs, a natural runner.' },
+  { label:'Athletic & Balanced', lean:'balanced', heightRange:[63,67], bio:'A good all-around athlete, solid at everything.' },
+  { label:'Tough as Nails', lean:'toughness', heightRange:[62,66], bio:'Took her share of bumps growing up and never complained once.' },
+  { label:'Graceful & Agile', lean:'agility', heightRange:[63,67], bio:'Danced before she could walk straight — light on her feet.' },
+];
+
+let mateCandidates = null; // transient, regenerated each time "Find a Mate" is clicked
+
+function generateMateCandidates(f){
+  const list = [];
+  for(let i=0;i<5;i++){
+    const province = PROVINCES[Math.floor(Math.random()*PROVINCES.length)];
+    const settlements = SETTLEMENT_DATA[province.id] || [];
+    const settlement = settlements.length ? settlements[Math.floor(Math.random()*settlements.length)].name : province.name;
+    const trait = FEMALE_TRAITS[Math.floor(Math.random()*FEMALE_TRAITS.length)];
+    const [lo,hi] = trait.heightRange;
+    const heightIn = lo + Math.floor(Math.random()*(hi-lo+1));
+    const age = Math.max(MIN_MARRIAGE_AGE, (f.age||18) + Math.floor(Math.random()*7) - 3);
+    list.push({
+      name: `${FEMALE_FIRST_NAMES[Math.floor(Math.random()*FEMALE_FIRST_NAMES.length)]} ${FAMILY_LAST_NAMES[Math.floor(Math.random()*FAMILY_LAST_NAMES.length)]}`,
+      age, heightIn, provinceId: province.id, provinceName: province.name, settlement,
+      trait: trait.label, lean: trait.lean, bio: trait.bio,
+    });
+  }
+  return list;
 }
-function findMateForFighter(f){
-  f.spouse = { name: randomFamilyName(), marriedDay: getCurrentDay() };
+function marryFighterTo(f, candidate){
+  f.spouse = { ...candidate, marriedDay: getCurrentDay() };
   f.children = f.children || [];
+  mateCandidates = null;
 }
 function haveChildForFighter(f){
   if(!f.spouse) return;
   f.children = f.children || [];
+  const momHeight = f.spouse.heightIn;
+  const dadHeight = f.heightIn || 66;
+  const heightIn = Math.round((momHeight+dadHeight)/2 + (Math.random()*6-3));
+  const lean = Math.random() < 0.6 ? f.spouse.lean : 'balanced'; // mom's traits favored, dad's own lean isn't tracked as data yet
   const surname = f.spouse.name.split(' ').slice(-1)[0];
-  const childName = `${FAMILY_FIRST_NAMES[Math.floor(Math.random()*FAMILY_FIRST_NAMES.length)]} ${surname}`;
-  f.children.push({ name: childName, birthDay: getCurrentDay() });
+  const childName = `${CHILD_FIRST_NAMES[Math.floor(Math.random()*CHILD_FIRST_NAMES.length)]} ${surname}`;
+  f.children.push({ name: childName, birthDay: getCurrentDay(), heightIn, lean });
 }
 function ageInYearsFromDay(birthDay, today){ return Math.max(0, Math.floor((today - birthDay) / 365)); }
+function heightLabel(inches){ if(!inches) return ''; const ft=Math.floor(inches/12), inch=inches%12; return `${ft}'${inch}"`; }
 
 /* ============================ MILESTONES & HEADLINES ============================ */
 function milestonesFor(f){
@@ -1085,6 +1115,19 @@ function recentHeadlinesFor(f){
     text: `${inviteHeadline(r.place)} — ${r.event}`,
     date: new Date(r.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
   }));
+}
+
+// Birthdays — the single source of truth for age everywhere in the game now (mirrors
+// fight_pit.html / free_roam.html). Every fighter has a birthDay; age is always derived
+// from it, never incremented by hand — so it stays correct no matter how time passes
+// (fighting, walking, or the Home Hub's sim controls).
+function birthDayForAge(age, today){
+  return Math.max(1, today - (age*365) - Math.floor(Math.random()*365));
+}
+function ageFromBirthday(birthDay, today){ return Math.max(0, Math.floor((today-birthDay)/365)); }
+function syncFighterAge(f, today){
+  if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
+  f.age = ageFromBirthday(f.birthDay, today);
 }
 
 function renderApp(){
@@ -1118,6 +1161,13 @@ function renderApp(){
   }
 
   const playable = roster.find(f=> f.isPlayable) || roster[0];
+  let agedAnyone = false;
+  roster.forEach(f=>{
+    const before = f.age;
+    syncFighterAge(f, today);
+    if(f.age !== before) agedAnyone = true;
+  });
+  if(agedAnyone) saveRoster(roster);
   const npcCount = roster.length - 1;
   const tier = fighterStatusLine(playable);
 
@@ -1177,30 +1227,38 @@ function renderApp(){
 
   /* ---------- Family ---------- */
   const children = playable.children || [];
-  const familyHtml = playable.spouse
-    ? `
+  let familyHtml;
+  if(playable.spouse){
+    familyHtml = `
       <div class="info-row"><span>Married to</span><b>${playable.spouse.name}</b></div>
-      ${children.length ? children.map(c=> `<div class="info-row"><span>Child</span><b>${c.name}</b> <span>(age ${ageInYearsFromDay(c.birthDay, today)})</span></div>`).join('') : `<div class="empty-note">No children yet.</div>`}
-      <div class="btn-row"><span></span><button class="btn btn-small" id="btn-have-child">Have a Child</button></div>
-    `
-    : `
+      <div class="info-row"><span>Her build</span><span>${playable.spouse.trait || '—'}${playable.spouse.heightIn ? ' · '+heightLabel(playable.spouse.heightIn) : ''}</span></div>
+      <div class="info-row"><span>From</span><span>${playable.spouse.settlement || ''}${playable.spouse.provinceName ? ', '+playable.spouse.provinceName : ''}</span></div>
+      ${children.length ? children.map(c=> `<div class="info-row"><span>Child</span><b>${c.name}</b> <span>age ${ageInYearsFromDay(c.birthDay, today)} · ${heightLabel(c.heightIn)} projected · ${c.lean} lean</span></div>`).join('') : `<div class="empty-note">No children yet.</div>`}
+      <div class="btn-row"><button class="btn btn-small" id="btn-annul">Annul &amp; Look Again</button><button class="btn btn-small" id="btn-have-child">Have a Child</button></div>
+    `;
+  } else if(playable.age < MIN_MARRIAGE_AGE){
+    familyHtml = `<div class="empty-note">${playable.name} can look for a mate once they turn ${MIN_MARRIAGE_AGE}.</div>`;
+  } else if(mateCandidates){
+    familyHtml = mateCandidates.map((c,i)=> `
+      <div class="info-row" style="flex-direction:column; align-items:flex-start; gap:4px;">
+        <div style="display:flex; justify-content:space-between; width:100%;"><b>${c.name}</b><span>Age ${c.age}</span></div>
+        <div style="font-family:var(--mono); font-size:10.5px; color:var(--muted);">${c.trait} · ${heightLabel(c.heightIn)} · ${c.settlement}, ${c.provinceName}</div>
+        <div style="font-family:var(--body); font-size:11.5px; color:var(--bone-dim);">${c.bio}</div>
+        <div class="btn-row" style="width:100%; margin-top:4px;"><span></span><button class="btn btn-small btn-primary" data-choose-mate="${i}">Propose →</button></div>
+      </div>
+    `).join('') + `<div class="btn-row"><span></span><button class="btn btn-small" id="btn-reroll-mates">See Different Women</button></div>`;
+  } else {
+    familyHtml = `
       <div class="empty-note">${playable.name} hasn't found a mate yet.</div>
       <div class="btn-row"><span></span><button class="btn btn-small" id="btn-find-mate">Find a Mate</button></div>
     `;
+  }
 
   /* ---------- Milestones ---------- */
   const milestones = milestonesFor(playable);
   const milestonesHtml = milestones.length
     ? `<div class="milestone-row">${milestones.map(m=> `<span class="milestone-badge">${m}</span>`).join('')}</div>`
     : `<div class="empty-note">No milestones yet — get some wins on the board.</div>`;
-
-  const modeCards = MODES.map(m=>`
-    <a class="mode-card" style="--tc:${m.tc}" href="${m.href}">
-      <span class="mode-icon">${m.icon}</span>
-      <div class="mode-title">${m.title}</div>
-      <div class="mode-desc">${m.desc}</div>
-    </a>
-  `).join('');
 
   document.getElementById('app').innerHTML = `
     <div class="ticket-header">
@@ -1273,13 +1331,19 @@ function renderApp(){
       </section>
 
       <section>
-        <div class="section-label">Game Modes</div>
-        <div class="mode-grid">${modeCards}</div>
+        <div class="section-label">Roster</div>
+        <div class="info-row"><span>${npcCount ? `${npcCount} other created fighter${npcCount===1?'':'s'} in this world` : 'No other fighters in this world'}</span></div>
+        <div class="btn-row"><span></span><a class="btn btn-small" href="iifl_character_creator.html">Add / Manage Fighters →</a></div>
       </section>
 
       <section>
-        <div class="section-label">Other</div>
-        <div class="info-row"><span>${npcCount ? `${npcCount} other created fighter${npcCount===1?'':'s'} in this world` : 'No other fighters in this world'}</span></div>
+        <div class="section-label">Junior League</div>
+        <div class="empty-note">Browse the three leagues, franchises, and standings.</div>
+        <div class="btn-row"><span></span><a class="btn btn-small" href="iifl_junior_league.html">View Junior League →</a></div>
+      </section>
+
+      <section>
+        <div class="section-label">Other Saves</div>
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-switch-save">Switch or Start Another Game →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
@@ -1426,7 +1490,29 @@ function wireEvents(cycleYear, roster, playable){
 
   const findMateBtn = document.getElementById('btn-find-mate');
   if(findMateBtn) findMateBtn.onclick = ()=>{
-    findMateForFighter(playable);
+    mateCandidates = generateMateCandidates(playable);
+    renderApp();
+  };
+
+  const rerollBtn = document.getElementById('btn-reroll-mates');
+  if(rerollBtn) rerollBtn.onclick = ()=>{
+    mateCandidates = generateMateCandidates(playable);
+    renderApp();
+  };
+
+  document.querySelectorAll('[data-choose-mate]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const candidate = mateCandidates[parseInt(btn.dataset.chooseMate, 10)];
+      marryFighterTo(playable, candidate);
+      saveRoster(roster);
+      renderApp();
+    };
+  });
+
+  const annulBtn = document.getElementById('btn-annul');
+  if(annulBtn) annulBtn.onclick = ()=>{
+    playable.spouse = null;
+    mateCandidates = null;
     saveRoster(roster);
     renderApp();
   };
@@ -1491,13 +1577,14 @@ function showProvinceDetail(provinceId){
     const jrTeam = JR_LEAGUES_DISPLAY.flatMap(l=> l.teams.map(t=>({...t, league:l.name}))).find(t=> t.city === s.name);
     const cityPits = pits.filter(p=> p.hometownPool.includes(s.name));
     return `
-      <div class="fighter-card" style="flex-direction:column; align-items:flex-start; gap:6px;">
+      <div class="fighter-card" data-city-link="${encodeURIComponent(s.name)}" style="flex-direction:column; align-items:flex-start; gap:6px; cursor:pointer;">
         <div style="display:flex; justify-content:space-between; width:100%;">
           <div class="fighter-name">${s.name}</div>
           <div class="fighter-meta">${s.tier} · pop. ${s.population.toLocaleString()}</div>
         </div>
         ${jrTeam ? `<div class="fighter-meta">🏆 ${jrTeam.city} ${jrTeam.nickname} — ${jrTeam.league}</div>` : ''}
         ${cityPits.length ? cityPits.map(p=>`<div class="fighter-meta">🥊 ${p.key}</div>`).join('') : `<div class="fighter-meta" style="opacity:0.5;">No standing pit here yet</div>`}
+        <div class="fighter-status" style="width:100%; text-align:right; color:var(--brass);">Hit the Streets →</div>
       </div>
     `;
   }).join('');
@@ -1527,6 +1614,12 @@ function showProvinceDetail(provinceId){
 
   document.getElementById('close-province-modal').onclick = ()=> overlay.remove();
   overlay.onclick = (e)=>{ if(e.target === overlay) overlay.remove(); };
+  overlay.querySelectorAll('[data-city-link]').forEach(el=>{
+    el.onclick = (e)=>{
+      e.stopPropagation();
+      window.location.href = `iifl_free_roam.html?province=${encodeURIComponent(provinceId)}&city=${el.dataset.cityLink}`;
+    };
+  });
 }
 
 function wireMapClicks(){
