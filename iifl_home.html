@@ -1130,9 +1130,32 @@ function birthDayForAge(age, today){
   return Math.max(1, today - (age*DAYS_PER_FIGHTER_YEAR) - Math.floor(Math.random()*DAYS_PER_FIGHTER_YEAR));
 }
 function ageFromBirthday(birthDay, today){ return Math.max(0, Math.floor((today-birthDay)/DAYS_PER_FIGHTER_YEAR)); }
+
+// Repairs birthDay values saved under the OLD 63-day-year system, which collapse to a
+// near-zero apparent age once reinterpreted under the 365-day divisor. entryDay is real
+// ground truth where available (juvenile intake always starts at exactly 11); everything
+// else falls back to a rough fights-played estimate rather than trusting the already-
+// corrupted age field. Gated by ageSystemVersion so it only ever runs once per fighter.
+function estimateAgeFallback(f){
+  const totalFights = f.record ? (f.record.wins||0)+(f.record.losses||0) : 0;
+  if(f.juniorTeamId || f.amateurLeagueId){
+    return Math.min(35, Math.max(14, 16 + Math.round(totalFights / 12)));
+  }
+  return Math.min(18, Math.max(11, 11 + Math.round(totalFights / 7)));
+}
 function syncFighterAge(f, today){
-  if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
-  f.age = ageFromBirthday(f.birthDay, today);
+  if(f.ageSystemVersion === 2){
+    if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
+    f.age = ageFromBirthday(f.birthDay, today);
+    return;
+  }
+  if(f.entryDay){
+    f.age = 11 + Math.floor((today - f.entryDay) / DAYS_PER_FIGHTER_YEAR);
+  } else {
+    f.age = estimateAgeFallback(f);
+  }
+  f.birthDay = birthDayForAge(f.age, today);
+  f.ageSystemVersion = 2;
 }
 
 function renderApp(){
@@ -1352,7 +1375,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-switch-save">Switch or Start Another Game →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V7 · 2026-07-16</div>
+        <div class="version-badge">HOME · V8 · 2026-07-16</div>
       </footer>
     </div>
   `;
@@ -1426,7 +1449,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V6 · 2026-07-15</div>
+        <div class="version-badge">HOME · V8 · 2026-07-16</div>
       </footer>
     </div>
   `;
