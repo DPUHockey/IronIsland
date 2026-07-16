@@ -1070,8 +1070,13 @@ function renderApp(){
         <div class="section-label">Game Modes</div>
         <div class="mode-grid">${modeCards}</div>
       </section>
+
+      <section>
+        <div class="section-label">Other Saves</div>
+        <button class="btn" id="btn-switch-save">Switch or Start Another Game →</button>
+      </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V5 · 2026-07-15</div>
+        <div class="version-badge">HOME · V6 · 2026-07-15</div>
       </footer>
     </div>
   `;
@@ -1145,7 +1150,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V5 · 2026-07-15</div>
+        <div class="version-badge">HOME · V6 · 2026-07-15</div>
       </footer>
     </div>
   `;
@@ -1189,6 +1194,12 @@ function renderSaveSelectScreen(){
 }
 
 function wireEvents(cycleYear, roster){
+  const switchSaveBtn = document.getElementById('btn-switch-save');
+  if(switchSaveBtn) switchSaveBtn.onclick = ()=>{
+    setActiveSaveId(null); // deselects, doesn't delete — the save itself is untouched
+    renderApp();
+  };
+
   const stayBtn = document.getElementById('btn-stay');
   if(stayBtn) stayBtn.onclick = ()=>{
     // View-only — nothing to do here but acknowledge. Nothing on the calendar moves.
