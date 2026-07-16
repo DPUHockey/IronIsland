@@ -239,6 +239,95 @@
 <script>
 /* ============================ SHARED DATA (mirrors character creator) ============================ */
 
+/* ============================ SAVE REGISTRY ============================ */
+/*
+  Every game save is a fully independent world: its own clock, its own roster, its own
+  field pools, its own fight results — nothing shared between saves except this registry
+  itself and the global created-fighters catalog (see CREATED_FIGHTERS_KEY below). A
+  fighter built in the Character Creator doesn't belong to any save until it's actually
+  added to one; from that point on each save tracks its own evolving copy independently
+  (Karza's career in "IronOne" and Karza's career in some other save, if he were ever
+  added to two, would diverge completely — they're snapshots, not live-shared records).
+
+  sk() is the mechanism: every existing storage key in every file gets wrapped with it
+  at the point of use, so `localStorage.getItem(sk(CLOCK_KEY))` becomes
+  `localStorage.getItem(sk(CLOCK_KEY))` and now transparently reads/writes the ACTIVE
+  save's own copy of that data. No stored key's declaration or meaning changes — only
+  which save's namespace it's actually reading/writing.
+*/
+const SAVE_REGISTRY_KEY = 'iifl_save_registry_v1';
+const CREATED_FIGHTERS_KEY = 'iifl_created_fighters_v1'; // global catalog, NOT save-namespaced
+
+function loadSaveRegistry(){
+  try{
+    const raw = localStorage.getItem(SAVE_REGISTRY_KEY);
+    return raw ? JSON.parse(raw) : { saves: [], activeSaveId: null };
+  }catch(err){ console.error('IIFL save registry load failed:', err); return { saves: [], activeSaveId: null }; }
+}
+function saveSaveRegistry(reg){
+  try{ localStorage.setItem(SAVE_REGISTRY_KEY, JSON.stringify(reg)); return true; }
+  catch(err){ console.error('IIFL save registry save failed:', err); return false; }
+}
+function getActiveSaveId(){ return loadSaveRegistry().activeSaveId; }
+function getActiveSave(){
+  const reg = loadSaveRegistry();
+  return reg.saves.find(s=> s.id === reg.activeSaveId) || null;
+}
+function setActiveSaveId(saveId){
+  const reg = loadSaveRegistry();
+  reg.activeSaveId = saveId;
+  saveSaveRegistry(reg);
+}
+
+// The wrapper every storage key gets threaded through. Falls back to the raw base key
+// when no save is active yet (e.g. mid-creation, or old data from before this system
+// existed) rather than silently losing access to it.
+function sk(baseKey){
+  const sid = getActiveSaveId();
+  return sid ? `iifl_save_${sid}__${baseKey}` : baseKey;
+}
+
+// Creates a brand new, fully independent save: fresh clock at Day 1 (May 1, 1958),
+// no records, no roster. playableFighterId is the one fighter from the created-fighters
+// catalog the player actually controls; npcFighterIds are the others they've chosen to
+// bring into THIS world (opt-in per save, never automatic — see CREATED_FIGHTERS_KEY).
+// Both get cloned from the catalog into this save's own roster as independent copies.
+function createNewSave(name, playableFighterId, npcFighterIds){
+  const reg = loadSaveRegistry();
+  const id = 'save_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7);
+  reg.saves.push({
+    id, name, createdAt: Date.now(),
+    playableFighterId, npcFighterIds: npcFighterIds || [],
+  });
+  reg.activeSaveId = id;
+  saveSaveRegistry(reg);
+
+  // Fresh clock for this save, independent of every other save's timeline.
+  localStorage.setItem(`iifl_save_${id}__${CLOCK_KEY}`, JSON.stringify({ day: 1 }));
+
+  // Clone the chosen fighters out of the global catalog into this save's own roster —
+  // from here on they're this save's copies, not the catalog's.
+  const catalog = loadCreatedFighters();
+  const allIds = [playableFighterId, ...(npcFighterIds || [])].filter(Boolean);
+  const clonedRoster = allIds
+    .map(fid => catalog.find(f=> f.id === fid))
+    .filter(Boolean)
+    .map(f => ({ ...f, isPlayable: f.id === playableFighterId }));
+  localStorage.setItem(`iifl_save_${id}__${ROSTER_KEY}`, JSON.stringify(clonedRoster));
+
+  return id;
+}
+
+function loadCreatedFighters(){
+  try{ const raw = localStorage.getItem(CREATED_FIGHTERS_KEY); return raw ? JSON.parse(raw) : []; }
+  catch(err){ console.error('IIFL created-fighters catalog load failed:', err); return []; }
+}
+function saveCreatedFighters(list){
+  try{ localStorage.setItem(CREATED_FIGHTERS_KEY, JSON.stringify(list)); return true; }
+  catch(err){ console.error('IIFL created-fighters catalog save failed:', err); return false; }
+}
+
+
 const ROSTER_KEY = 'iifl_roster_v1';
 
 const PROVINCES = [
@@ -289,12 +378,12 @@ function buildSilhouetteSM(app){
 
 function loadRoster(){
   try{
-    const raw = localStorage.getItem(ROSTER_KEY);
+    const raw = localStorage.getItem(sk(ROSTER_KEY));
     return raw ? JSON.parse(raw) : [];
   }catch(err){ console.error('IIFL roster load failed:', err); return []; }
 }
 function saveRoster(list){
-  try{ localStorage.setItem(ROSTER_KEY, JSON.stringify(list)); return true; }
+  try{ localStorage.setItem(sk(ROSTER_KEY), JSON.stringify(list)); return true; }
   catch(err){ console.error('IIFL roster save failed:', err); return false; }
 }
 function ensureRecord(f){
@@ -420,7 +509,7 @@ function projectAdultSize(f){
 const CLOCK_KEY = 'iifl_clock_v1';
 const GAME_EPOCH = new Date(1958, 2, 3); // Monday, March 3 1958 = Day 1, island-wide
 function loadClock(){
-  try{ const raw = localStorage.getItem(CLOCK_KEY); return raw ? JSON.parse(raw) : { day: 1 }; }
+  try{ const raw = localStorage.getItem(sk(CLOCK_KEY)); return raw ? JSON.parse(raw) : { day: 1 }; }
   catch(err){ return { day: 1 }; }
 }
 function getCurrentDay(){ return loadClock().day; }
@@ -1058,6 +1147,6 @@ function applyResultToRoster(){
 
 render();
 </script>
-<div class="version-badge">FIGHT ENGINE · V10 · 2026-07-15</div>
+<div class="version-badge">FIGHT ENGINE · V11 · 2026-07-15</div>
 </body>
 </html>
