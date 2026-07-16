@@ -380,7 +380,7 @@ const PROVINCES = [
   { flag:'Provincial%20Flags/sherwood.jpg', id:'sherwood', name:'Sherwood Province', color:'#A0623B', pit:'Frontenac Fight House', primary:['mma','brawler'], secondary:['boxer'] },
   { flag:'Provincial%20Flags/gazon.jpg', id:'gazon', name:'Gazon Province', color:'#C8943F', pit:'The Dust Circle', primary:['boxer'], secondary:[] },
   { flag:'Provincial%20Flags/ditiero.jpg', id:'ditiero', name:'Di Tiero Province', color:'#7C5491', pit:"Big Jim's Fightin' Pit", primary:['karate'], secondary:['brawler'] },
-  { flag:'Provincial%20Flags/carpathia.jpg', id:'carpathia', name:'Targu Banshea Province', color:'#5B4070', pit:'The Hollow Ring', primary:['sambo'], secondary:['judo'] },
+  { flag:'Provincial%20Flags/carpathia.jpg', id:'carpathia', name:'The Province of Targu', color:'#5B4070', pit:'The Hollow Ring', primary:['sambo'], secondary:['judo'] },
   { flag:'Provincial%20Flags/northeast.jpg', id:'northeast', name:'Northeast Territory', color:'#9C4242', pit:'Dojo Reach', primary:['sambo','judo'], secondary:['catch'] },
   { flag:'Provincial%20Flags/bay.jpg', id:'bay', name:'White Bay Province', color:'#6E8C9C', pit:'The Fairground Ring', primary:['wrestler','catch'], secondary:[] },
 ];
@@ -465,6 +465,23 @@ function applyPendingGrowth(f){
   }
 }
 
+// Birthdays — the single source of truth for age from here on. Every fighter (player or
+// NPC) gets a birthDay (absolute game-clock day); age is always DERIVED from it via
+// syncFighterAge, never incremented by hand. This replaces the old "age up when a season
+// of fights completes" mechanic, which left anyone who skipped time without fighting
+// (or any NPC who wasn't the player's direct opponent) never aging at all. Draft
+// eligibility, growth curves, and everything else that reads f.age now stays correct
+// regardless of how time passes. birthDayForAge picks a random day-of-year offset so
+// birthdays spread out naturally instead of clustering on day 1.
+function birthDayForAge(age, today){
+  return Math.max(1, today - (age*365) - Math.floor(Math.random()*365));
+}
+function ageFromBirthday(birthDay, today){ return Math.max(0, Math.floor((today-birthDay)/365)); }
+function syncFighterAge(f, today){
+  if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
+  f.age = ageFromBirthday(f.birthDay, today);
+}
+
 function ensureFighterDefaults(f){
   if(!f.record) f.record = { wins:0, losses:0 };
   if(!f.fightLog) f.fightLog = [];
@@ -473,6 +490,7 @@ function ensureFighterDefaults(f){
   if(!f.amateurSeason) f.amateurSeason = null;
   if(!f.amateurSeasonHistory) f.amateurSeasonHistory = [];
   if(!f.age) f.age = 12;
+  syncFighterAge(f, getCurrentDay());
   if(!f.talentTier) f.talentTier = 'normal';
   if(f.juvenileHomeProvinceId === undefined){
     // Backfill for fighters who signed at a pit in Free Roam before this field existed
@@ -1052,6 +1070,7 @@ function generateAmateurFieldFighter(division, weightClass, province, leagueId){
   opp.provinceId = province.id;
   opp.leagueId = leagueId;
   opp.age = age;
+  opp.birthDay = birthDayForAge(age, getCurrentDay());
   return opp;
 }
 
@@ -1067,6 +1086,7 @@ function generateJuvenileFieldFighter(weightClass, province, hometown){
   const avgOvr = (stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5;
   const opp = finalizeOpponent(stats, avgOvr, weightClass, province, age, hometown);
   opp.age = age;
+  opp.birthDay = birthDayForAge(age, getCurrentDay());
   opp.talentTier = tier;
   opp.weightClass = weightClassOf(opp.weightLb); // derive from the real BMI-based weight, not the pre-picked target
   opp.provinceId = province.id;
@@ -1269,14 +1289,21 @@ function runJuvenileLeagueNight(pools, provinceId, day){
   if(!pool || pool.length < 2) return;
   Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
     // Not everybody fights every week — roughly 40% of a settlement's roster is on any
-    // given week's card. Paired within weight class, closest-age-first, so the pairing
-    // is at least a plausible matchup instead of whoever landed next to each other.
-    const participants = group.filter(()=> Math.random() < 0.4);
+    // given week's card, and each fighter is further capped to a season-length budget of
+    // League Night appearances per year so a deep pool doesn't let the same kids fight
+    // every single week for years straight.
+    const participants = group.filter(f=>{
+      if(Math.random() >= 0.4 || juvenileFightsRemaining(f) <= 0) return false;
+      ensureJuvenileYearWindow(f, day);
+      return (f.juvenileLeagueEntriesThisYear||0) < Math.round(JUVENILE_LEAGUE_ENTRIES_PER_YEAR * juvenilePaceMultiplier(f));
+    });
     ['Light','Middle','Heavy'].forEach(wc=>{
       const classGroup = participants.filter(f=> f.weightClass===wc).sort((a,b)=> a.age-b.age);
       for(let i=0;i+1<classGroup.length;i+=2){
         const { winner, loser } = quickSimBout(classGroup[i], classGroup[i+1]);
         winner.record.wins += 1; loser.record.losses += 1;
+        winner.juvenileLeagueEntriesThisYear = (winner.juvenileLeagueEntriesThisYear||0) + 1;
+        loser.juvenileLeagueEntriesThisYear = (loser.juvenileLeagueEntriesThisYear||0) + 1;
         logNpcBout(winner, loser, 'Juvenile', `${settlement} — League Night (${wc}weight)`, day);
         applyNpcGrowthTick(winner);
         if(Math.random() < 0.5) applyNpcGrowthTick(loser);
@@ -1290,7 +1317,11 @@ function runJuvenileTournamentDay(pools, provinceId, day){
   if(!pool || pool.length < 4) return;
   Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
     ['Light','Middle','Heavy'].forEach(wc=>{
-      const classGroup = group.filter(f=> f.weightClass===wc);
+      const classGroup = group.filter(f=>{
+        if(f.weightClass!==wc || juvenileFightsRemaining(f) <= 0) return false;
+        ensureJuvenileYearWindow(f, day);
+        return (f.juvenileTournamentEntriesThisYear||0) < Math.round(JUVENILE_TOURNAMENT_ENTRIES_PER_YEAR * juvenilePaceMultiplier(f));
+      });
       let size;
       if(classGroup.length >= 16) size = 16;
       else if(classGroup.length >= 8) size = 8;
@@ -1298,6 +1329,7 @@ function runJuvenileTournamentDay(pools, provinceId, day){
       else return; // not enough in this weight class this week — skip, don't force a mismatch
       // Age-sorted seeding so the bracket isn't a coin-flip 12-vs-17 matchup in round one.
       let field = [...classGroup].sort((a,b)=> a.age-b.age).slice(0, size);
+      field.forEach(f=>{ f.juvenileTournamentEntriesThisYear = (f.juvenileTournamentEntriesThisYear||0) + 1; }); // one entry per bracket appearance, not per round
       let runnerUp = null;
       while(field.length > 1){
         const isFinal = field.length === 2;
@@ -1326,13 +1358,18 @@ function runJuvenileFiestaDay(pools, provinceId, day, poolOverride, resultsBuffe
   if(!pool || pool.length < 4) return;
   Object.entries(groupFightersBySettlement(pool)).forEach(([settlement, group])=>{
     ['Light','Middle','Heavy'].forEach(wc=>{
-      const classGroup = group.filter(f=> f.weightClass===wc);
+      const classGroup = group.filter(f=>{
+        if(f.weightClass!==wc || juvenileFightsRemaining(f) <= 0) return false;
+        ensureJuvenileYearWindow(f, day);
+        return (f.juvenileTournamentEntriesThisYear||0) < Math.round(JUVENILE_TOURNAMENT_ENTRIES_PER_YEAR * juvenilePaceMultiplier(f)); // shared budget with Tuesday, per design
+      });
       let size;
       if(classGroup.length >= 16) size = 16;
       else if(classGroup.length >= 8) size = 8;
       else if(classGroup.length >= 4) size = 4;
       else return; // not enough for a bracket this week in this class
       let field = [...classGroup].sort(()=>Math.random()-0.5).slice(0, size);
+      field.forEach(f=>{ f.juvenileTournamentEntriesThisYear = (f.juvenileTournamentEntriesThisYear||0) + 1; });
       let runnerUp = null;
       while(field.length > 1){
         const isFinal = field.length === 2;
@@ -1439,6 +1476,7 @@ function runInviteClassBracket(classListAvailable, hostKey, hostProvinceId, even
   while(field.length < size && classListAvailable.length){
     field.push(classListAvailable.shift()); // still OVR-sorted, so this is "next best available"
   }
+  field.forEach(f=>{ f.juvenileInviteEntriesThisYear = (f.juvenileInviteEntriesThisYear||0) + 1; });
   if(!field.length) return field;
   let remaining = [...field];
   let runnerUp = null;
@@ -1532,7 +1570,10 @@ function runWednesdayEvents(pools, day){
   Object.values(pools.juvenile).forEach(list=>{
     list.forEach(f=>{
       const bucket = byClassBand[f.weightClass];
-      if(bucket) bucket[ageBandOf(f.age)].push(f);
+      if(!bucket || juvenileFightsRemaining(f) <= 0) return;
+      ensureJuvenileYearWindow(f, day);
+      if((f.juvenileInviteEntriesThisYear||0) >= Math.round(JUVENILE_INVITE_ENTRIES_PER_YEAR * juvenilePaceMultiplier(f))) return;
+      bucket[ageBandOf(f.age)].push(f);
     });
   });
   Object.values(byClassBand).forEach(bands=> Object.values(bands).forEach(arr=> arr.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats))));
@@ -1675,6 +1716,7 @@ function runJuvenileIntake(pools, provinceId, day){
     const hometown = loc ? pick(loc.hometownPool) : undefined;
     const f = finalizeOpponent(stats, avgOvr, weightClass, province, age, hometown);
     f.age = age;
+    f.birthDay = birthDayForAge(age, day);
     f.talentTier = tier;
     f.weightClass = weightClassOf(f.weightLb); // derive from the real BMI-based weight, not the pre-picked target
     f.provinceId = province.id;
@@ -1702,6 +1744,23 @@ function repairOrphanedHometowns(pools){
   if(changed) saveFieldPools(pools);
 }
 
+// Every NPC in the standing juvenile pool ages up from their real birthday now (not just
+// the player) — this is what actually lets the population reach Junior Draft eligibility
+// (14-17) and eventually age out at 18, instead of every intake fighter staying frozen at
+// the age they were created. Aged-out fighters are dropped from the pool here; actually
+// placing them into the Amateur ranks is a separate, not-yet-built pipeline — for now they
+// just leave the Juvenile scene, same as the game already treats undrafted 18-year-olds.
+function syncJuvenilePoolAges(pools, today){
+  PROVINCES.forEach(p=>{
+    const pool = pools.juvenile[p.id];
+    if(!pool) return;
+    pools.juvenile[p.id] = pool.filter(f=>{
+      syncFighterAge(f, today);
+      return f.age < 18;
+    });
+  });
+}
+
 function catchUpJuvenileSimulation(){
   // Retroactively cleans up orphaned pre-save-system data for saves that already
   // existed before cleanupLegacyFlatKeys() was added to createNewSave() — otherwise
@@ -1718,6 +1777,7 @@ function catchUpJuvenileSimulation(){
   PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id));
   repairOrphanedHometowns(pools);
   const today = getCurrentDay();
+  syncJuvenilePoolAges(pools, today);
   // A fighter locked out after a failed early-draft petition still ages toward natural
   // eligibility over real time, even though they can't fight to trigger normal age-up.
   try{
@@ -1772,33 +1832,48 @@ function calcOVR(stats){ return Math.round((stats.speed+stats.quickness+stats.to
 const JUVENILE_CAREER_FIGHT_CAP = 75;
 const JUVENILE_INVITE_ENTRIES_PER_YEAR = 4;
 const JUVENILE_TOURNAMENT_ENTRIES_PER_YEAR = 4; // Tuesday Local Tournament + Wednesday Fiesta combined
+const JUVENILE_LEAGUE_ENTRIES_PER_YEAR = 10; // Monday League Night — roughly matches a player's own season length (9)
 const DAYS_PER_JUVENILE_YEAR = 63; // a season's nominal length — reused as "how long is a year" for calendar-based aging
 
 function juvenileFightsRemaining(f){
-  return Math.max(0, JUVENILE_CAREER_FIGHT_CAP - (f.juvenileCareerFights || 0));
+  // juvenileCareerFights was only ever incremented for the player's own fighter — every
+  // NPC fighting through League Night / Tournament Day / Fiesta / Wednesday Invites never
+  // touched it, so the cap was silently unenforced for the whole background sim. Total
+  // record IS total fights for a still-juvenile fighter (nobody's graduated tiers yet if
+  // they're still in this pool), so falling back to it both fixes new fights going forward
+  // and retroactively caps anyone who already blew past 75 before this fix.
+  const totalFights = Math.max(f.juvenileCareerFights || 0, f.record ? (f.record.wins||0)+(f.record.losses||0) : 0);
+  return Math.max(0, JUVENILE_CAREER_FIGHT_CAP - totalFights);
 }
 
 // Resets the rolling yearly entry counters once enough time has passed since the last reset.
+// How aggressively a Juvenile NPC chases fights. Reuses the exact same pctOfCeiling
+// metric resolveJuniorDraftDeclaration already uses for its 55% "declared" threshold — a
+// fighter already showing real Junior Draft buzz has every reason to stack a resume fast
+// before the 14-17 draft window; a fighter with no buzz at all is better off rationing
+// their 75-fight career budget across the whole 11-18 span instead of running dry at 13
+// and sitting idle for years waiting to age out.
+function juvenilePaceMultiplier(f){
+  const pct = growthOutlook(f).pctOfCeiling;
+  if(pct >= 55) return 1.6; // real buzz — go get the resume
+  if(pct >= 35) return 1.0; // middling — baseline pace
+  return 0.55; // no buzz — stretch it out
+}
+
 function ensureJuvenileYearWindow(f, today){
   if(!f.juvenileYearResetDay || today - f.juvenileYearResetDay >= DAYS_PER_JUVENILE_YEAR){
     f.juvenileYearResetDay = today;
     f.juvenileInviteEntriesThisYear = 0;
     f.juvenileTournamentEntriesThisYear = 0;
+    f.juvenileLeagueEntriesThisYear = 0;
   }
 }
 
-// A fighter locked out after a failed/denied early-draft petition still needs to age up
-// toward natural eligibility (14) over real calendar time — normally aging up requires
-// completing a season of fights, which a locked-out fighter can't do anymore. Once they
-// reach 14 the lockout just falls away; they're a normal draft candidate from there.
+// A fighter locked out after a failed/denied early-draft petition stays locked until
+// they naturally reach 14 — age itself is now handled everywhere by syncFighterAge
+// (birthday-based), so this just clears the lockout flag once that happens.
 function ageLockedJuvenileIfDue(f, today){
   if(!f.juvenilePetitionStatus || f.juvenilePetitionStatus === 'approved-pending-draft') return;
-  if(f.age >= 14){ f.juvenilePetitionStatus = null; return; }
-  if(!f.juvenileLockoutStartDay) f.juvenileLockoutStartDay = today;
-  while(f.age < 14 && today - f.juvenileLockoutStartDay >= DAYS_PER_JUVENILE_YEAR){
-    f.age += 1;
-    f.juvenileLockoutStartDay += DAYS_PER_JUVENILE_YEAR;
-  }
   if(f.age >= 14) f.juvenilePetitionStatus = null;
 }
 
@@ -3987,7 +4062,6 @@ function applyBoutResult(){
     if(!isAmateur) f.juvenileCareerFights = (f.juvenileCareerFights || 0) + 1;
     if(s.fightsPlayed >= total){
       s.complete = true;
-      f.age = clamp((f.age || 12) + 1, 12, 18); // a full season completing ≈ a year passing
       if(isAmateur){
         const winPct = s.wins / (s.wins + s.losses);
         s.qualifiedForTournament = winPct >= AMATEUR_QUALIFY_WIN_PCT;
