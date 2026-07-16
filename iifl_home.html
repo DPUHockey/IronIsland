@@ -62,7 +62,7 @@
 
   .dock{
     background:rgba(36,29,23,0.92); backdrop-filter:blur(8px); border:1px solid var(--line);
-    width:100%; max-width:380px; padding:22px; margin-top:auto; margin-bottom:0;
+    width:100%; max-width:440px; padding:22px; margin-top:auto; margin-bottom:0;
     max-height:calc(100vh - 140px); overflow-y:auto;
   }
   .section-label{
@@ -72,6 +72,39 @@
   .section-label::after{ content:""; flex:1; height:1px; background:var(--line); }
   section{ margin-bottom:26px; }
   section:last-child{ margin-bottom:0; }
+
+  .alert-strip{ background:rgba(154,45,42,.16); border:1px solid var(--ink-red); padding:10px 14px; margin-bottom:20px; }
+  .alert-item{ display:flex; align-items:baseline; gap:8px; font-family:var(--body); font-size:12px; color:var(--bone); padding:3px 0; }
+  .alert-item::before{ content:"\26A0"; color:var(--ink-red); flex-shrink:0; }
+  .alert-item:last-child{ margin-bottom:0; }
+
+  .glance-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .glance-chip{ background:var(--bg-raised); border:1px solid var(--line); padding:9px 12px; }
+  .gc-label{ font-family:var(--label); font-size:9px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); }
+  .gc-value{ font-family:var(--mono); font-size:13px; color:var(--bone); margin-top:3px; }
+
+  .headline-item{ font-family:var(--body); font-size:12px; color:var(--bone-dim); padding:7px 0; border-bottom:1px solid var(--line); }
+  .headline-item:last-child{ border-bottom:none; }
+  .headline-item b{ color:var(--brass); }
+  .headline-date{ font-family:var(--mono); font-size:9.5px; color:var(--muted); display:block; margin-top:2px; }
+
+  .milestone-row{ display:flex; flex-wrap:wrap; gap:6px; }
+  .milestone-badge{
+    font-family:var(--label); font-size:9.5px; letter-spacing:.5px; text-transform:uppercase;
+    padding:5px 10px; background:var(--bg-raised); border:1px solid var(--brass); color:var(--brass);
+  }
+
+  .info-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:9px 0; border-bottom:1px solid var(--line); font-family:var(--body); font-size:12.5px; color:var(--bone-dim);
+  }
+  .info-row:last-child{ border-bottom:none; }
+  .info-row b{ color:var(--bone); font-weight:600; }
+
+  .sim-row{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .sim-row .btn{ flex:1; padding:9px 8px; font-size:10px; white-space:nowrap; }
+  .btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .btn-small{ padding:7px 12px; font-size:10.5px; }
 
   .fighter-card{
     background:var(--bg-raised); border:1px solid var(--line); padding:13px 15px;
@@ -976,6 +1009,84 @@ function fighterStatusLine(f){
   return 'Unattached';
 }
 
+// Overall rating — mirrors the fight pit / free roam calculation so ranking comparisons
+// are apples-to-apples with the pools those files generate.
+function calcOVR(stats){ return Math.round((stats.speed+stats.quickness+stats.toughness+stats.power+stats.agility)/5); }
+
+// Where a fighter's home province is, for ranking + flavor purposes — pit memberships are
+// the most reliable source (juvenileHomeProvinceId is derived from the same thing), falling
+// back to whatever's on the fighter record directly.
+function homeProvinceIdFor(f){
+  if(f.pitMemberships && f.pitMemberships.length) return f.pitMemberships[0].provinceId;
+  return f.juvenileHomeProvinceId || f.provinceId || null;
+}
+
+// Percentile rank within the fighter's own province + tier pool. Juvenile compares against
+// the procedural juvenile field pool; everyone else doesn't have a comparable pool wired up
+// yet, so this only returns a result for Juvenile fighters (returns null otherwise, and the
+// caller skips the section).
+function provincialRank(f){
+  const provinceId = homeProvinceIdFor(f);
+  if(!provinceId || fighterStatusLine(f) !== 'Juvenile') return null;
+  const pools = loadFieldPools();
+  const peers = (pools.juvenile && pools.juvenile[provinceId]) || [];
+  if(!peers.length) return null;
+  const myOvr = calcOVR(f.stats);
+  const better = peers.filter(p=> calcOVR(p.stats) > myOvr).length;
+  const rank = better + 1;
+  const outOf = peers.length + 1;
+  const province = PROVINCES.find(p=> p.id === provinceId);
+  return { rank, outOf, provinceName: province ? province.name : 'your province' };
+}
+
+/* ============================ FAMILY (mate / children) ============================ */
+const FAMILY_FIRST_NAMES = ['Dot','Marge','Vi','Peg','Ruth','Alma','Frannie','Gale','Nell','June','Sal','Roz','Trudy','Iris','Bev','Lorraine','Connie','Edie','Mavis','Pearl','Walt','Gus','Hank','Mickey','Lou','Sid','Ray','Duke','Chet','Earl'];
+const FAMILY_LAST_NAMES = ['Kowalczyk','Beauchamp','Dunmore','Pelletier','Ostrowski','Vachon','Callaghan','Sudbury','Marchetti','Whitlock','Trudeau','Novak','Fitchett','Delacroix','Hartigan'];
+function randomFamilyName(){
+  return `${FAMILY_FIRST_NAMES[Math.floor(Math.random()*FAMILY_FIRST_NAMES.length)]} ${FAMILY_LAST_NAMES[Math.floor(Math.random()*FAMILY_LAST_NAMES.length)]}`;
+}
+function findMateForFighter(f){
+  f.spouse = { name: randomFamilyName(), marriedDay: getCurrentDay() };
+  f.children = f.children || [];
+}
+function haveChildForFighter(f){
+  if(!f.spouse) return;
+  f.children = f.children || [];
+  const surname = f.spouse.name.split(' ').slice(-1)[0];
+  const childName = `${FAMILY_FIRST_NAMES[Math.floor(Math.random()*FAMILY_FIRST_NAMES.length)]} ${surname}`;
+  f.children.push({ name: childName, birthDay: getCurrentDay() });
+}
+function ageInYearsFromDay(birthDay, today){ return Math.max(0, Math.floor((today - birthDay) / 365)); }
+
+/* ============================ MILESTONES & HEADLINES ============================ */
+function milestonesFor(f){
+  const badges = [];
+  const rec = f.record || { wins:0, losses:0 };
+  if(rec.wins >= 50) badges.push('50 Win Club');
+  else if(rec.wins >= 25) badges.push('25 Win Club');
+  else if(rec.wins >= 10) badges.push('10 Win Club');
+  if(rec.wins > 0 && rec.losses === 0) badges.push('Undefeated');
+  const invites = f.inviteResults || [];
+  const championships = invites.filter(r=> r.place === 1).length;
+  if(championships >= 3) badges.push(`${championships}x Invitational Champ`);
+  else if(championships >= 1) badges.push('Invitational Champ');
+  if(f.pitMemberships && f.pitMemberships.length >= 3) badges.push('Multi-Pit Fighter');
+  return badges;
+}
+function inviteHeadline(place){
+  if(place === 1) return 'Champion!';
+  if(place === 2) return 'Runner-Up';
+  if(place === 3) return 'Semifinal Exit';
+  return 'Early Exit';
+}
+function recentHeadlinesFor(f){
+  const invites = (f.inviteResults || []).slice(-3).reverse();
+  return invites.map(r=> ({
+    text: `${inviteHeadline(r.place)} — ${r.event}`,
+    date: new Date(r.date).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+  }));
+}
+
 function renderApp(){
   if(!getActiveSaveId()){ renderSaveSelectScreen(); return; }
   const today = getCurrentDay();
@@ -983,38 +1094,105 @@ function renderApp(){
   const kd = tierKeyDates(cycleYear);
   const roster = loadRoster();
 
-  const tierRows = ['juvenile','junior','amateur','pro'].map(tier=>{
-    const s = resolveTierSeason(tier, today);
-    let nextLabel, nextDay;
-    if(s.phase === 'regular'){ nextLabel = 'Regular season ends'; nextDay = s.regularEndDay; }
-    else if(s.phase === 'playoffs'){ nextLabel = 'Playoffs end'; nextDay = s.playoffEndDay; }
-    else { nextLabel = 'Next season opens'; nextDay = s.nextStartDay; }
-    return `
-      <div class="tier-row">
-        <div class="tier-name">${tier}</div>
-        <div class="tier-phase ${s.phase}">${phaseLabel(s.phase)}</div>
-        <div class="tier-next">${nextLabel} · ${formatCalendarDateShort(nextDay)}</div>
+  if(!roster.length){
+    document.getElementById('app').innerHTML = `
+      <div class="ticket-header">
+        <div><div class="ticket-eyebrow">Iron Island · Fight League</div><div class="ticket-title">Home</div></div>
+        <div class="ticket-sub">${formatCalendarDate(today)}</div>
+      </div>
+      <div class="dock">
+        <section>
+          <div class="section-label">No Fighter Yet</div>
+          <div class="empty-note">Start one in the Character Creator to open your career hub.</div>
+          <div class="btn-row"><a class="btn btn-primary" href="iifl_character_creator.html">Character Creator →</a><span></span></div>
+        </section>
+        <section>
+          <div class="section-label">Other Saves</div>
+          <button class="btn" id="btn-switch-save">Switch or Start Another Game →</button>
+        </section>
       </div>
     `;
-  }).join('');
+    const switchSaveBtn = document.getElementById('btn-switch-save');
+    if(switchSaveBtn) switchSaveBtn.onclick = ()=>{ setActiveSaveId(null); renderApp(); };
+    return;
+  }
 
-  const fighterCards = roster.length ? roster.map(f=>{
-    return `
-      <div class="fighter-card">
-        <div>
-          <div class="fighter-name">${f.name || 'Unnamed Fighter'}</div>
-          <div class="fighter-meta">Age ${f.age || '?'} · ${f.settlement || f.hometown || 'Unknown hometown'}</div>
-        </div>
-        <div class="fighter-status">${fighterStatusLine(f)}</div>
-      </div>
-    `;
-  }).join('') : `<div class="empty-note">No fighters yet — start one in the Character Creator to see them here.</div>`;
+  const playable = roster.find(f=> f.isPlayable) || roster[0];
+  const npcCount = roster.length - 1;
+  const tier = fighterStatusLine(playable);
 
   // The stay/off-season/advance choice is anchored to Juvenile's phase since that's the
   // whole island-year anchor (the "dead days" window Jeric described running from Pro's
   // playoffs ending through the next Juvenile opener).
   const juvenilePhase = resolveTierSeason('juvenile', today).phase;
   const showSeasonControls = juvenilePhase === 'dead-days';
+
+  /* ---------- Alerts ---------- */
+  const alerts = [];
+  if(!(playable.pitMemberships && playable.pitMemberships.length) && tier === 'Juvenile'){
+    alerts.push(`${playable.name} doesn't have a pit yet — head to Free Roam to sign somewhere.`);
+  }
+  const jrEligible = playable.age >= 14 && playable.age <= 17 && !playable.juniorTeamId && !playable.amateurLeagueId;
+  if(jrEligible) alerts.push(`Junior Draft eligibility window is open for ${playable.name}.`);
+  const proEligible = playable.age >= 18 && (playable.juniorTeamId || playable.amateurLeagueId) && !playable.proTeamId;
+  if(proEligible) alerts.push(`${playable.name} has hit Pro Draft eligibility.`);
+  if(showSeasonControls) alerts.push(`The island is between seasons — advance whenever you're ready.`);
+
+  /* ---------- Career at a Glance ---------- */
+  const rec = playable.record || { wins:0, losses:0 };
+  const rank = provincialRank(playable);
+  const homeProvince = PROVINCES.find(p=> p.id === homeProvinceIdFor(playable));
+
+  /* ---------- Recent Headlines ---------- */
+  const headlines = recentHeadlinesFor(playable);
+  const headlinesHtml = headlines.length
+    ? headlines.map(h=> `<div class="headline-item"><b>${h.text}</b><span class="headline-date">${h.date}</span></div>`).join('')
+    : `<div class="empty-note">No invitational results yet.</div>`;
+
+  /* ---------- Pit Memberships ---------- */
+  const memberships = playable.pitMemberships || [];
+  const membershipsHtml = memberships.length
+    ? memberships.map(m=>{
+        const prov = PROVINCES.find(p=> p.id === m.provinceId);
+        return `<div class="info-row"><span><b>${m.pitName || 'Local Pit'}</b> — ${m.settlementName || ''}${prov ? ', '+prov.name : ''}</span><span>${m.record ? m.record.wins+'-'+m.record.losses : ''}</span></div>`;
+      }).join('')
+    : `<div class="empty-note">Not signed anywhere yet.</div>`;
+
+  /* ---------- Contract ---------- */
+  let contractLine;
+  if(playable.juniorTeamId){ contractLine = 'Signed — Junior League roster'; }
+  else if(playable.amateurLeagueId){
+    const league = IIFL_AMATEUR_DISPLAY.find(l=> l.id === playable.amateurLeagueId);
+    contractLine = `Signed — ${league ? league.name : 'Amateur circuit'}`;
+  } else if(tier === 'Juvenile'){ contractLine = memberships.length ? 'Juvenile pit fighter — no formal contract yet' : 'Unsigned'; }
+  else { contractLine = 'Unsigned'; }
+
+  /* ---------- Draft Center ---------- */
+  const draftHtml = `
+    <div class="info-row"><span>Junior Draft (age 14–17)</span><span>${playable.juniorTeamId ? 'Drafted' : (jrEligible ? 'Eligible now' : (playable.age < 14 ? 'Not yet eligible' : 'Window closed'))}</span></div>
+    ${jrEligible ? `<div class="btn-row"><span></span><a class="btn btn-primary btn-small" href="iifl_junior_league.html">Apply for Junior Draft →</a></div>` : ''}
+    <div class="info-row"><span>Pro Draft (age 18+)</span><span>${playable.proTeamId ? 'Drafted' : (proEligible ? 'Eligible now' : 'Not yet eligible')}</span></div>
+    ${proEligible ? `<div class="btn-row"><span></span><button class="btn btn-small" disabled title="Pro Draft screen isn't built yet">Apply for Pro Draft (coming soon)</button></div>` : ''}
+  `;
+
+  /* ---------- Family ---------- */
+  const children = playable.children || [];
+  const familyHtml = playable.spouse
+    ? `
+      <div class="info-row"><span>Married to</span><b>${playable.spouse.name}</b></div>
+      ${children.length ? children.map(c=> `<div class="info-row"><span>Child</span><b>${c.name}</b> <span>(age ${ageInYearsFromDay(c.birthDay, today)})</span></div>`).join('') : `<div class="empty-note">No children yet.</div>`}
+      <div class="btn-row"><span></span><button class="btn btn-small" id="btn-have-child">Have a Child</button></div>
+    `
+    : `
+      <div class="empty-note">${playable.name} hasn't found a mate yet.</div>
+      <div class="btn-row"><span></span><button class="btn btn-small" id="btn-find-mate">Find a Mate</button></div>
+    `;
+
+  /* ---------- Milestones ---------- */
+  const milestones = milestonesFor(playable);
+  const milestonesHtml = milestones.length
+    ? `<div class="milestone-row">${milestones.map(m=> `<span class="milestone-badge">${m}</span>`).join('')}</div>`
+    : `<div class="empty-note">No milestones yet — get some wins on the board.</div>`;
 
   const modeCards = MODES.map(m=>`
     <a class="mode-card" style="--tc:${m.tc}" href="${m.href}">
@@ -1026,26 +1204,64 @@ function renderApp(){
 
   document.getElementById('app').innerHTML = `
     <div class="ticket-header">
-      <div><div class="ticket-eyebrow">Iron Island · Fight League</div><div class="ticket-title">Home</div></div>
+      <div><div class="ticket-eyebrow">Iron Island · Fight League</div><div class="ticket-title">${playable.name}</div></div>
       <div class="ticket-sub">${formatCalendarDate(today)}</div>
     </div>
     <div class="dock">
+      ${alerts.length ? `<div class="alert-strip">${alerts.map(a=> `<div class="alert-item">${a}</div>`).join('')}</div>` : ''}
+
       <section>
-        <div class="section-label">Your Fighters</div>
-        ${fighterCards}
+        <div class="section-label">Career at a Glance</div>
+        <div class="glance-grid">
+          <div class="glance-chip"><div class="gc-label">Tier</div><div class="gc-value">${tier}</div></div>
+          <div class="glance-chip"><div class="gc-label">Record</div><div class="gc-value">${rec.wins}-${rec.losses}</div></div>
+          <div class="glance-chip"><div class="gc-label">Age</div><div class="gc-value">${playable.age || '?'}</div></div>
+          <div class="glance-chip"><div class="gc-label">Weight Class</div><div class="gc-value">${playable.weightLb ? weightClassOf(playable.weightLb) : '—'}</div></div>
+          <div class="glance-chip"><div class="gc-label">Home Province</div><div class="gc-value">${homeProvince ? homeProvince.name : '—'}</div></div>
+          <div class="glance-chip"><div class="gc-label">Provincial Rank</div><div class="gc-value">${rank ? `#${rank.rank} of ${rank.outOf}` : '—'}</div></div>
+        </div>
       </section>
 
       <section>
-        <div class="section-label">Season Status</div>
-        ${tierRows}
+        <div class="section-label">Recent Headlines</div>
+        ${headlinesHtml}
       </section>
 
-      ${showSeasonControls ? `
       <section>
-        <div class="section-label">Time Controls</div>
-        <p style="font-family:var(--body); font-size:12.5px; color:var(--bone-dim); margin-bottom:12px;">
-          The island's between seasons right now. Keep browsing this year's results, run your fighters
-          through an off-season, or jump straight to next year.
+        <div class="section-label">Milestones</div>
+        ${milestonesHtml}
+      </section>
+
+      <section>
+        <div class="section-label">Pit Memberships</div>
+        ${membershipsHtml}
+      </section>
+
+      <section>
+        <div class="section-label">Contract</div>
+        <div class="info-row"><span>${contractLine}</span></div>
+      </section>
+
+      <section>
+        <div class="section-label">Draft Center</div>
+        ${draftHtml}
+      </section>
+
+      <section>
+        <div class="section-label">Family</div>
+        ${familyHtml}
+      </section>
+
+      <section>
+        <div class="section-label">Sim Time</div>
+        <div class="sim-row">
+          <button class="btn" id="btn-sim-day">Sim a Day</button>
+          <button class="btn" id="btn-sim-week">Sim to Next Week</button>
+          <button class="btn" id="btn-sim-season">Sim to Season End</button>
+        </div>
+        ${showSeasonControls ? `
+        <p style="font-family:var(--body); font-size:12px; color:var(--bone-dim); margin:10px 0;">
+          The island's between seasons right now. Run your fighters through an off-season, or jump straight to next year.
         </p>
         <div class="btn-row">
           <button class="btn" id="btn-stay">Stay &amp; Browse</button>
@@ -1053,8 +1269,8 @@ function renderApp(){
           <button class="btn btn-primary" id="btn-advance">Advance to Next Season →</button>
         </div>
         <div class="offseason-log" id="offseason-log"></div>
+        ` : ''}
       </section>
-      ` : ''}
 
       <section>
         <div class="section-label">Game Modes</div>
@@ -1062,15 +1278,16 @@ function renderApp(){
       </section>
 
       <section>
-        <div class="section-label">Other Saves</div>
-        <button class="btn" id="btn-switch-save">Switch or Start Another Game →</button>
+        <div class="section-label">Other</div>
+        <div class="info-row"><span>${npcCount ? `${npcCount} other created fighter${npcCount===1?'':'s'} in this world` : 'No other fighters in this world'}</span></div>
+        <div class="btn-row"><span></span><button class="btn btn-small" id="btn-switch-save">Switch or Start Another Game →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V6 · 2026-07-15</div>
+        <div class="version-badge">HOME · V7 · 2026-07-16</div>
       </footer>
     </div>
   `;
-  wireEvents(cycleYear, roster);
+  wireEvents(cycleYear, roster, playable);
 }
 
 /* =========================================================================
@@ -1183,10 +1400,41 @@ function renderSaveSelectScreen(){
   };
 }
 
-function wireEvents(cycleYear, roster){
+function wireEvents(cycleYear, roster, playable){
   const switchSaveBtn = document.getElementById('btn-switch-save');
   if(switchSaveBtn) switchSaveBtn.onclick = ()=>{
     setActiveSaveId(null); // deselects, doesn't delete — the save itself is untouched
+    renderApp();
+  };
+
+  const simDayBtn = document.getElementById('btn-sim-day');
+  if(simDayBtn) simDayBtn.onclick = ()=>{ advanceClockByDays(1); renderApp(); };
+
+  const simWeekBtn = document.getElementById('btn-sim-week');
+  if(simWeekBtn) simWeekBtn.onclick = ()=>{ advanceClockByDays(7); renderApp(); };
+
+  const simSeasonBtn = document.getElementById('btn-sim-season');
+  if(simSeasonBtn) simSeasonBtn.onclick = ()=>{
+    // Jump to whatever's next on the calendar for the fighter's own tier — regular season
+    // end, playoff end, or next opening day, whichever phase they're currently in.
+    const tierKey = ({'Junior League':'junior','Amateur':'amateur','Juvenile':'juvenile'})[fighterStatusLine(playable)] || 'juvenile';
+    const s = resolveTierSeason(tierKey, getCurrentDay());
+    const target = s.phase === 'regular' ? s.regularEndDay : s.phase === 'playoffs' ? s.playoffEndDay : s.nextStartDay;
+    const c = loadClock(); c.day = target; saveClock(c);
+    renderApp();
+  };
+
+  const findMateBtn = document.getElementById('btn-find-mate');
+  if(findMateBtn) findMateBtn.onclick = ()=>{
+    findMateForFighter(playable);
+    saveRoster(roster);
+    renderApp();
+  };
+
+  const haveChildBtn = document.getElementById('btn-have-child');
+  if(haveChildBtn) haveChildBtn.onclick = ()=>{
+    haveChildForFighter(playable);
+    saveRoster(roster);
     renderApp();
   };
 
