@@ -2591,7 +2591,7 @@ function wireEvents(){
       id: 'fighter_' + Date.now() + '_' + Math.floor(Math.random()*1000),
       name: state.name,
       age: f.age,
-      birthDay: Math.max(1, today - (f.age*365) - Math.floor(Math.random()*365)),
+      birthDay: Math.max(1, today - (f.age*365) - Math.floor(Math.random()*365)), // real calendar year, matches DAYS_PER_FIGHTER_YEAR everywhere else
       talentTier: f.talentTier,
       provinceId: f.province.id,
       settlement: state.settlement,
