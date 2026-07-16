@@ -3805,15 +3805,8 @@ function ensureNewspaper(provinceId, day){
   const key = provinceId+'|'+day;
   if(s.newspapers[key]) return s.newspapers[key];
   const isIsland = provinceId === 'island';
-  const flavorSettlement = isIsland ? 'the capital' : pick(SETTLEMENTS_SHORT[provinceId] || [provinceId]);
   const paper = {
     paperName: isIsland ? ISLAND_PAPER_NAME : (PROVINCE_PAPER_NAMES[provinceId] || 'The Local Herald'),
-    proTeamBlurb: pick(PRO_TEAM_BLURBS),
-    jrTeams: isIsland ? [] : (JR_TEAMS_BY_PROVINCE[provinceId] || []),
-    flavorTopFighters: {
-      Amateur: generateFlavorFighterList(isIsland?'bay':provinceId, flavorSettlement, 3),
-      Junior: generateFlavorFighterList(isIsland?'bay':provinceId, flavorSettlement, 3),
-    },
     rumors: [pick(RUMOR_LINES), pick(RUMOR_LINES)],
     trainerTip: pick(TRAINER_TIP_LINES),
   };
@@ -3858,10 +3851,12 @@ function renderNewspaper(){
     ).join('')}</div>
   ` : `<p>No Juvenile fighters registered here yet.</p>`;
 
-  const otherTopHtml = Object.entries(paper.flavorTopFighters).map(([tier,list])=>`
-    <div style="margin-bottom:10px;"><b>${tier} Division Leaders</b><br>
-    ${list.map(f=>`${f.name} (${f.wins}-${f.losses})`).join(' · ')}</div>
-  `).join('');
+  // Amateur/Junior leader lists used to be procedurally-generated flavor names with
+  // fake records, completely disconnected from the real Amateur circuits and the real
+  // Ironbound/Northgate/Tidewater Junior League teams — cleared out rather than left
+  // showing fake stats next to the real Juvenile ones above. Empty for now; wire this
+  // to real Amateur/Junior standings once those have actual season data to report.
+  const otherTopHtml = `<p style="opacity:0.6;">Amateur and Junior League standings aren't being tracked in print yet — check back once those seasons are underway.</p>`;
 
   const newFaces = newJuvenileFacesFor(provinceId, day, 3);
   const newFacesHtml = newFaces.length ? newFaces.map(f=>
@@ -3881,14 +3876,7 @@ function renderNewspaper(){
       <div class="np-section">
         <div class="np-headline">Pro Club Notes</div>
         <div class="np-byline">From Our Sports Desk</div>
-        <div class="np-body">${fillTpl(paper.proTeamBlurb, {city: province.name})}</div>
-      </div>
-      <hr class="np-divider">` : ''}
-
-      ${paper.jrTeams.length ? `
-      <div class="np-section">
-        <div class="np-headline">Junior League Roundup</div>
-        <div class="np-body">Local squads active this season: <b>${paper.jrTeams.join(', ')}</b>.</div>
+        <div class="np-body" style="opacity:0.6;">No Pro League yet — this space is reserved for when Iron Island Professional Fight League news is real.</div>
       </div>
       <hr class="np-divider">` : ''}
 
@@ -5090,6 +5078,6 @@ function wireEvents(){
 
 render();
 </script>
-<div class="version-badge">FREE ROAM · V40 · 2026-07-15</div>
+<div class="version-badge">FREE ROAM · V41 · 2026-07-15</div>
 </body>
 </html>
