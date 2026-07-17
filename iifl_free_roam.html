@@ -2289,7 +2289,13 @@ function simulateBout(fA, fB, ctx){
     } else {
       // Non-finish round — a chance of a dramatic scare that doesn't end the fight.
       if(Math.random() < 0.22){
-        const scareWinnerIsA = Math.random() < probA;
+        // Biased toward whoever actually wins the bout, not an independent re-roll of
+        // probA — otherwise a close matchup could easily narrate 2-3 rounds of the
+        // eventual LOSER scoring knockdowns before losing anyway, which reads as
+        // "robbed" even though nothing in the sim actually contradicts itself. Still
+        // lets the eventual loser get a real moment sometimes (20%) for drama — just
+        // not as the coin-flip default.
+        const scareWinnerIsA = Math.random() < (winnerIsA ? 0.8 : 0.2);
         const smap = { A: fA.name, B: fB.name, W: scareWinnerIsA?fA.name:fB.name, L: scareWinnerIsA?fB.name:fA.name, floor };
         log.push({ type:'line', text: fillTpl(pick(SCARE_KNOCKDOWN), smap) });
         log.push({ type:'line', text: fillTpl(pick(SCARE_RECOVERY), smap) });
@@ -2395,6 +2401,15 @@ function ensureFighterDefaults(f){
     // matter how active their career actually was.
     f.juvenileHomeProvinceId = (f.pitMemberships && f.pitMemberships.length) ? f.pitMemberships[0].provinceId : null;
   }
+  // Province/city access — earned via Wednesday Invitational acceptance or a successful
+  // street "connection" encounter, permanent once granted. Home province and (once fame
+  // is high enough) every province are always accessible regardless of this list — see
+  // hasProvinceAccess()/hasCityTierAccess(). Kept separate from fame so a lucky early
+  // connection can open a door before fame would, without needing a whole new system.
+  if(!f.earnedProvinceAccess) f.earnedProvinceAccess = [];
+  if(!f.earnedCityAccess) f.earnedCityAccess = []; // entries are "provinceId|settlementName"
+  if(f.currentProvinceId === undefined) f.currentProvinceId = null;
+  if(f.currentSettlementName === undefined) f.currentSettlementName = null;
   reconcileRecord(f);
   return f;
 }
@@ -2966,6 +2981,44 @@ function generateNpc(provinceId, settlementName, role, pits){
 
 const GRID_SIZE_BY_TIER = { Capital:7, City:6, Town:5, Village:4 };
 
+// A fighter always has their home province and — once famous enough — the whole
+// island. Everything else needs a specific earned "in" (invite accepted, street
+// connection paid off). Fame thresholds are deliberately island-wide and low relative
+// to what it'd take to actually COMPETE somewhere — this is about who'll let you in
+// the door, not whether you're good enough, so opening a new region never changes the
+// difficulty of what's inside it. See ensureFighterDefaults for earnedProvinceAccess/
+// earnedCityAccess persistence.
+const FAME_CITY_TIER_UNLOCK = 12;   // opens City/Capital tier inside any already-unlocked province
+const FAME_PROVINCE_UNLOCK = 30;    // opens every province island-wide, no invite/connection needed
+function settlementTier(provinceId, settlementName){
+  const entry = (SETTLEMENT_DATA[provinceId]||[]).find(e=>e.name===settlementName);
+  return entry ? entry.tier : 'Village';
+}
+function hasProvinceAccess(f, provinceId){
+  if(!provinceId) return false;
+  if(provinceId === f.juvenileHomeProvinceId) return true;
+  if((f.fame||0) >= FAME_PROVINCE_UNLOCK) return true;
+  return (f.earnedProvinceAccess||[]).includes(provinceId);
+}
+function hasCityTierAccess(f, provinceId, settlementName){
+  if(!hasProvinceAccess(f, provinceId)) return false;
+  if(provinceId === f.juvenileHomeProvinceId) return true; // home turf — every city always open
+  const tier = settlementTier(provinceId, settlementName);
+  if(tier==='Village' || tier==='Town') return true;
+  if((f.fame||0) >= FAME_CITY_TIER_UNLOCK) return true;
+  return (f.earnedCityAccess||[]).includes(provinceId+'|'+settlementName);
+}
+// Call whenever the player's live position changes — Home Hub has no session state of
+// its own, so this is the only way it can show "currently in X" without recomputing
+// the whole free-roam grid.
+function persistCurrentLocation(){
+  if(!state.fighterId || !state.provinceId || !state.settlementName) return;
+  updateFighter(state.fighterId, ff=>{
+    ff.currentProvinceId = state.provinceId;
+    ff.currentSettlementName = state.settlementName;
+  });
+}
+
 function ensureCityGrid(provinceId, settlementName){
   const s = loadRoamState();
   const key = provinceId + '|' + settlementName;
@@ -3236,7 +3289,8 @@ function renderCityWalk(){
   const grid = currentGrid();
   const entry = (SETTLEMENT_DATA[state.provinceId]||[]).find(e=>e.name===state.settlementName);
   const pits = currentPits();
-  const eligiblePits = pits.filter(p=> f.fame >= p.reputationRequired);
+  const juvenileInSeasonForWalk = resolveTierSeason('juvenile', getCurrentDay()).phase !== 'dead-days';
+  const eligiblePits = juvenileInSeasonForWalk ? pits.filter(p=> f.fame >= p.reputationRequired) : [];
 
   const cellsHtml = [];
   for(let r=0;r<grid.size;r++){
@@ -3288,6 +3342,7 @@ function renderCityWalk(){
 }
 
 function renderLocTravel(){
+  const f = getFighterById(state.fighterId);
   const all = SETTLEMENT_DATA[state.provinceId] || [];
   const others = all.filter(e=> e.name !== state.settlementName);
   const cards = others.map(e=>`
@@ -3296,6 +3351,44 @@ function renderLocTravel(){
       <div class="pit-meta">${e.tier} · Pop. ${e.population.toLocaleString()}</div>
     </div>
   `).join('');
+
+  const otherProvinces = PROVINCES.filter(p=> p.id !== state.provinceId);
+  const provinceCards = otherProvinces.map(p=>{
+    const unlocked = hasProvinceAccess(f, p.id);
+    if(!unlocked){
+      return `
+        <div class="pit-card" style="opacity:0.4; cursor:default;">
+          <div class="pit-name">🔒 ${p.name}</div>
+          <div class="pit-meta">Nobody there knows your name. Get an invite, a connection, or ${FAME_PROVINCE_UNLOCK} Fame to travel here.</div>
+        </div>
+      `;
+    }
+    const settlements = SETTLEMENT_DATA[p.id] || [];
+    const cityCards = settlements.map(s=>{
+      const cityOpen = hasCityTierAccess(f, p.id, s.name);
+      if(!cityOpen){
+        return `
+          <div class="pit-card" style="opacity:0.4; cursor:default;">
+            <div class="pit-name">🔒 ${s.name}</div>
+            <div class="pit-meta">${s.tier} · needs ${FAME_CITY_TIER_UNLOCK} Fame or a local connection</div>
+          </div>
+        `;
+      }
+      return `
+        <div class="pit-card" data-travel-to-province="${p.id}" data-travel-to-city="${encodeURIComponent(s.name)}">
+          <div class="pit-name">${s.name}</div>
+          <div class="pit-meta">${s.tier} · Pop. ${s.population.toLocaleString()}</div>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="weight-class-block">
+        <div class="wc-label" style="color:${p.color};">${p.name}</div>
+        <div class="pit-grid">${cityCards}</div>
+      </div>
+    `;
+  }).join('');
+
   return `
     <div class="section-label">Roads Out of ${state.settlementName}</div>
     <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:16px;">
@@ -3303,6 +3396,11 @@ function renderLocTravel(){
       down these roads. Takes the rest of the day to get there; you'll arrive fresh the next morning.
     </p>
     <div class="pit-grid">${cards || '<div class="empty-note">Nowhere else in this province to go.</div>'}</div>
+    <div class="section-label" style="margin-top:22px;">Beyond ${PROVINCES.find(p=>p.id===state.provinceId)?.name || 'the Province'}</div>
+    <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:16px;">
+      Every other province on the island — grey ones aren't open to you yet.
+    </p>
+    ${provinceCards}
     <div class="btn-row" style="margin-top:16px;"><button class="btn" id="back-to-walk">← Stay in Town</button><span></span></div>
   `;
 }
@@ -4159,6 +4257,8 @@ function renderLocPit(){
   const day = getCurrentDay();
   const weekday = weekdayNameForDay(day);
   const myWc = weightClassOf(f.weightLb);
+  const juvenileSeason = resolveTierSeason('juvenile', day);
+  const juvenileInSeason = juvenileSeason.phase !== 'dead-days'; // regular OR playoffs both count as "in season"
 
   const byClass = { Light:[], Middle:[], Heavy:[] };
   pit.roster.forEach(r=> byClass[r.weightClass].push(r));
@@ -4180,7 +4280,15 @@ function renderLocPit(){
   }).join('');
 
   let scheduleHtml = '';
-  if(weekday === 'Monday'){
+  if(!juvenileInSeason){
+    scheduleHtml = `
+      <div class="section-label" style="margin-top:18px;">Off-Season</div>
+      <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:10px;">
+        The Juvenile League doesn't run year-round — this pit is quiet until the season opens back up on
+        ${formatCalendarDate(juvenileSeason.nextStartDay)}. Head to the Home Hub to advance to the next season when you're ready.
+      </p>
+    `;
+  } else if(weekday === 'Monday'){
     const schedule = ensurePitSchedule(pit, day);
     const rosterById = {};
     pit.roster.forEach(r=> rosterById[r.id] = r);
@@ -4239,7 +4347,7 @@ function renderLocPit(){
   }
 
   const JUVENILE_FIGHT_NIGHTS = ['Monday','Tuesday','Wednesday'];
-  const isFightNight = JUVENILE_FIGHT_NIGHTS.includes(weekday);
+  const isFightNight = juvenileInSeason && JUVENILE_FIGHT_NIGHTS.includes(weekday);
   const OTHER_TIER_NIGHT_NAMES = { Thursday:'the Junior League', Friday:'the Amateur circuit', Saturday:'the Pro league', Sunday:'a night off island-wide' };
 
   let actionHtml;
@@ -4247,6 +4355,8 @@ function renderLocPit(){
     actionHtml = `<p style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center;">This pit doesn't know your name yet. Build some fame first (needs ${pit.reputationRequired}, you have ${f.fame}).</p>`;
   } else if(!isSignedHere){
     actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="sign-here" data-pit-id="${pit.id}">${f.pitMemberships.length ? 'Sign Here — Add This Pit →' : 'Sign Here — Start Your Career'}</button></div>`;
+  } else if(!juvenileInSeason){
+    actionHtml = `<p style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center;">The season's over — nothing to register for until ${formatCalendarDate(juvenileSeason.nextStartDay)}. Advance to next season from the Home Hub when you're ready.</p>`;
   } else if(!isFightNight){
     const dayIdx = WEEKDAY_NAMES.indexOf(weekday);
     const daysToMonday = 7 - dayIdx;
@@ -4644,6 +4754,7 @@ function wireEvents(){
       const grid = ensureCityGrid(state.provinceId, state.settlementName);
       state.position = { ...grid.startCell };
       state.screen = 'city-walk';
+      persistCurrentLocation();
       render();
     };
   });
@@ -4706,6 +4817,24 @@ function wireEvents(){
       state.position = { ...grid.startCell };
       advanceDay(); // the road takes the rest of the day — arrive fresh next morning
       state.screen = 'city-walk';
+      persistCurrentLocation();
+      render();
+    };
+  });
+
+  document.querySelectorAll('[data-travel-to-province]').forEach(card=>{
+    card.onclick = ()=>{
+      const f = getFighterById(state.fighterId);
+      const provinceId = card.dataset.travelToProvince;
+      const settlementName = decodeURIComponent(card.dataset.travelToCity);
+      if(!hasCityTierAccess(f, provinceId, settlementName)) return; // belt-and-suspenders — shouldn't render clickable if locked
+      state.provinceId = provinceId;
+      state.settlementName = settlementName;
+      const grid = ensureCityGrid(state.provinceId, state.settlementName);
+      state.position = { ...grid.startCell };
+      advanceDay(); // crossing a province border costs the day too
+      state.screen = 'city-walk';
+      persistCurrentLocation();
       render();
     };
   });
@@ -5163,18 +5292,26 @@ function tryAutoEnterFromUrl(){
   const reg = loadSaveRegistry();
   const activeSave = reg.saves.find(s=> s.id === reg.activeSaveId);
   if(!activeSave || !activeSave.npcSelectionConfirmed) return false;
+  const targetProvinceId = provinceParam ? decodeURIComponent(provinceParam) : (playable.pitMemberships&&playable.pitMemberships[0] ? playable.pitMemberships[0].provinceId : playable.provinceId);
+  const targetSettlementName = cityParam ? decodeURIComponent(cityParam) : playable.settlement;
+  if(!hasCityTierAccess(playable, targetProvinceId, targetSettlementName)){
+    // Locked destination — this was the "type any URL, go anywhere" loophole. Fall through
+    // to the normal fighter-select screen instead of silently dropping them in anyway.
+    return false;
+  }
   state.fighterId = playable.id;
-  state.provinceId = provinceParam ? decodeURIComponent(provinceParam) : (playable.pitMemberships&&playable.pitMemberships[0] ? playable.pitMemberships[0].provinceId : playable.provinceId);
-  state.settlementName = cityParam ? decodeURIComponent(cityParam) : playable.settlement;
+  state.provinceId = targetProvinceId;
+  state.settlementName = targetSettlementName;
   const grid = ensureCityGrid(state.provinceId, state.settlementName);
   state.position = { ...grid.startCell };
   state.screen = 'city-walk';
+  persistCurrentLocation();
   return true;
 }
 
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V50 · 2026-07-17</div>
+<div class="version-badge">FREE ROAM · V52 · 2026-07-17</div>
 </body>
 </html>
