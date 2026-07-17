@@ -1169,6 +1169,30 @@ function syncFighterAge(f, today){
   f.ageSystemVersion = 4;
 }
 
+// Mirrors the same-named functions in iifl_free_roam.html — kept in sync manually since
+// these files share localStorage but not code. Used here only to grey out the map, not
+// to enforce anything (free_roam.html is the actual gatekeeper for entry).
+const FAME_CITY_TIER_UNLOCK = 12;
+const FAME_PROVINCE_UNLOCK = 30;
+function settlementTier(provinceId, settlementName){
+  const entry = (SETTLEMENT_DATA[provinceId]||[]).find(e=>e.name===settlementName);
+  return entry ? entry.tier : 'Village';
+}
+function hasProvinceAccess(f, provinceId){
+  if(!provinceId) return false;
+  if(provinceId === homeProvinceIdFor(f)) return true;
+  if((f.fame||0) >= FAME_PROVINCE_UNLOCK) return true;
+  return (f.earnedProvinceAccess||[]).includes(provinceId);
+}
+function hasCityTierAccess(f, provinceId, settlementName){
+  if(!hasProvinceAccess(f, provinceId)) return false;
+  if(provinceId === homeProvinceIdFor(f)) return true;
+  const tier = settlementTier(provinceId, settlementName);
+  if(tier==='Village' || tier==='Town') return true;
+  if((f.fame||0) >= FAME_CITY_TIER_UNLOCK) return true;
+  return (f.earnedCityAccess||[]).includes(provinceId+'|'+settlementName);
+}
+
 // Test-mode reset: spins up a brand new, fully independent save (fresh clock, fresh
 // roster, and every lazily-created system — field pools, roam state, results log —
 // starts empty automatically the first time this save's namespace touches them, since
@@ -1373,6 +1397,7 @@ function renderApp(){
           </div>
           <div class="glance-chip"><div class="gc-label">Weight Class</div><div class="gc-value">${playable.weightLb ? weightClassOf(playable.weightLb) : '—'}</div></div>
           <div class="glance-chip"><div class="gc-label">Home Province</div><div class="gc-value">${homeProvince ? homeProvince.name : '—'}</div></div>
+          <div class="glance-chip"><div class="gc-label">Currently In</div><div class="gc-value">${playable.currentSettlementName ? playable.currentSettlementName : '—'}${playable.currentProvinceId && playable.currentProvinceId !== homeProvinceIdFor(playable) ? ` <span style="opacity:0.6; font-size:9px;">(${(PROVINCES.find(p=>p.id===playable.currentProvinceId)||{}).name || ''})</span>` : ''}</div></div>
           <div class="glance-chip"><div class="gc-label">Provincial Rank</div><div class="gc-value">${rank ? `#${rank.rank} of ${rank.outOf}` : '—'}</div></div>
         </div>
       </section>
@@ -1446,7 +1471,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-reset-island">🔄 Reset Island (Test Mode) →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V12 · 2026-07-17</div>
+        <div class="version-badge">HOME · V13 · 2026-07-17</div>
       </footer>
     </div>
   `;
@@ -1520,7 +1545,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V12 · 2026-07-17</div>
+        <div class="version-badge">HOME · V13 · 2026-07-17</div>
       </footer>
     </div>
   `;
@@ -1692,12 +1717,50 @@ renderApp();
 function showProvinceDetail(provinceId){
   const province = PROVINCES.find(p=>p.id===provinceId);
   if(!province) return;
+  const roster = loadRoster();
+  const playable = roster.find(f=>f.isPlayable) || roster[0];
+  const provinceUnlocked = playable && hasProvinceAccess(playable, provinceId);
+
+  if(!playable || !provinceUnlocked){
+    const overlay = document.createElement('div');
+    overlay.id = 'province-modal-overlay';
+    overlay.style.cssText = 'position:fixed; inset:0; z-index:50; background:rgba(20,17,13,0.85); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; padding:20px;';
+    overlay.innerHTML = `
+      <div style="background:var(--bg-panel); border:1px solid ${province.color}; max-width:480px; width:100%; padding:24px; text-align:center;">
+        <div class="ticket-eyebrow" style="color:${province.color};">Iron Island · Province</div>
+        <div class="ticket-title" style="margin-bottom:14px;">🔒 ${province.name}</div>
+        <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:18px;">
+          Nobody out here knows ${playable ? playable.name : 'your fighter'}'s name yet. Get an invite to fight
+          here, make a connection while walking the streets somewhere, or build up to ${FAME_PROVINCE_UNLOCK} Fame
+          — that's enough of a reputation to open every province, invite or not.
+        </p>
+        <button class="btn btn-primary" id="close-province-modal">Close</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById('close-province-modal').onclick = ()=> overlay.remove();
+    overlay.onclick = (e)=>{ if(e.target === overlay) overlay.remove(); };
+    return;
+  }
+
   const settlements = SETTLEMENT_DATA[provinceId] || [];
   const pits = pitLocationsForProvince(provinceId);
 
   const cityRows = settlements.map(s=>{
     const jrTeam = JR_LEAGUES_DISPLAY.flatMap(l=> l.teams.map(t=>({...t, league:l.name}))).find(t=> t.city === s.name);
     const cityPits = pits.filter(p=> p.hometownPool.includes(s.name));
+    const cityUnlocked = hasCityTierAccess(playable, provinceId, s.name);
+    if(!cityUnlocked){
+      return `
+        <div class="fighter-card" style="flex-direction:column; align-items:flex-start; gap:6px; opacity:0.4; cursor:default;">
+          <div style="display:flex; justify-content:space-between; width:100%;">
+            <div class="fighter-name">🔒 ${s.name}</div>
+            <div class="fighter-meta">${s.tier} · pop. ${s.population.toLocaleString()}</div>
+          </div>
+          <div class="fighter-meta">Needs ${FAME_CITY_TIER_UNLOCK} Fame or a local connection</div>
+        </div>
+      `;
+    }
     return `
       <div class="fighter-card" data-city-link="${encodeURIComponent(s.name)}" style="flex-direction:column; align-items:flex-start; gap:6px; cursor:pointer;">
         <div style="display:flex; justify-content:space-between; width:100%;">
@@ -1745,8 +1808,14 @@ function showProvinceDetail(provinceId){
 }
 
 function wireMapClicks(){
+  const roster = loadRoster();
+  const playable = roster.find(f=>f.isPlayable) || roster[0];
   document.querySelectorAll('[data-province]').forEach(el=>{
     el.onclick = ()=> showProvinceDetail(el.dataset.province);
+    if(playable && !hasProvinceAccess(playable, el.dataset.province)){
+      el.style.opacity = '0.35';
+      el.style.filter = 'grayscale(1)';
+    }
   });
 }
 wireMapClicks();
