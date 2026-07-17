@@ -2591,8 +2591,8 @@ function wireEvents(){
       id: 'fighter_' + Date.now() + '_' + Math.floor(Math.random()*1000),
       name: state.name,
       age: f.age,
-      birthDay: Math.max(1, today - (f.age*365) - Math.floor(Math.random()*365)), // real calendar year, matches DAYS_PER_FIGHTER_YEAR everywhere else
-      ageSystemVersion: 3,
+      birthDay: today - (f.age*365) - Math.floor(Math.random()*365), // no floor — pre-Day-1 birthdays are valid; DAYS_PER_FIGHTER_YEAR everywhere else
+      ageSystemVersion: 4,
       talentTier: f.talentTier,
       provinceId: f.province.id,
       settlement: state.settlement,
@@ -2677,6 +2677,6 @@ function updateNextBasicsDisabled(){
 
 render();
 </script>
-<div class="version-badge">CHARACTER CREATOR · V20 · 2026-07-17</div>
+<div class="version-badge">CHARACTER CREATOR · V21 · 2026-07-17</div>
 </body>
 </html>
