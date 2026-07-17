@@ -2949,8 +2949,16 @@ const LOCAL_ENCOUNTERS = [
 
 function generateLocalEncounter(provinceId, settlementName){
   const name = pickName(provinceId, settlementName);
-  const template = pick(LOCAL_ENCOUNTERS);
-  return { name, role:'encounter', template, setupLine: template.setup(name) };
+  const templateIndex = Math.floor(Math.random() * LOCAL_ENCOUNTERS.length);
+  const template = LOCAL_ENCOUNTERS[templateIndex];
+  // templateIndex is what actually gets persisted (via the city grid → saveRoamState →
+  // JSON.stringify). setupLine is a plain string, safe to store. template itself is NOT
+  // stored on the object below — it's a live JS object with function properties
+  // (smartWin/smartLose/boldWin/boldLose), and JSON.stringify silently drops functions.
+  // Embedding it directly here worked right up until the grid got cached to localStorage
+  // and reloaded, at which point every encounter's choice buttons stopped doing anything —
+  // renderLocNpc always re-derives the real template from LOCAL_ENCOUNTERS[templateIndex].
+  return { name, role:'encounter', templateIndex, setupLine: template.setup(name) };
 }
 
 function generateNpc(provinceId, settlementName, role, pits){
@@ -3408,7 +3416,13 @@ function renderLocTravel(){
 function renderLocNpc(){
   const npc = state.visitingLocation.npc;
   if(npc.role === 'encounter'){
-    const t = npc.template;
+    // Always re-derive from the live LOCAL_ENCOUNTERS array — npc.templateIndex is what's
+    // actually trustworthy after a save/reload. Falls back to matching by title for NPCs
+    // generated before this fix (their stored templateIndex is missing, but the string
+    // fields like title survived the old JSON round-trip fine).
+    const t = LOCAL_ENCOUNTERS[npc.templateIndex]
+      || (npc.template && LOCAL_ENCOUNTERS.find(e=> e.title === npc.template.title))
+      || LOCAL_ENCOUNTERS[0];
     if(state.encounterResult){
       const res = state.encounterResult;
       let flavor, tone;
@@ -5312,6 +5326,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V52 · 2026-07-17</div>
+<div class="version-badge">FREE ROAM · V53 · 2026-07-17</div>
 </body>
 </html>
