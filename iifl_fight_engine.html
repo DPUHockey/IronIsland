@@ -401,6 +401,12 @@ function ageFromBirthday(birthDay, today){ return Math.max(0, Math.floor((today-
 // ground truth where available (juvenile intake always starts at exactly 11); everything
 // else falls back to a rough fights-played estimate rather than trusting the already-
 // corrupted age field. Gated by ageSystemVersion so it only ever runs once per fighter.
+// v3 (bumped from v2, 2026-07-17): the original v2 migration itself ran on some fighters
+// before DAYS_PER_FIGHTER_YEAR was corrected from 63 to 365, locking in a wrong-divisor
+// birthDay and stamping them "already migrated" anyway — everyone collapsed to ~age 2 and
+// stayed there. Bumping the gate forces one clean re-derivation for anyone still below v3.
+// If age corruption ever resurfaces, bump this number again rather than patching in place —
+// re-deriving without bumping just re-stamps the same broken fighters as "already fixed."
 function estimateAgeFallback(f){
   const totalFights = f.record ? (f.record.wins||0)+(f.record.losses||0) : 0;
   if(f.juniorTeamId || f.amateurLeagueId){
@@ -409,7 +415,7 @@ function estimateAgeFallback(f){
   return Math.min(18, Math.max(11, 11 + Math.round(totalFights / 7)));
 }
 function syncFighterAge(f, today){
-  if(f.ageSystemVersion === 2){
+  if(f.ageSystemVersion === 3){
     if(!f.birthDay) f.birthDay = birthDayForAge(f.age || 12, today);
     f.age = ageFromBirthday(f.birthDay, today);
     return;
@@ -420,7 +426,7 @@ function syncFighterAge(f, today){
     f.age = estimateAgeFallback(f);
   }
   f.birthDay = birthDayForAge(f.age, today);
-  f.ageSystemVersion = 2;
+  f.ageSystemVersion = 3;
 }
 function ensureRecord(f){
   if(!f.record) f.record = { wins:0, losses:0 };
@@ -1184,6 +1190,6 @@ function applyResultToRoster(){
 
 render();
 </script>
-<div class="version-badge">FIGHT ENGINE · V12 · 2026-07-16</div>
+<div class="version-badge">FIGHT ENGINE · V13 · 2026-07-17</div>
 </body>
 </html>
