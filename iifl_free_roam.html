@@ -1786,7 +1786,14 @@ function provincePoolCap(provinceId){
   // tournament brackets, which was always the bigger driver of pool size than the
   // draft pipeline specifically.
   const target = pitLocationsForProvince(provinceId).reduce((s,l)=> s + l.perClass*3, 0);
-  return Math.min(250, Math.max(100, Math.round(target * 0.5)));
+  // Raised 2026-07-17: this was tuned down hard while Iron Island shared its origin's
+  // localStorage quota with several other unrelated apps. Now isolated on its own domain
+  // (Netlify), there's real headroom again — a flagship Capital alone can organically want
+  // ~150, and the old 250 hard ceiling meant a whole 17-settlement province was fighting
+  // over less room than one city needed. Still capped, not removed: fight logs grow every
+  // fighter's JSON size over time regardless of headcount, so an unbounded pool would
+  // eventually refill the same wall from a different direction.
+  return Math.min(450, Math.max(150, Math.round(target * 0.75)));
 }
 function enforceProvincePoolCap(pools, provinceId, capOverride){
   const pool = pools.juvenile[provinceId];
@@ -5168,6 +5175,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V49 · 2026-07-17</div>
+<div class="version-badge">FREE ROAM · V50 · 2026-07-17</div>
 </body>
 </html>
