@@ -2148,11 +2148,20 @@ const ROUND_EXCHANGES = [
   '{A} controls the center, mixing in {flavorA} that {B} can\'t quite solve.',
   '{B} finds a home for {flavorB}, and the crowd reacts.',
 ];
-const ROUND_CLOSERS = [
+const ROUND_CLOSERS_NEUTRAL = [
   'The horn sounds to end the round — close to call.',
   'Round ends with both corners shouting instructions.',
-  'Round closes with {A} marginally ahead on output.',
-  'Round closes with {B} landing the harder shot at the bell.',
+];
+// {EDGE} is resolved per-round in the simulation loop below, biased toward the actual
+// match winner — NOT fixed to fA/fB. The old version used {A}/{B} directly, which meant
+// one of these two lines ALWAYS credited the same fixed fighter (fA is always the player
+// in a player fight) no matter who the sim had already decided would win — so a fight
+// could narrate the player "marginally ahead" in all 3 rounds and still lose, with
+// nothing contradictory in the sim itself, just a flavor line that was never actually
+// tracking the outcome. This is the exact bug Jeric reported.
+const ROUND_CLOSERS_EDGE = [
+  'Round closes with {EDGE} marginally ahead on output.',
+  'Round closes with {EDGE} landing the harder shot at the bell.',
 ];
 // Mid-round scares: a knockdown that DOESN'T end the fight — pure drama, keeps rounds tense.
 const SCARE_KNOCKDOWN = [
@@ -2300,7 +2309,15 @@ function simulateBout(fA, fB, ctx){
         log.push({ type:'line', text: fillTpl(pick(SCARE_KNOCKDOWN), smap) });
         log.push({ type:'line', text: fillTpl(pick(SCARE_RECOVERY), smap) });
       } else {
-        log.push({ type:'line', text: fillTpl(pick(ROUND_CLOSERS), map) });
+        // 50/50 neutral vs. giving one fighter the edge for the round — and when it does,
+        // biased toward whoever actually wins, same reasoning as the scare above.
+        if(Math.random() < 0.5){
+          log.push({ type:'line', text: fillTpl(pick(ROUND_CLOSERS_NEUTRAL), map) });
+        } else {
+          const edgeIsA = Math.random() < (winnerIsA ? 0.8 : 0.2);
+          const edgeMap = Object.assign({}, map, { EDGE: edgeIsA ? fA.name : fB.name });
+          log.push({ type:'line', text: fillTpl(pick(ROUND_CLOSERS_EDGE), edgeMap) });
+        }
       }
     }
   }
@@ -5326,6 +5343,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V53 · 2026-07-17</div>
+<div class="version-badge">FREE ROAM · V54 · 2026-07-17</div>
 </body>
 </html>
