@@ -226,6 +226,25 @@ function sk(baseKey){
   return sid ? `iifl_save_${sid}__${baseKey}` : baseKey;
 }
 
+// Permanently deletes a save: removes it from the registry and clears every localStorage
+// key under its namespace (iifl_save_<id>__*). Nothing did this before — "Reset Island
+// (Test Mode)" and every other new-save path only ever ADDED saves, never removed one,
+// so old test saves just sat there forever eating into the shared localStorage quota
+// until a fresh save could hit QuotaExceededError on its very first city visit.
+function deleteSave(saveId){
+  const prefix = `iifl_save_${saveId}__`;
+  const toRemove = [];
+  for(let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if(k && k.startsWith(prefix)) toRemove.push(k);
+  }
+  toRemove.forEach(k=> localStorage.removeItem(k));
+  const reg = loadSaveRegistry();
+  reg.saves = reg.saves.filter(s=> s.id !== saveId);
+  if(reg.activeSaveId === saveId) reg.activeSaveId = null;
+  saveSaveRegistry(reg);
+}
+
 // Creates a brand new, fully independent save: fresh clock at Day 1 (May 1, 1958),
 // no records, no roster. playableFighterId is the one fighter from the created-fighters
 // catalog the player actually controls; npcFighterIds are the others they've chosen to
@@ -1569,7 +1588,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-reset-island">🔄 Reset Island (Test Mode) →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V15 · 2026-07-17</div>
+        <div class="version-badge">HOME · V16 · 2026-07-17</div>
       </footer>
     </div>
   `;
@@ -1597,7 +1616,10 @@ function renderSaveSelectScreen(){
           <div class="fighter-name">${s.name}</div>
           <div class="fighter-meta">Playing as ${playable ? playable.name : 'Unknown'} · ${s.npcFighterIds.length} NPC${s.npcFighterIds.length===1?'':'s'} in this world</div>
         </div>
-        <button class="btn" data-continue-save="${s.id}">Continue →</button>
+        <div style="display:flex; gap:6px;">
+          <button class="btn" data-continue-save="${s.id}">Continue →</button>
+          <button class="btn" data-delete-save="${s.id}" style="color:var(--ink-red); border-color:var(--ink-red);" title="Delete this save permanently">🗑</button>
+        </div>
       </div>
     `;
   }).join('') : `<div class="empty-note">No saves yet — start your first one below.</div>`;
@@ -1643,7 +1665,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V15 · 2026-07-17</div>
+        <div class="version-badge">HOME · V16 · 2026-07-17</div>
       </footer>
     </div>
   `;
@@ -1652,6 +1674,17 @@ function renderSaveSelectScreen(){
     btn.onclick = ()=>{
       setActiveSaveId(btn.dataset.continueSave);
       renderApp();
+    };
+  });
+
+  document.querySelectorAll('[data-delete-save]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const id = btn.dataset.deleteSave;
+      const save = loadSaveRegistry().saves.find(s=> s.id === id);
+      const ok = window.confirm(`Permanently delete "${save?save.name:'this save'}"? This can't be undone — everything about this save (roster, pools, results, clock) is gone for good.`);
+      if(!ok) return;
+      deleteSave(id);
+      renderSaveSelectScreen();
     };
   });
 
@@ -1750,7 +1783,7 @@ function wireEvents(cycleYear, roster, playable){
   if(resetIslandBtn) resetIslandBtn.onclick = ()=>{
     const ok = window.confirm(
       'This creates a brand new test save (fresh clock, empty field pools, an auto-generated placeholder fighter) and switches to it immediately. ' +
-      'Your current save isn\'t deleted — it\'ll still be there under "Switch or Start Another Game" — but you\'ll be playing this new one until you switch back. Continue?'
+      'Your current save isn\'t deleted — it\'ll still be there under "Switch or Start Another Game" (which now also lets you delete old saves you don\'t need, to free up storage) — but you\'ll be playing this new one until you switch back. Continue?'
     );
     if(!ok) return;
     const name = resetIslandForTesting();
