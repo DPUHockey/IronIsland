@@ -3485,30 +3485,51 @@ function renderCityWalk(){
 function renderCalendar(){
   const f = state.fighterId ? getFighterById(state.fighterId) : null;
   const today = getCurrentDay();
-  const year = currentIslandYear();
+  // Use the actual calendar year the clock is on — NOT currentIslandYear()/the juvenile
+  // cycle-year, which intentionally rolls back to the previous year for the first ~2
+  // months of every cycle (before the season opens on May 1). That's correct for season
+  // math but wrong here: in early-year saves it showed a nonexistent prior year's dates
+  // instead of "whatever year we're actually in."
+  const year = dateForDay(today).getFullYear();
   const events = getMajorEventsForYear(year).sort((a,b)=> a.day-b.day);
   const log = loadEventLog();
   const logByDay = {};
   log.forEach(e=> logByDay[e.day] = e);
+  const tab = state.calendarTab || 'tracker';
 
-  const trackerHtml = events.map(e=>{
-    const status = e.day < today ? 'past' : e.day === today ? 'today' : 'upcoming';
-    const logged = logByDay[e.day];
+  const tabsHtml = `
+    <div class="btn-row" style="margin-bottom:16px;">
+      <button class="btn ${tab==='tracker'?'btn-primary':''}" id="cal-tab-tracker" style="flex:1;">Year Tracker</button>
+      <button class="btn ${tab==='grid'?'btn-primary':''}" id="cal-tab-grid" style="flex:1;">Month Grid</button>
+    </div>
+  `;
+
+  if(tab === 'tracker'){
+    const trackerHtml = events.map(e=>{
+      const status = e.day < today ? 'past' : e.day === today ? 'today' : 'upcoming';
+      const logged = logByDay[e.day];
+      return `
+        <div class="pit-card" style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div class="pit-name">${e.title}</div>
+            <div class="pit-meta">${e.tier} · ${formatCalendarDate(e.day)}</div>
+          </div>
+          <div style="text-align:right;">
+            ${status==='today' ? `<span style="color:var(--brass); font-family:var(--label); font-size:11px; text-transform:uppercase;">Today</span>`
+              : status==='upcoming' ? `<span style="color:var(--muted); font-family:var(--mono); font-size:11px;">in ${e.day-today}d</span>`
+              : logged ? `<span style="font-family:var(--mono); font-size:10px; color:var(--good);">${logged.watched?'Watched':'Simmed'}</span>`
+              : `<span style="font-family:var(--mono); font-size:10px; color:var(--muted);">Passed</span>`}
+          </div>
+        </div>
+      `;
+    }).join('');
     return `
-      <div class="pit-card" style="display:flex; justify-content:space-between; align-items:center;">
-        <div>
-          <div class="pit-name">${e.title}</div>
-          <div class="pit-meta">${e.tier} · ${formatCalendarDate(e.day)}</div>
-        </div>
-        <div style="text-align:right;">
-          ${status==='today' ? `<span style="color:var(--brass); font-family:var(--label); font-size:11px; text-transform:uppercase;">Today</span>`
-            : status==='upcoming' ? `<span style="color:var(--muted); font-family:var(--mono); font-size:11px;">in ${e.day-today}d</span>`
-            : logged ? `<span style="font-family:var(--mono); font-size:10px; color:var(--good);">${logged.watched?'Watched':'Simmed'}</span>`
-            : `<span style="font-family:var(--mono); font-size:10px; color:var(--muted);">Passed</span>`}
-        </div>
-      </div>
+      ${tabsHtml}
+      <div class="section-label">Year Tracker — ${year}</div>
+      <div class="pit-grid" style="grid-template-columns:1fr;">${trackerHtml}</div>
+      <div class="btn-row" style="margin-top:16px;"><button class="btn" id="cal-back">← Back</button><span></span></div>
     `;
-  }).join('');
+  }
 
   // Month grid — defaults to the month containing today, navigable via state.calendarMonthOffset
   const offset = state.calendarMonthOffset || 0;
@@ -3518,6 +3539,7 @@ function renderCalendar(){
   const gridMonth = gridMonthDate.getMonth(); // 0-indexed
   const daysInMonth = new Date(gridYear, gridMonth+1, 0).getDate();
   const startWeekday = new Date(gridYear, gridMonth, 1).getDay();
+  const gridYearEvents = getMajorEventsForYear(gridYear).sort((a,b)=> a.day-b.day);
 
   const juniorSeason = f && f.juniorTeamId ? resolveTierSeason('junior', today) : null;
 
@@ -3529,7 +3551,7 @@ function renderCalendar(){
     const weekday = weekdayNameForDay(dayIndex);
     const juvSeason = resolveTierSeason('juvenile', dayIndex);
     const isJuvFightNight = ['Monday','Tuesday','Wednesday'].includes(weekday) && juvSeason.phase !== 'dead-days';
-    const majorEvent = events.find(e=> e.day === dayIndex);
+    const majorEvent = gridYearEvents.find(e=> e.day === dayIndex);
     let markers = '';
     if(majorEvent) markers += `<div class="cal-marker cal-marker-major" title="${majorEvent.title}">★</div>`;
     else if(isJuvFightNight) markers += `<div class="cal-marker" title="${eventNameForDay(dayIndex)}">🥊</div>`;
@@ -3537,8 +3559,7 @@ function renderCalendar(){
   }
 
   return `
-    <div class="section-label">Year Tracker — Cycle ${year}</div>
-    <div class="pit-grid" style="grid-template-columns:1fr; margin-bottom:22px;">${trackerHtml}</div>
+    ${tabsHtml}
     <div class="section-label" style="display:flex; justify-content:space-between; align-items:center;">
       <span>${gridMonthDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</span>
       <span><button class="btn" id="cal-prev-month" style="padding:4px 10px;">←</button> <button class="btn" id="cal-next-month" style="padding:4px 10px;">→</button></span>
@@ -5042,7 +5063,11 @@ function wireEvents(){
   if(backToWalk) backToWalk.onclick = ()=>{ state.encounterResult = null; state.screen='city-walk'; render(); };
 
   const openCalendar = document.querySelector('[data-open-calendar]');
-  if(openCalendar) openCalendar.onclick = ()=>{ state.calendarMonthOffset = 0; state.screen='calendar'; render(); };
+  if(openCalendar) openCalendar.onclick = ()=>{ state.calendarMonthOffset = 0; state.calendarTab = 'tracker'; state.screen='calendar'; render(); };
+  const calTabTracker = document.getElementById('cal-tab-tracker');
+  if(calTabTracker) calTabTracker.onclick = ()=>{ state.calendarTab = 'tracker'; render(); };
+  const calTabGrid = document.getElementById('cal-tab-grid');
+  if(calTabGrid) calTabGrid.onclick = ()=>{ state.calendarTab = 'grid'; render(); };
   const calPrev = document.getElementById('cal-prev-month');
   if(calPrev) calPrev.onclick = ()=>{ state.calendarMonthOffset = (state.calendarMonthOffset||0) - 1; render(); };
   const calNext = document.getElementById('cal-next-month');
@@ -5589,6 +5614,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V58 · 2026-07-17</div>
+<div class="version-badge">FREE ROAM · V59 · 2026-07-17</div>
 </body>
 </html>
