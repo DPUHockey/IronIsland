@@ -409,6 +409,104 @@ function tierKeyDates(cycleYear){
   };
 }
 
+// Canonical "major events" calendar, built directly off tierKeyDates so it can never
+// drift out of sync with the actual season logic. watchUrl points at a real dedicated
+// screen when one exists (currently just Junior Draft Day); everything else is
+// "watchable" only in the sense of pausing the clock and showing a summary — most tiers
+// don't have a built live-viewing screen yet, so simming and watching produce the same
+// result for those, just with a different framing.
+function getMajorEventsForYear(cycleYear){
+  const d = tierKeyDates(cycleYear);
+  return [
+    { day: d.juvenileOpen, title: 'Juvenile League Opens', tier: 'Juvenile', kind: 'open' },
+    { day: d.juvenileRegEnd, title: 'Juvenile Season Ends', tier: 'Juvenile', kind: 'end' },
+    { day: d.juniorDraftDay, title: 'Ironbound Jr Draft', tier: 'Junior', kind: 'draft', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
+    { day: d.juniorOpen, title: 'Junior League Opens', tier: 'Junior', kind: 'open' },
+    { day: d.juniorTradeDeadline, title: 'Junior Trade Deadline', tier: 'Junior', kind: 'deadline' },
+    { day: d.juniorRegEnd, title: 'Junior Regular Season Ends', tier: 'Junior', kind: 'end' },
+    { day: d.jrLeaguePlayoffStart, title: 'Junior League Playoffs Begin', tier: 'Junior', kind: 'playoffs' },
+    { day: d.jrLeaguePlayoffEnd, title: 'Junior League Playoffs End', tier: 'Junior', kind: 'playoffs' },
+    { day: d.jrIslandChampStart, title: 'Junior Island Championship Begins', tier: 'Junior', kind: 'championship' },
+    { day: d.jrIslandChampEnd, title: 'Junior Island Championship Ends', tier: 'Junior', kind: 'championship' },
+    { day: d.amateurOpen, title: 'Amateur Circuit Opens', tier: 'Amateur', kind: 'open' },
+    { day: d.amateurTradeDeadline, title: 'Amateur Trade Deadline', tier: 'Amateur', kind: 'deadline' },
+    { day: d.amateurRegEnd, title: 'Amateur Regular Season Ends', tier: 'Amateur', kind: 'end' },
+    { day: d.amateurPlayoffStart, title: 'Amateur Playoffs Begin', tier: 'Amateur', kind: 'playoffs' },
+    { day: d.amateurPlayoffEnd, title: 'Amateur Playoffs End', tier: 'Amateur', kind: 'playoffs' },
+    { day: d.proDraftDay, title: 'Pro Draft', tier: 'Pro', kind: 'draft' },
+    { day: d.proOpen, title: 'Pro League Opens', tier: 'Pro', kind: 'open' },
+    { day: d.proTradeDeadline, title: 'Pro Trade Deadline', tier: 'Pro', kind: 'deadline' },
+    { day: d.proRegEnd, title: 'Pro Regular Season Ends', tier: 'Pro', kind: 'end' },
+    { day: d.proPlayoffStart, title: 'Pro Playoffs Begin', tier: 'Pro', kind: 'playoffs' },
+    { day: d.proPlayoffEnd, title: 'Pro Playoffs End', tier: 'Pro', kind: 'playoffs' },
+  ];
+}
+// Covers a day range that may cross a cycle-year boundary (e.g. jumping from late-season
+// dead-days into next May) by checking both the current and next island year's events.
+function majorEventsInRange(fromDayExclusive, toDayInclusive){
+  const y = resolveTierSeason('juvenile', fromDayExclusive).cycleYear;
+  const events = [...getMajorEventsForYear(y), ...getMajorEventsForYear(y+1)];
+  return events.filter(e=> e.day > fromDayExclusive && e.day <= toDayInclusive).sort((a,b)=> a.day-b.day);
+}
+function nextMajorEventInRange(fromDayExclusive, toDayInclusive){
+  return majorEventsInRange(fromDayExclusive, toDayInclusive)[0] || null;
+}
+const EVENT_LOG_KEY = 'iifl_event_log_v1';
+function logEventResult(evt, watched){
+  let log = [];
+  try{ log = JSON.parse(localStorage.getItem(sk(EVENT_LOG_KEY))) || []; }catch(e){}
+  log.push({ day: evt.day, title: evt.title, tier: evt.tier, watched: !!watched });
+  if(log.length > 60) log = log.slice(-60);
+  try{ localStorage.setItem(sk(EVENT_LOG_KEY), JSON.stringify(log)); }catch(e){}
+}
+// Stops a multi-day jump AT the first major event instead of blowing past it, and shows
+// a Watch/Sim choice. "Sim the Day" resolves it automatically (still logged, viewable
+// later) and — if the original jump had further to go — keeps checking for the NEXT
+// event in the remaining range rather than just completing the rest blindly.
+function advanceWithEventChecks(targetDay){
+  const today = getCurrentDay();
+  const evt = nextMajorEventInRange(today, targetDay);
+  if(!evt){
+    const c = loadClock(); c.day = Math.max(1, targetDay); saveClock(c);
+    renderApp();
+    return;
+  }
+  const c = loadClock(); c.day = evt.day; saveClock(c);
+  showEventChoiceModal(evt, targetDay);
+  renderApp();
+}
+function showEventChoiceModal(evt, resumeTarget){
+  const overlay = document.createElement('div');
+  overlay.id = 'event-modal-overlay';
+  overlay.style.cssText = 'position:fixed; inset:0; z-index:60; background:rgba(20,17,13,0.9); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:var(--bg-panel); border:1px solid var(--brass); max-width:460px; width:100%; padding:24px; text-align:center;">
+      <div class="ticket-eyebrow" style="color:var(--brass);">${formatCalendarDate(evt.day)}</div>
+      <div class="ticket-title" style="margin-bottom:10px;">${evt.title}</div>
+      <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:20px;">${evt.tier} · a major date on the island calendar has arrived.</p>
+      <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+        ${evt.watchUrl ? `<button class="btn btn-primary" id="event-watch">Watch It →</button>` : ''}
+        <button class="btn" id="event-sim">Sim the Day</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  if(evt.watchUrl) document.getElementById('event-watch').onclick = ()=>{
+    logEventResult(evt, true);
+    window.location.href = evt.watchUrl;
+  };
+  document.getElementById('event-sim').onclick = ()=>{
+    logEventResult(evt, false);
+    overlay.remove();
+    const c = loadClock(); c.day = evt.day; saveClock(c); // land on the event day itself so its effects (draft resolving, etc.) fire
+    if(resumeTarget && resumeTarget > evt.day){
+      advanceWithEventChecks(resumeTarget); // keep checking for further events the rest of the way
+    } else {
+      renderApp();
+    }
+  };
+}
+
 // Weighted rotation for which QUALIFYING team hosts its league's own playoff bracket.
 // Hosting is a venue perk, not a playoff-entry mechanic — it's picked from teams that
 // already qualified. Weighted toward "better programs" (all-time win% is the proxy
@@ -1471,7 +1569,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-reset-island">🔄 Reset Island (Test Mode) →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V13 · 2026-07-17</div>
+        <div class="version-badge">HOME · V14 · 2026-07-17</div>
       </footer>
     </div>
   `;
@@ -1545,7 +1643,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V13 · 2026-07-17</div>
+        <div class="version-badge">HOME · V14 · 2026-07-17</div>
       </footer>
     </div>
   `;
@@ -1596,10 +1694,10 @@ function wireEvents(cycleYear, roster, playable){
   };
 
   const simDayBtn = document.getElementById('btn-sim-day');
-  if(simDayBtn) simDayBtn.onclick = ()=>{ advanceClockByDays(1); renderApp(); };
+  if(simDayBtn) simDayBtn.onclick = ()=>{ advanceWithEventChecks(getCurrentDay() + 1); };
 
   const simWeekBtn = document.getElementById('btn-sim-week');
-  if(simWeekBtn) simWeekBtn.onclick = ()=>{ advanceClockByDays(7); renderApp(); };
+  if(simWeekBtn) simWeekBtn.onclick = ()=>{ advanceWithEventChecks(getCurrentDay() + 7); };
 
   const simSeasonBtn = document.getElementById('btn-sim-season');
   if(simSeasonBtn) simSeasonBtn.onclick = ()=>{
@@ -1701,10 +1799,7 @@ function wireEvents(cycleYear, roster, playable){
   const advanceBtn = document.getElementById('btn-advance');
   if(advanceBtn) advanceBtn.onclick = ()=>{
     const target = nextJuvenileOpeningDay(getCurrentDay());
-    const c = loadClock();
-    c.day = target;
-    saveClock(c);
-    renderApp();
+    advanceWithEventChecks(target);
   };
 }
 
