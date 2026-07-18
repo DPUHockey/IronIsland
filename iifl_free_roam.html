@@ -57,6 +57,14 @@
   /* fighter select */
   .fighter-grid{ display:grid; gap:10px; }
   .pit-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; margin-top:8px; }
+  .cal-cell{ aspect-ratio:1; border:1px solid var(--line); padding:4px; font-family:var(--mono); font-size:10px; position:relative; display:flex; flex-direction:column; }
+  .cal-cell.cal-head{ border:none; text-align:center; font-family:var(--label); font-size:10px; text-transform:uppercase; color:var(--muted); aspect-ratio:auto; align-items:center; justify-content:center; }
+  .cal-cell.cal-empty{ border:none; }
+  .cal-cell.cal-today{ border-color:var(--brass); box-shadow:inset 0 0 0 1px var(--brass); }
+  .cal-daynum{ color:var(--bone-dim); }
+  .cal-marker{ font-size:11px; line-height:1; margin-top:auto; }
+  .cal-marker-major{ color:var(--brass); }
   .pit-card{
     background:var(--bg-raised); border:1px solid var(--line); border-left:4px solid var(--pc-color, var(--brass));
     padding:14px 16px; cursor:pointer; transition:all .15s ease;
@@ -731,6 +739,46 @@ function tierKeyDates(cycleYear){
     proPlayoffStart: proRegEnd + 1,
     proPlayoffEnd: proRegEnd + 3*7,
   };
+}
+
+// Mirrors the same function in iifl_home.html — kept in sync manually since these files
+// share localStorage but not code. Canonical major-events calendar, built directly off
+// tierKeyDates so it can never drift out of sync with the actual season logic.
+function getMajorEventsForYear(cycleYear){
+  const d = tierKeyDates(cycleYear);
+  return [
+    { day: d.juvenileOpen, title: 'Juvenile League Opens', tier: 'Juvenile', kind: 'open' },
+    { day: d.juvenileRegEnd, title: 'Juvenile Season Ends', tier: 'Juvenile', kind: 'end' },
+    { day: d.juniorDraftDay, title: 'Ironbound Jr Draft', tier: 'Junior', kind: 'draft', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
+    { day: d.juniorOpen, title: 'Junior League Opens', tier: 'Junior', kind: 'open' },
+    { day: d.juniorTradeDeadline, title: 'Junior Trade Deadline', tier: 'Junior', kind: 'deadline' },
+    { day: d.juniorRegEnd, title: 'Junior Regular Season Ends', tier: 'Junior', kind: 'end' },
+    { day: d.jrLeaguePlayoffStart, title: 'Junior League Playoffs Begin', tier: 'Junior', kind: 'playoffs' },
+    { day: d.jrLeaguePlayoffEnd, title: 'Junior League Playoffs End', tier: 'Junior', kind: 'playoffs' },
+    { day: d.jrIslandChampStart, title: 'Junior Island Championship Begins', tier: 'Junior', kind: 'championship' },
+    { day: d.jrIslandChampEnd, title: 'Junior Island Championship Ends', tier: 'Junior', kind: 'championship' },
+    { day: d.amateurOpen, title: 'Amateur Circuit Opens', tier: 'Amateur', kind: 'open' },
+    { day: d.amateurTradeDeadline, title: 'Amateur Trade Deadline', tier: 'Amateur', kind: 'deadline' },
+    { day: d.amateurRegEnd, title: 'Amateur Regular Season Ends', tier: 'Amateur', kind: 'end' },
+    { day: d.amateurPlayoffStart, title: 'Amateur Playoffs Begin', tier: 'Amateur', kind: 'playoffs' },
+    { day: d.amateurPlayoffEnd, title: 'Amateur Playoffs End', tier: 'Amateur', kind: 'playoffs' },
+    { day: d.proDraftDay, title: 'Pro Draft', tier: 'Pro', kind: 'draft' },
+    { day: d.proOpen, title: 'Pro League Opens', tier: 'Pro', kind: 'open' },
+    { day: d.proTradeDeadline, title: 'Pro Trade Deadline', tier: 'Pro', kind: 'deadline' },
+    { day: d.proRegEnd, title: 'Pro Regular Season Ends', tier: 'Pro', kind: 'end' },
+    { day: d.proPlayoffStart, title: 'Pro Playoffs Begin', tier: 'Pro', kind: 'playoffs' },
+    { day: d.proPlayoffEnd, title: 'Pro Playoffs End', tier: 'Pro', kind: 'playoffs' },
+  ];
+}
+const EVENT_LOG_KEY = 'iifl_event_log_v1';
+function loadEventLog(){
+  try{ return JSON.parse(localStorage.getItem(sk(EVENT_LOG_KEY))) || []; }catch(e){ return []; }
+}
+function currentIslandYear(){ return resolveTierSeason('juvenile', getCurrentDay()).cycleYear; }
+function majorEventsInRange(fromDayExclusive, toDayInclusive){
+  const y = resolveTierSeason('juvenile', fromDayExclusive).cycleYear;
+  const events = [...getMajorEventsForYear(y), ...getMajorEventsForYear(y+1)];
+  return events.filter(e=> e.day > fromDayExclusive && e.day <= toDayInclusive).sort((a,b)=> a.day-b.day);
 }
 
 // Weighted rotation for which QUALIFYING team hosts its league's own playoff bracket.
@@ -3300,6 +3348,7 @@ function render(){
   else if(state.screen==='preview'){ body = renderPreview(); title='TALE OF THE TAPE'; }
   else if(state.screen==='bout'){ body = renderBout(); title='FIGHT NIGHT'; }
   else if(state.screen==='fight-result'){ body = renderFightResult(); title='RESULT'; }
+  else if(state.screen==='calendar'){ body = renderCalendar(); title='ISLAND CALENDAR'; }
 
   const bannerFighter = state.fighterId ? getFighterById(state.fighterId) : null;
   const bannerFighterInfo = (bannerFighter && bannerFighter.juvenileHomeProvinceId)
@@ -3311,6 +3360,7 @@ function render(){
       <div><div class="ticket-eyebrow">Iron Island · Fight League</div><div class="ticket-title">${title}</div></div>
       <div style="display:flex; align-items:center; gap:14px;">
         <div class="ticket-sub">${sub}</div>
+        <button data-open-calendar="1" style="font-family:var(--label); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--brass); background:none; border:1px solid var(--brass); padding:6px 12px; cursor:pointer; white-space:nowrap;">📅 Calendar</button>
         <a href="iifl_home.html" style="font-family:var(--label); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--brass); border:1px solid var(--brass); padding:6px 12px; text-decoration:none; white-space:nowrap;">🏠 Home Hub</a>
       </div>
     </div>
@@ -3429,6 +3479,77 @@ function renderCityWalk(){
       ${pits.some(p=> isSignedAtPit(f, state.provinceId+'|'+state.settlementName+'|'+p.id)) && eligiblePits.length ? `<button class="btn btn-primary" id="find-a-fight">Find a Fight →</button>` : ''}
     </div>
     </div>
+  `;
+}
+
+function renderCalendar(){
+  const f = state.fighterId ? getFighterById(state.fighterId) : null;
+  const today = getCurrentDay();
+  const year = currentIslandYear();
+  const events = getMajorEventsForYear(year).sort((a,b)=> a.day-b.day);
+  const log = loadEventLog();
+  const logByDay = {};
+  log.forEach(e=> logByDay[e.day] = e);
+
+  const trackerHtml = events.map(e=>{
+    const status = e.day < today ? 'past' : e.day === today ? 'today' : 'upcoming';
+    const logged = logByDay[e.day];
+    return `
+      <div class="pit-card" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div class="pit-name">${e.title}</div>
+          <div class="pit-meta">${e.tier} · ${formatCalendarDate(e.day)}</div>
+        </div>
+        <div style="text-align:right;">
+          ${status==='today' ? `<span style="color:var(--brass); font-family:var(--label); font-size:11px; text-transform:uppercase;">Today</span>`
+            : status==='upcoming' ? `<span style="color:var(--muted); font-family:var(--mono); font-size:11px;">in ${e.day-today}d</span>`
+            : logged ? `<span style="font-family:var(--mono); font-size:10px; color:var(--good);">${logged.watched?'Watched':'Simmed'}</span>`
+            : `<span style="font-family:var(--mono); font-size:10px; color:var(--muted);">Passed</span>`}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Month grid — defaults to the month containing today, navigable via state.calendarMonthOffset
+  const offset = state.calendarMonthOffset || 0;
+  const base = dateForDay(today);
+  const gridMonthDate = new Date(base.getFullYear(), base.getMonth()+offset, 1);
+  const gridYear = gridMonthDate.getFullYear();
+  const gridMonth = gridMonthDate.getMonth(); // 0-indexed
+  const daysInMonth = new Date(gridYear, gridMonth+1, 0).getDate();
+  const startWeekday = new Date(gridYear, gridMonth, 1).getDay();
+
+  const juniorSeason = f && f.juniorTeamId ? resolveTierSeason('junior', today) : null;
+
+  let cells = '';
+  for(let i=0;i<startWeekday;i++) cells += `<div class="cal-cell cal-empty"></div>`;
+  for(let d=1; d<=daysInMonth; d++){
+    const dayIndex = dayForCalendarDate(gridYear, gridMonth+1, d);
+    const isToday = dayIndex === today;
+    const weekday = weekdayNameForDay(dayIndex);
+    const juvSeason = resolveTierSeason('juvenile', dayIndex);
+    const isJuvFightNight = ['Monday','Tuesday','Wednesday'].includes(weekday) && juvSeason.phase !== 'dead-days';
+    const majorEvent = events.find(e=> e.day === dayIndex);
+    let markers = '';
+    if(majorEvent) markers += `<div class="cal-marker cal-marker-major" title="${majorEvent.title}">★</div>`;
+    else if(isJuvFightNight) markers += `<div class="cal-marker" title="${eventNameForDay(dayIndex)}">🥊</div>`;
+    cells += `<div class="cal-cell ${isToday?'cal-today':''}" title="${majorEvent?majorEvent.title:(isJuvFightNight?eventNameForDay(dayIndex):'')}"><div class="cal-daynum">${d}</div>${markers}</div>`;
+  }
+
+  return `
+    <div class="section-label">Year Tracker — Cycle ${year}</div>
+    <div class="pit-grid" style="grid-template-columns:1fr; margin-bottom:22px;">${trackerHtml}</div>
+    <div class="section-label" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>${gridMonthDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</span>
+      <span><button class="btn" id="cal-prev-month" style="padding:4px 10px;">←</button> <button class="btn" id="cal-next-month" style="padding:4px 10px;">→</button></span>
+    </div>
+    ${juniorSeason ? `<p style="font-family:var(--mono); font-size:11px; color:var(--muted); margin-bottom:8px;">Your Junior team's season: <b>${juniorSeason.phase}</b> — full game-by-game schedule lives in the Junior League file.</p>` : ''}
+    <div class="cal-grid">
+      ${['S','M','T','W','T','F','S'].map(d=>`<div class="cal-cell cal-head">${d}</div>`).join('')}
+      ${cells}
+    </div>
+    <p style="font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:8px;">★ major event &nbsp; 🥊 Juvenile fight night</p>
+    <div class="btn-row" style="margin-top:16px;"><button class="btn" id="cal-back">← Back</button><span></span></div>
   `;
 }
 
@@ -4920,6 +5041,15 @@ function wireEvents(){
   const backToWalk = document.getElementById('back-to-walk');
   if(backToWalk) backToWalk.onclick = ()=>{ state.encounterResult = null; state.screen='city-walk'; render(); };
 
+  const openCalendar = document.querySelector('[data-open-calendar]');
+  if(openCalendar) openCalendar.onclick = ()=>{ state.calendarMonthOffset = 0; state.screen='calendar'; render(); };
+  const calPrev = document.getElementById('cal-prev-month');
+  if(calPrev) calPrev.onclick = ()=>{ state.calendarMonthOffset = (state.calendarMonthOffset||0) - 1; render(); };
+  const calNext = document.getElementById('cal-next-month');
+  if(calNext) calNext.onclick = ()=>{ state.calendarMonthOffset = (state.calendarMonthOffset||0) + 1; render(); };
+  const calBack = document.getElementById('cal-back');
+  if(calBack) calBack.onclick = ()=>{ state.screen = (state.fighterId && state.provinceId && state.settlementName) ? 'city-walk' : 'select'; render(); };
+
   ['decline','smart','bold'].forEach(tier=>{
     const btn = document.getElementById('encounter-'+tier);
     if(!btn) return;
@@ -5459,6 +5589,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V57 · 2026-07-17</div>
+<div class="version-badge">FREE ROAM · V58 · 2026-07-17</div>
 </body>
 </html>
