@@ -2962,11 +2962,77 @@ const LOCAL_ENCOUNTERS = [
     boldWin: n=> `The house is packed. ${n} is thrilled, and your cut is a real payday.`,
     boldLose: n=> `Barely anyone shows. You're out a real chunk of money for an empty room.`,
   },
+  {
+    title: 'Fresh Blood',
+    setup: n=> `A kid who can't be older than fifteen squares up in front of you, chest out, daring you to say something back. "${n}. Remember it. I'm coming for your spot."`,
+    declineLabel: 'Not Worth It', smartLabel: 'Size Him Up First', boldLabel: 'Take the Bait',
+    smartWin: n=> `Turns out ${n}'s all mouth. A little needling sends him off red-faced — and word gets around that you didn't even have to lift a finger.`,
+    smartLose: n=> `${n} actually has hands. You underestimated him, and he lets everyone on the block know it.`,
+    boldWin: n=> `You put ${n} on his back foot fast, right there on the street. He'll remember it — so will everyone watching.`,
+    boldLose: n=> `${n} catches you clean and the crowd loves it. Costs you money, pride, and a little bit of your next fight.`,
+  },
+  {
+    title: 'The Rematch Offer',
+    rivalKind: 'beat-you', // needs a real fighter Johnny has actually LOST to
+    setup: n=> `"${n}" spots you across the street and doesn't even try to hide the grin. "Been a while. You still thinking about it? I know I am."`,
+    declineLabel: 'Keep Walking', smartLabel: 'Talk It Over, Calm', boldLabel: 'Tell Him You Want It Too',
+    smartWin: n=> `You keep it civil — but the conversation does something for you. A rival's respect is worth more than his money.`,
+    smartLose: n=> `${n} needles you the whole time and you take the bait, snapping back harder than you meant to. It costs you standing, not cash.`,
+    boldWin: n=> `You go chest-to-chest right there and don't back down an inch. ${n} respects it — and it's already all over the street by tonight.`,
+    boldLose: n=> `It nearly goes physical before a passerby breaks it up. You're rattled going into whatever's next.`,
+  },
+  {
+    title: 'Old Business',
+    rivalKind: 'you-beat', // needs a real fighter Johnny has actually BEATEN
+    setup: n=> `"${n}" hasn't forgotten. "You caught me on a bad night. Everybody knows it. Say it."`,
+    declineLabel: "Don't Engage", smartLabel: 'Hear Him Out', boldLabel: 'Stand Your Ground',
+    smartWin: n=> `You let him talk himself out. ${n} walks off still salty, but it cost you nothing and you kept your head.`,
+    smartLose: n=> `${n} won't let it go, and it drags on long enough to be a real waste of your evening.`,
+    boldWin: n=> `You tell him straight: the record says what it says. ${n} doesn't love hearing it, but it shuts the whole thing down for good.`,
+    boldLose: n=> `You push back too hard and it turns into a real scene. Not your finest hour on this street.`,
+  },
+  {
+    title: 'Family Matter',
+    rivalKind: 'you-beat', // frames the SAME beaten opponent as a friend's grievance, not their own
+    setup: n=> `"${n}" isn't the fighter you beat — it's someone who cares about him, and they've clearly been waiting for this. "You did that to him. You think that's nothing?"`,
+    declineLabel: 'Not My Fight', smartLabel: 'Explain It Was a Fair Fight', boldLabel: "Tell Them to Take It Up With Him",
+    smartWin: n=> `You stay calm and lay it out plain — it was sanctioned, it was fair, that's the sport. ${n} isn't thrilled but backs off.`,
+    smartLose: n=> `Nothing you say lands. ${n} isn't interested in fair — just in being angry at you, and it eats your evening.`,
+    boldWin: n=> `You hold your ground without flinching. ${n} realizes yelling at you isn't going to change anything and finally walks off.`,
+    boldLose: n=> `It gets loud and ugly fast. You don't come out of it looking good, whatever the truth of the fight actually was.`,
+  },
 ];
 
 function generateLocalEncounter(provinceId, settlementName){
   const name = pickName(provinceId, settlementName);
-  const templateIndex = Math.floor(Math.random() * LOCAL_ENCOUNTERS.length);
+  const player = state.fighterId ? getFighterById(state.fighterId) : null;
+  const fightLog = (player && player.fightLog) ? player.fightLog : [];
+  const pastLosses = fightLog.filter(e=> e.opponentId && e.result === 'L');
+  const pastWins = fightLog.filter(e=> e.opponentId && e.result === 'W');
+
+  // ~25% of the time, if the career has real history to draw on, this "stranger" turns
+  // out to actually be someone from it — gives street encounters continuity with the
+  // real career, and crucially means the name is a real fighterId, not a throwaway —
+  // clickable to open their actual Fighter Card, not a dead end.
+  if(Math.random() < 0.25 && (pastLosses.length || pastWins.length)){
+    const useLoss = pastLosses.length && (!pastWins.length || Math.random() < 0.5);
+    const pool = useLoss ? pastLosses : pastWins;
+    const past = pick(pool);
+    const rivalKind = useLoss ? 'beat-you' : 'you-beat';
+    const candidates = LOCAL_ENCOUNTERS.filter(e=> e.rivalKind === rivalKind);
+    if(candidates.length){
+      const templateIndex = LOCAL_ENCOUNTERS.indexOf(pick(candidates));
+      const template = LOCAL_ENCOUNTERS[templateIndex];
+      return {
+        name: past.opponent, role:'encounter', templateIndex,
+        setupLine: template.setup(past.opponent),
+        opponentId: past.opponentId, // real fighter — renderLocNpc uses this to make the name clickable
+      };
+    }
+  }
+
+  const generalPool = LOCAL_ENCOUNTERS.filter(e=> !e.rivalKind);
+  const templateIndex = LOCAL_ENCOUNTERS.indexOf(pick(generalPool));
   const template = LOCAL_ENCOUNTERS[templateIndex];
   // templateIndex is what actually gets persisted (via the city grid → saveRoamState →
   // JSON.stringify). setupLine is a plain string, safe to store. template itself is NOT
@@ -3440,6 +3506,12 @@ function renderLocNpc(){
     const t = LOCAL_ENCOUNTERS[npc.templateIndex]
       || (npc.template && LOCAL_ENCOUNTERS.find(e=> e.title === npc.template.title))
       || LOCAL_ENCOUNTERS[0];
+    // Rival encounters carry a real opponentId — make the name clickable to open their
+    // actual Fighter Card, since this genuinely is someone from the fight log, not a
+    // throwaway stranger. This is what "I fought this guy and can't look him up" needed.
+    const npcNameHtml = npc.opponentId
+      ? `<span class="npc-name clickable-name" data-open-fighter="${npc.opponentId}" style="cursor:pointer; text-decoration:underline;">— ${npc.name} 🔍</span>`
+      : `<span class="npc-name">— ${npc.name}</span>`;
     if(state.encounterResult){
       const res = state.encounterResult;
       let flavor, tone;
@@ -3453,7 +3525,7 @@ function renderLocNpc(){
       if(res.injury){ bits.push(`<span style="color:var(--ink-red);">Banged up — ${res.injury} to everything, next fight only.</span>`); }
       return `
         <div class="loc-head"><div class="loc-name">${t.title}</div></div>
-        <div class="npc-quote">"${npc.setupLine}"<span class="npc-name">— ${npc.name}</span></div>
+        <div class="npc-quote">"${npc.setupLine}"${npcNameHtml}</div>
         <p style="font-family:var(--body); font-size:13.5px; color:var(--bone-dim); margin:14px 0 8px;">${flavor}</p>
         ${bits.length ? `<div style="font-family:var(--mono); font-size:12px; text-align:center; margin-bottom:14px;">${bits.join(' &nbsp; ')}</div>` : ''}
         <div class="btn-row"><span></span><button class="btn btn-primary" id="back-to-walk">Keep Walking →</button></div>
@@ -3461,7 +3533,7 @@ function renderLocNpc(){
     }
     return `
       <div class="loc-head"><div class="loc-name">${t.title}</div></div>
-      <div class="npc-quote">"${npc.setupLine}"<span class="npc-name">— ${npc.name}</span></div>
+      <div class="npc-quote">"${npc.setupLine}"${npcNameHtml}</div>
       <div class="btn-row" style="margin-top:14px; flex-direction:column; gap:8px;">
         <button class="btn" id="encounter-decline" style="width:100%;">${t.declineLabel}</button>
         <button class="btn" id="encounter-smart" style="width:100%;">${t.smartLabel}</button>
@@ -3825,6 +3897,7 @@ function renderModal(){
             <div>
               <div class="mf-name">${f.name}</div>
               <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${f.heightIn?heightLabel(f.heightIn):''}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement || f.hometown || ''}${prov?', '+prov.name:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
+              <div class="mf-meta">${f.birthDay !== undefined && f.birthDay !== null ? 'Born '+formatCalendarDate(f.birthDay) : ''}${f.fame !== undefined ? ' · Fame '+f.fame : ''}</div>
               <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Career ${rec.wins}-${rec.losses}</div>
             </div>
           </div>
@@ -5343,6 +5416,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V54 · 2026-07-17</div>
+<div class="version-badge">FREE ROAM · V55 · 2026-07-17</div>
 </body>
 </html>
