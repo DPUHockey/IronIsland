@@ -661,7 +661,21 @@ function resolveJuniorPlayoffSubPhase(todayDay){
 // (Home Hub, newspaper, etc) should read from rather than re-deriving offsets by hand.
 function tierKeyDates(cycleYear){
   const may1 = dayForCalendarDate(cycleYear, 5, 1);
-  const jrDraft = may1 + 14;
+  // Three separate draft nights, one per league tier, always Monday/Tuesday/Wednesday of
+  // the same week — anchored to the nearest Monday on/after may1+14 so it lands on a real
+  // Monday no matter what weekday May 1 itself falls on that year. Tier 1 (Ironbound)
+  // drafts Monday, tier 2 (Northgate) Tuesday, tier 3 (Tidewater) Wednesday — deliberately
+  // sequential so a lower league can never draft a player the higher league already took;
+  // see runLeagueDraftForCycle / runDraftForFighter in junior_league.html, which both now
+  // respect this order. Signing deadline is the Friday of that same week.
+  const draftAnchorTarget = may1 + 14;
+  const anchorWeekdayIdx = (draftAnchorTarget - 1) % 7; // WEEKDAY_NAMES[0] === 'Monday'
+  const toMonday = (7 - anchorWeekdayIdx) % 7;
+  const jrDraftIronbound = draftAnchorTarget + toMonday;   // Monday — tier 1
+  const jrDraftNorthgate = jrDraftIronbound + 1;            // Tuesday — tier 2
+  const jrDraftTidewater = jrDraftIronbound + 2;            // Wednesday — tier 3
+  const jrSignDeadline = jrDraftIronbound + 4;              // Friday, same week
+  const jrDraft = jrDraftIronbound; // kept as the "draft week has begun" anchor for juniorOpen below
   const jrOpen = jrDraft + 14;
   const amOpen = may1 + 31;
   const proOpen = dayForCalendarDate(cycleYear, 8, 1);
@@ -678,7 +692,10 @@ function tierKeyDates(cycleYear){
     jrChampHostBidDue: may1,
     jrChampHostAnnounced: may1 + 7,
     juniorDraftDeclareDeadline: may1,
-    juniorDraftDay: jrDraft,
+    juniorDraftDayIronbound: jrDraftIronbound,
+    juniorDraftDayNorthgate: jrDraftNorthgate,
+    juniorDraftDayTidewater: jrDraftTidewater,
+    juniorSignDeadline: jrSignDeadline,
     juniorOpen: jrOpen,
     juniorTradeDeadline: jrOpen + 10*7,
     juniorRegEnd: jrRegEnd,
@@ -4306,6 +4323,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V50 · 2026-07-17</div>
+<div class="version-badge">FIGHT PIT · V51 · 2026-07-17</div>
 </body>
 </html>
