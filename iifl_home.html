@@ -439,7 +439,7 @@ function getMajorEventsForYear(cycleYear){
   return [
     { day: d.juvenileOpen, title: 'Juvenile League Opens', tier: 'Juvenile', kind: 'open' },
     { day: d.juvenileRegEnd, title: 'Juvenile Season Ends', tier: 'Juvenile', kind: 'end' },
-    { day: d.juniorDraftDay, title: 'Ironbound Jr Draft', tier: 'Junior', kind: 'draft', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
+    { day: d.juniorDraftDay, title: 'Junior League Draft Day', tier: 'Junior', kind: 'draft', description: 'All three Junior leagues — Ironbound, Northgate, and Tidewater — draft on this same day.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
     { day: d.juniorOpen, title: 'Junior League Opens', tier: 'Junior', kind: 'open' },
     { day: d.juniorTradeDeadline, title: 'Junior Trade Deadline', tier: 'Junior', kind: 'deadline' },
     { day: d.juniorRegEnd, title: 'Junior Regular Season Ends', tier: 'Junior', kind: 'end' },
@@ -502,7 +502,7 @@ function showEventChoiceModal(evt, resumeTarget){
     <div style="background:var(--bg-panel); border:1px solid var(--brass); max-width:460px; width:100%; padding:24px; text-align:center;">
       <div class="ticket-eyebrow" style="color:var(--brass);">${formatCalendarDate(evt.day)}</div>
       <div class="ticket-title" style="margin-bottom:10px;">${evt.title}</div>
-      <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:20px;">${evt.tier} · a major date on the island calendar has arrived.</p>
+      <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:20px;">${evt.description || (evt.tier + " · a major date on the island calendar has arrived.")}</p>
       <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
         ${evt.watchUrl ? `<button class="btn btn-primary" id="event-watch">Watch It →</button>` : ''}
         <button class="btn" id="event-sim">Sim the Day</button>
@@ -1588,7 +1588,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-reset-island">🔄 Reset Island (Test Mode) →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V16 · 2026-07-17</div>
+        <div class="version-badge">HOME · V17 · 2026-07-17</div>
       </footer>
     </div>
   `;
@@ -1665,7 +1665,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V16 · 2026-07-17</div>
+        <div class="version-badge">HOME · V17 · 2026-07-17</div>
       </footer>
     </div>
   `;
