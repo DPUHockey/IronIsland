@@ -1569,7 +1569,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-reset-island">🔄 Reset Island (Test Mode) →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V14 · 2026-07-17</div>
+        <div class="version-badge">HOME · V15 · 2026-07-17</div>
       </footer>
     </div>
   `;
@@ -1643,7 +1643,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V14 · 2026-07-17</div>
+        <div class="version-badge">HOME · V15 · 2026-07-17</div>
       </footer>
     </div>
   `;
@@ -1748,6 +1748,11 @@ function wireEvents(cycleYear, roster, playable){
 
   const resetIslandBtn = document.getElementById('btn-reset-island');
   if(resetIslandBtn) resetIslandBtn.onclick = ()=>{
+    const ok = window.confirm(
+      'This creates a brand new test save (fresh clock, empty field pools, an auto-generated placeholder fighter) and switches to it immediately. ' +
+      'Your current save isn\'t deleted — it\'ll still be there under "Switch or Start Another Game" — but you\'ll be playing this new one until you switch back. Continue?'
+    );
+    if(!ok) return;
     const name = resetIslandForTesting();
     renderApp();
   };
