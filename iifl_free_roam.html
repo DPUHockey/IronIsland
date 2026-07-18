@@ -3555,9 +3555,13 @@ function triggerRandomEvent(){
   const f = getFighterById(state.fighterId);
   const roll = Math.random();
   if(roll < 0.34){
-    const amount = rand(3,6);
-    updateFighter(state.fighterId, ff=>{ ff.tempBoost = { amount, usesLeft:1 }; });
-    state.randomEventPending = { type:'potion', amount };
+    if(Math.random() < 0.08){
+      // Rare — a stranger offering a genuine permanent point, not just a next-fight edge.
+      state.randomEventPending = { type:'potion-permanent' };
+    } else {
+      const amount = rand(3,6);
+      state.randomEventPending = { type:'potion', amount };
+    }
   } else if(roll < 0.67){
     const opp = generatePitFighter(state.provinceId, state.settlementName, weightClassOf(f.weightLb));
     state.randomEventPending = { type:'kid-challenge', opponent: opp };
@@ -4304,13 +4308,36 @@ function renderBlackMarket(){
 
 function renderRandomEvent(){
   const ev = state.randomEventPending;
+  if(ev.type === 'potion-permanent'){
+    return `
+      <div class="stub-screen">
+        <h2>A Real Opportunity</h2>
+        <p>An old-timer waves you over, sizes you up like he's done it a thousand times before. "I know a guy. A real trainer, not some street-corner hack — one session, and it'll actually change something. Doesn't come around twice."</p>
+        <p style="font-family:var(--mono); color:var(--brass);">A genuine, permanent edge — one point, banked forever, not just for your next fight.</p>
+        <div class="btn-row">
+          <button class="btn" id="decline-event">Pass</button>
+          <button class="btn btn-primary" id="dismiss-event">Take the Session →</button>
+        </div>
+      </div>
+    `;
+  }
   if(ev.type === 'potion'){
+    const f = getFighterById(state.fighterId);
+    const existing = f.tempBoost ? f.tempBoost.amount : 0;
     return `
       <div class="stub-screen">
         <h2>A Stranger's Deal</h2>
         <p>Someone in the crowd presses a little bottle into your hand. "Drink this before your next fight — you'll feel it." Whatever it is, your corner's not going to ask questions.</p>
         <p style="font-family:var(--mono); color:var(--brass);">+${ev.amount} to every stat, next fight only.</p>
-        <button class="btn btn-primary" id="dismiss-event">Pocket It →</button>
+        ${existing >= ev.amount
+          ? `<p style="font-family:var(--mono); font-size:11px; color:var(--muted);">You're already carrying a +${existing} edge into your next fight — this one's not even an upgrade.</p>`
+          : existing
+            ? `<p style="font-family:var(--mono); font-size:11px; color:var(--muted);">You're carrying +${existing} already — this would replace it with the better one.</p>`
+            : ''}
+        <div class="btn-row">
+          <button class="btn" id="decline-event">Pass</button>
+          <button class="btn btn-primary" id="dismiss-event">Pocket It →</button>
+        </div>
       </div>
     `;
   }
@@ -4985,7 +5012,23 @@ function wireEvents(){
   if(viewBlackMarket) viewBlackMarket.onclick = ()=>{ state.screen='black-market'; render(); };
 
   const dismissEvent = document.getElementById('dismiss-event');
-  if(dismissEvent) dismissEvent.onclick = ()=>{ state.randomEventPending=null; state.screen='city-walk'; render(); };
+  if(dismissEvent) dismissEvent.onclick = ()=>{
+    const ev = state.randomEventPending;
+    if(ev && ev.type === 'potion'){
+      updateFighter(state.fighterId, ff=>{
+        const existing = ff.tempBoost ? ff.tempBoost.amount : 0;
+        if(ev.amount > existing) ff.tempBoost = { amount: ev.amount, usesLeft: 1 }; // never overwrites a better one you already have banked
+      });
+    } else if(ev && ev.type === 'potion-permanent'){
+      updateFighter(state.fighterId, ff=>{
+        const statKeys = ['speed','quickness','toughness','power','agility'];
+        const key = pick(statKeys);
+        const ceiling = bandCeiling(ff.age||12, ff.talentTier||'normal');
+        if(ff.stats[key] < ceiling) ff.stats[key] = clamp(ff.stats[key] + 1, 1, ceiling);
+      });
+    }
+    state.randomEventPending=null; state.screen='city-walk'; render();
+  };
   const declineEvent = document.getElementById('decline-event');
   if(declineEvent) declineEvent.onclick = ()=>{ state.randomEventPending=null; state.screen='city-walk'; render(); };
   const acceptEvent = document.getElementById('accept-event');
@@ -5416,6 +5459,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V55 · 2026-07-17</div>
+<div class="version-badge">FREE ROAM · V57 · 2026-07-17</div>
 </body>
 </html>
