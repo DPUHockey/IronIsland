@@ -749,7 +749,7 @@ function getMajorEventsForYear(cycleYear){
   return [
     { day: d.juvenileOpen, title: 'Juvenile League Opens', tier: 'Juvenile', kind: 'open' },
     { day: d.juvenileRegEnd, title: 'Juvenile Season Ends', tier: 'Juvenile', kind: 'end' },
-    { day: d.juniorDraftDay, title: 'Ironbound Jr Draft', tier: 'Junior', kind: 'draft', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
+    { day: d.juniorDraftDay, title: 'Junior League Draft Day', tier: 'Junior', kind: 'draft', description: 'All three Junior leagues — Ironbound, Northgate, and Tidewater — draft on this same day.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
     { day: d.juniorOpen, title: 'Junior League Opens', tier: 'Junior', kind: 'open' },
     { day: d.juniorTradeDeadline, title: 'Junior Trade Deadline', tier: 'Junior', kind: 'deadline' },
     { day: d.juniorRegEnd, title: 'Junior Regular Season Ends', tier: 'Junior', kind: 'end' },
@@ -3268,6 +3268,54 @@ function advanceDay(){
   state.movesRemaining = MOVES_PER_PERIOD;
   relocateEventSquares();
   getRoster(); // touches every fighter through ensureFighterDefaults, which syncs age from birthday
+  checkForMajorEventToday();
+}
+// Home Hub's Sim Day/Sim Week/Advance-to-Next-Season already had a pause-on-major-event
+// check, but normal walking through Free Roam — the way days actually pass most of the
+// time — never did, so a major event day (like Draft Day) could arrive and pass silently
+// with no pop-up at all. This is the same check, triggered every time advanceDay() runs.
+function checkForMajorEventToday(){
+  const today = getCurrentDay();
+  if(state.pendingMajorEvent && state.pendingMajorEvent.day === today) return; // already queued
+  const y = resolveTierSeason('juvenile', today).cycleYear;
+  const events = [...getMajorEventsForYear(y), ...getMajorEventsForYear(y-1), ...getMajorEventsForYear(y+1)];
+  const evt = events.find(e=> e.day === today);
+  if(!evt) return;
+  if(loadEventLog().some(e=> e.day === evt.day)) return; // already surfaced (watched or simmed) once
+  state.pendingMajorEvent = evt;
+}
+function showEventChoiceModal(evt){
+  if(document.getElementById('event-modal-overlay')) return; // already showing
+  const overlay = document.createElement('div');
+  overlay.id = 'event-modal-overlay';
+  overlay.style.cssText = 'position:fixed; inset:0; z-index:60; background:rgba(20,17,13,0.9); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:var(--bg-panel); border:1px solid var(--brass); max-width:460px; width:100%; padding:24px; text-align:center;">
+      <div class="ticket-eyebrow" style="color:var(--brass);">${formatCalendarDate(evt.day)}</div>
+      <div class="ticket-title" style="margin-bottom:10px;">${evt.title}</div>
+      <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:20px;">${evt.description || (evt.tier + " · a major date on the island calendar has arrived.")}</p>
+      <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+        ${evt.watchUrl ? `<button class="btn btn-primary" id="event-watch">Watch It →</button>` : ''}
+        <button class="btn" id="event-sim">Sim the Day</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  if(evt.watchUrl) document.getElementById('event-watch').onclick = ()=>{
+    logEventResult(evt, true);
+    state.pendingMajorEvent = null;
+    window.location.href = evt.watchUrl;
+  };
+  document.getElementById('event-sim').onclick = ()=>{
+    logEventResult(evt, false);
+    state.pendingMajorEvent = null;
+    overlay.remove();
+  };
+}
+function logEventResult(evt, watched){
+  const log = loadEventLog();
+  log.push({ day: evt.day, title: evt.title, tier: evt.tier, watched: !!watched });
+  try{ localStorage.setItem(sk(EVENT_LOG_KEY), JSON.stringify(log.slice(-60))); }catch(e){}
 }
 function spendMove(){
   state.movesRemaining -= 1;
@@ -3371,6 +3419,7 @@ function render(){
     <div class="panel">${body}</div>
   `;
   wireEvents();
+  if(state.pendingMajorEvent) showEventChoiceModal(state.pendingMajorEvent);
 }
 
 let pendingNpcAdds = new Set();
@@ -3513,6 +3562,7 @@ function renderCalendar(){
           <div>
             <div class="pit-name">${e.title}</div>
             <div class="pit-meta">${e.tier} · ${formatCalendarDate(e.day)}</div>
+            ${e.description ? `<div class="pit-meta" style="opacity:0.75;">${e.description}</div>` : ''}
           </div>
           <div style="text-align:right;">
             ${status==='today' ? `<span style="color:var(--brass); font-family:var(--label); font-size:11px; text-transform:uppercase;">Today</span>`
@@ -5614,6 +5664,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V59 · 2026-07-17</div>
+<div class="version-badge">FREE ROAM · V60 · 2026-07-17</div>
 </body>
 </html>
