@@ -1945,6 +1945,64 @@ function repairOrphanedHometowns(pools){
   if(changed) saveFieldPools(pools);
 }
 
+// Self-heal for data corrupted by two now-fixed bugs interacting: (1) the pre-cap era
+// where a Juvenile could rack up 300+ career fights before JUVENILE_CAREER_FIGHT_CAP
+// existed, and (2) the age system going through several broken revisions (63-day-year
+// migration, the Math.max(1,...) floor bug) where a fighter's APPARENT age at the time
+// of a given growth tick could be wildly wrong — so stats grew toward whatever ceiling
+// that wrong age implied, and never got reduced when age was later recomputed correctly.
+// Both bugs only ever pushed numbers up and never got retroactively corrected, which is
+// why "Aonghas Hamilton (366-53)" and "80-rated 13-year-olds" could still show up long
+// after the underlying causes were fixed. This runs every catch-up, but it's a pure
+// clamp/scale-down — once a fighter is within bounds it's a no-op, so it's safe to run
+// unconditionally rather than gating it behind a version flag.
+function healLegacyJuvenileBloat(pools, today){
+  let changed = false;
+  Object.values(pools.juvenile || {}).forEach(list=>{
+    list.forEach(f=>{
+      // Stats: an NPC's stats can never legitimately exceed their OWN current-age/tier
+      // ceiling — applyNpcGrowthTick (the only thing that grows NPC-vs-NPC stats) always
+      // respects that ceiling. Only the player's own fighter gets earned overgrowth past
+      // it (growFighterStats, from a player bout). So any NPC stat above its current
+      // ceiling is leftover inflation from a wrong historical age, not a real result.
+      const ceiling = bandCeiling(f.age||11, f.talentTier||'normal');
+      ['speed','quickness','toughness','power','agility'].forEach(k=>{
+        if(f.stats && f.stats[k] > ceiling){ f.stats[k] = ceiling; changed = true; }
+      });
+      // Record: scale down proportionally to the lifetime cap, preserving win rate,
+      // rather than just truncating losses or wins outright.
+      const total = (f.record.wins||0) + (f.record.losses||0);
+      if(total > JUVENILE_CAREER_FIGHT_CAP){
+        const ratio = JUVENILE_CAREER_FIGHT_CAP / total;
+        const newWins = Math.round((f.record.wins||0) * ratio);
+        f.record.wins = newWins;
+        f.record.losses = JUVENILE_CAREER_FIGHT_CAP - newWins;
+        f.juvenileCareerFights = JUVENILE_CAREER_FIGHT_CAP;
+        changed = true;
+      }
+    });
+  });
+  // Same two fixes for the player's own fighter(s), which share the exact same history.
+  try{
+    const roster = loadRoster();
+    let rosterChanged = false;
+    roster.forEach(f=>{
+      if(!f.juvenileHomeProvinceId || !f.record) return;
+      const total = (f.record.wins||0) + (f.record.losses||0);
+      if(total > JUVENILE_CAREER_FIGHT_CAP){
+        const ratio = JUVENILE_CAREER_FIGHT_CAP / total;
+        const newWins = Math.round((f.record.wins||0) * ratio);
+        f.record.wins = newWins;
+        f.record.losses = JUVENILE_CAREER_FIGHT_CAP - newWins;
+        f.juvenileCareerFights = JUVENILE_CAREER_FIGHT_CAP;
+        rosterChanged = true;
+      }
+    });
+    if(rosterChanged) saveRoster(roster);
+  }catch(err){}
+  return changed;
+}
+
 function syncJuvenilePoolAges(pools, today){
   PROVINCES.forEach(p=>{
     const pool = pools.juvenile[p.id];
@@ -1974,6 +2032,7 @@ function catchUpJuvenileSimulation(){
   repairOrphanedHometowns(pools);
   const today = getCurrentDay();
   syncJuvenilePoolAges(pools, today);
+  healLegacyJuvenileBloat(pools, today);
   // A fighter locked out after a failed early-draft petition still ages toward natural
   // eligibility over real time, even though they can't fight to trigger normal age-up.
   try{
