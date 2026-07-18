@@ -58,7 +58,12 @@
   .fighter-grid{ display:grid; gap:10px; }
   .pit-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .cal-grid{ display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; margin-top:8px; }
-  .cal-cell{ aspect-ratio:1; border:1px solid var(--line); padding:4px; font-family:var(--mono); font-size:10px; position:relative; display:flex; flex-direction:column; }
+  .cal-cell{ min-height:44px; border:1px solid var(--line); padding:4px; font-family:var(--mono); font-size:10px; position:relative; display:flex; flex-direction:column; }
+  .cal-cell.cal-has-event{ min-height:64px; }
+  .cal-cell.cal-clickable{ cursor:pointer; transition:background 0.15s; }
+  .cal-cell.cal-clickable:hover{ background:rgba(180,140,80,0.12); }
+  .cal-event-label{ font-family:var(--label); font-size:6.5px; line-height:1.25; letter-spacing:0.2px; color:var(--brass); margin-top:2px; white-space:normal; }
+  .cal-event-label.cal-inactive{ color:var(--muted); }
   .cal-cell.cal-head{ border:none; text-align:center; font-family:var(--label); font-size:10px; text-transform:uppercase; color:var(--muted); aspect-ratio:auto; align-items:center; justify-content:center; }
   .cal-cell.cal-empty{ border:none; }
   .cal-cell.cal-today{ border-color:var(--brass); box-shadow:inset 0 0 0 1px var(--brass); }
@@ -701,7 +706,21 @@ function resolveJuniorPlayoffSubPhase(todayDay){
 // (Home Hub, newspaper, etc) should read from rather than re-deriving offsets by hand.
 function tierKeyDates(cycleYear){
   const may1 = dayForCalendarDate(cycleYear, 5, 1);
-  const jrDraft = may1 + 14;
+  // Three separate draft nights, one per league tier, always Monday/Tuesday/Wednesday of
+  // the same week — anchored to the nearest Monday on/after may1+14 so it lands on a real
+  // Monday no matter what weekday May 1 itself falls on that year. Tier 1 (Ironbound)
+  // drafts Monday, tier 2 (Northgate) Tuesday, tier 3 (Tidewater) Wednesday — deliberately
+  // sequential so a lower league can never draft a player the higher league already took;
+  // see runLeagueDraftForCycle / runDraftForFighter in junior_league.html, which both now
+  // respect this order. Signing deadline is the Friday of that same week.
+  const draftAnchorTarget = may1 + 14;
+  const anchorWeekdayIdx = (draftAnchorTarget - 1) % 7; // WEEKDAY_NAMES[0] === 'Monday'
+  const toMonday = (7 - anchorWeekdayIdx) % 7;
+  const jrDraftIronbound = draftAnchorTarget + toMonday;   // Monday — tier 1
+  const jrDraftNorthgate = jrDraftIronbound + 1;            // Tuesday — tier 2
+  const jrDraftTidewater = jrDraftIronbound + 2;            // Wednesday — tier 3
+  const jrSignDeadline = jrDraftIronbound + 4;              // Friday, same week
+  const jrDraft = jrDraftIronbound; // kept as the "draft week has begun" anchor for juniorOpen below
   const jrOpen = jrDraft + 14;
   const amOpen = may1 + 31;
   const proOpen = dayForCalendarDate(cycleYear, 8, 1);
@@ -718,7 +737,10 @@ function tierKeyDates(cycleYear){
     jrChampHostBidDue: may1,
     jrChampHostAnnounced: may1 + 7,
     juniorDraftDeclareDeadline: may1,
-    juniorDraftDay: jrDraft,
+    juniorDraftDayIronbound: jrDraftIronbound,
+    juniorDraftDayNorthgate: jrDraftNorthgate,
+    juniorDraftDayTidewater: jrDraftTidewater,
+    juniorSignDeadline: jrSignDeadline,
     juniorOpen: jrOpen,
     juniorTradeDeadline: jrOpen + 10*7,
     juniorRegEnd: jrRegEnd,
@@ -749,7 +771,10 @@ function getMajorEventsForYear(cycleYear){
   return [
     { day: d.juvenileOpen, title: 'Juvenile League Opens', tier: 'Juvenile', kind: 'open' },
     { day: d.juvenileRegEnd, title: 'Juvenile Season Ends', tier: 'Juvenile', kind: 'end' },
-    { day: d.juniorDraftDay, title: 'Junior League Draft Day', tier: 'Junior', kind: 'draft', description: 'All three Junior leagues — Ironbound, Northgate, and Tidewater — draft on this same day.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
+    { day: d.juniorDraftDayIronbound, title: 'Ironbound Jr League Draft', tier: 'Junior', kind: 'draft', description: 'Tier 1 (top league) drafts first — first crack at every declared prospect.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
+    { day: d.juniorDraftDayNorthgate, title: 'Northgate Jr League Draft', tier: 'Junior', kind: 'draft', description: 'Tier 2 drafts from the same pool Ironbound already picked from — reaching for someone already taken is a real risk here.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
+    { day: d.juniorDraftDayTidewater, title: 'Tidewater Jr League Draft', tier: 'Junior', kind: 'draft', description: 'Tier 3 drafts last, same shared pool, same risk.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
+    { day: d.juniorSignDeadline, title: 'Junior League Signing Deadline', tier: 'Junior', kind: 'deadline', description: 'Every fighter drafted by more than one league signs with the highest tier that took them — the rest lose that roster spot for the cycle.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
     { day: d.juniorOpen, title: 'Junior League Opens', tier: 'Junior', kind: 'open' },
     { day: d.juniorTradeDeadline, title: 'Junior Trade Deadline', tier: 'Junior', kind: 'deadline' },
     { day: d.juniorRegEnd, title: 'Junior Regular Season Ends', tier: 'Junior', kind: 'end' },
@@ -3602,10 +3627,17 @@ function renderCalendar(){
     const juvSeason = resolveTierSeason('juvenile', dayIndex);
     const isJuvFightNight = ['Monday','Tuesday','Wednesday'].includes(weekday) && juvSeason.phase !== 'dead-days';
     const majorEvent = gridYearEvents.find(e=> e.day === dayIndex);
-    let markers = '';
-    if(majorEvent) markers += `<div class="cal-marker cal-marker-major" title="${majorEvent.title}">★</div>`;
-    else if(isJuvFightNight) markers += `<div class="cal-marker" title="${eventNameForDay(dayIndex)}">🥊</div>`;
-    cells += `<div class="cal-cell ${isToday?'cal-today':''}" title="${majorEvent?majorEvent.title:(isJuvFightNight?eventNameForDay(dayIndex):'')}"><div class="cal-daynum">${d}</div>${markers}</div>`;
+    const eventActive = majorEvent && dayIndex <= today; // arrived — clickable through to its landing page
+    let markers = '', label = '';
+    if(majorEvent){
+      markers = `<div class="cal-marker cal-marker-major">★</div>`;
+      label = `<div class="cal-event-label ${eventActive?'':'cal-inactive'}">${majorEvent.title}</div>`;
+    } else if(isJuvFightNight){
+      markers = `<div class="cal-marker" title="${eventNameForDay(dayIndex)}">🥊</div>`;
+    }
+    const clickable = eventActive && majorEvent.watchUrl;
+    const cellTitle = majorEvent ? `${majorEvent.title}${eventActive ? '' : ' — not active yet'}` : (isJuvFightNight ? eventNameForDay(dayIndex) : '');
+    cells += `<div class="cal-cell ${isToday?'cal-today':''} ${majorEvent?'cal-has-event':''} ${clickable?'cal-clickable':''}" ${clickable ? `data-cal-event-link="${majorEvent.watchUrl}"` : ''} title="${cellTitle}"><div class="cal-daynum">${d}</div>${markers}${label}</div>`;
   }
 
   return `
@@ -5124,6 +5156,9 @@ function wireEvents(){
   if(calNext) calNext.onclick = ()=>{ state.calendarMonthOffset = (state.calendarMonthOffset||0) + 1; render(); };
   const calBack = document.getElementById('cal-back');
   if(calBack) calBack.onclick = ()=>{ state.screen = (state.fighterId && state.provinceId && state.settlementName) ? 'city-walk' : 'select'; render(); };
+  document.querySelectorAll('[data-cal-event-link]').forEach(cell=>{
+    cell.onclick = ()=>{ window.location.href = cell.dataset.calEventLink; };
+  });
 
   ['decline','smart','bold'].forEach(tier=>{
     const btn = document.getElementById('encounter-'+tier);
@@ -5664,6 +5699,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V60 · 2026-07-17</div>
+<div class="version-badge">FREE ROAM · V61 · 2026-07-17</div>
 </body>
 </html>
