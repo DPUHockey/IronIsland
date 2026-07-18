@@ -459,7 +459,88 @@ function tierKeyDates(cycleYear){
   };
 }
 
-// Canonical "major events" calendar, built directly off tierKeyDates so it can never
+// The cycle-year whose off-season should currently be considered "the most recent
+// one" — while still in dead-days that's the current cycleYear itself; once the clock
+// crosses next May 1, resolveTierSeason's cycleYear ticks forward, so the season that
+// just ended is cycleYear-1.
+function seasonJustEndedYear(today){
+  const s = resolveTierSeason('juvenile', today);
+  return s.phase === 'dead-days' ? s.cycleYear : s.cycleYear - 1;
+}
+
+// Off-season improvements (training bonus, conditioning, past-prime decline, injury,
+// retirement) used to only ever apply if the player happened to notice the dead-days
+// window and manually clicked "Enter Off-Season" — every other path (Sim a Day/Week,
+// Sim to Season End, Advance to Next Season, or just walking through the calendar in
+// Free Roam) could carry a fighter straight through an entire off-season with zero
+// growth and no indication anything was skipped. This tracks the last cycle-year an
+// off-season was actually applied (on the shared clock, so it stays correct no matter
+// which screen crossed the boundary) and catches it up automatically the next time
+// anything renders — exactly once per season, on whichever path gets there first,
+// always with a real result to show for it. The manual "Enter Off-Season" button now
+// routes through this too, so clicking it and then later crossing May 1 doesn't double-
+// apply.
+function ensureOffSeasonApplied(roster, today){
+  const targetY = seasonJustEndedYear(today);
+  const c = loadClock();
+  if(c.lastOffSeasonAppliedYear === undefined){
+    // First time this code has run on this save — don't retroactively apply however
+    // many off-seasons already passed unnoticed, just establish the baseline from here.
+    c.lastOffSeasonAppliedYear = targetY;
+    saveClock(c);
+    return null;
+  }
+  if(targetY <= c.lastOffSeasonAppliedYear) return null;
+  const lines = [];
+  for(let y = c.lastOffSeasonAppliedYear + 1; y <= targetY; y++){
+    roster.forEach(f=>{
+      const beforeStats = { ...(f.stats||{}) };
+      applyOffSeasonToFighter(f);
+      reclassifyWeightClass(f);
+      const retired = checkRetirement(f);
+      const injured = checkOffSeasonInjury(f);
+      const deltas = [];
+      Object.keys(beforeStats).forEach(k=>{
+        const diff = (f.stats[k]||0) - (beforeStats[k]||0);
+        if(diff !== 0) deltas.push(`${k} ${diff>0?'+':''}${diff}`);
+      });
+      lines.push({
+        name: f.name,
+        detail: deltas.length ? deltas.join(', ') : 'no measurable change',
+        retired, injured, injuryNote: injured ? f.offSeasonInjuryNote : null,
+      });
+    });
+    const walkedAway = processFAWalkAway(dayForCalendarDate(y, 5, 1));
+    if(walkedAway) lines.push({ name: null, detail: `${walkedAway} free agent(s) walked away from the sport this off-season.` });
+  }
+  saveRoster(roster);
+  c.lastOffSeasonAppliedYear = targetY;
+  saveClock(c);
+  return lines;
+}
+
+function showOffSeasonReportModal(lines){
+  if(document.getElementById('offseason-modal-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'offseason-modal-overlay';
+  overlay.style.cssText = 'position:fixed; inset:0; z-index:60; background:rgba(20,17,13,0.9); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; padding:20px;';
+  const rows = lines.map(l=> `
+    <div style="padding:8px 0; border-bottom:1px solid var(--line); font-family:var(--body); font-size:12.5px; color:var(--bone-dim); text-align:left;">
+      ${l.name ? `<b style="color:var(--bone);">${l.name}</b>: ${l.detail}${l.retired ? ' — <span style="color:var(--ink-red);">RETIRED</span>' : ''}${l.injuryNote ? '<br><span style="color:var(--muted); font-size:11px;">'+l.injuryNote+'</span>' : ''}` : l.detail}
+    </div>
+  `).join('');
+  overlay.innerHTML = `
+    <div style="background:var(--bg-panel); border:1px solid var(--brass); max-width:460px; width:100%; padding:24px; max-height:80vh; overflow-y:auto;">
+      <div class="ticket-eyebrow" style="color:var(--brass); text-align:center;">Off-Season Report</div>
+      <div class="ticket-title" style="margin-bottom:14px; text-align:center;">Training Camp Results</div>
+      <div>${rows}</div>
+      <div class="btn-row" style="margin-top:16px; justify-content:center;"><button class="btn btn-primary" id="offseason-report-close">Got It →</button></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('offseason-report-close').onclick = ()=> overlay.remove();
+}
+
 // drift out of sync with the actual season logic. watchUrl points at a real dedicated
 // screen when one exists (currently just Junior Draft Day); everything else is
 // "watchable" only in the sense of pausing the clock and showing a summary — most tiers
@@ -539,6 +620,7 @@ function showEventChoiceModal(evt, resumeTarget){
       <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:20px;">${evt.description || (evt.tier + " · a major date on the island calendar has arrived.")}</p>
       <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
         ${evt.watchUrl ? `<button class="btn btn-primary" id="event-watch">Watch It →</button>` : ''}
+        <button class="btn" id="event-goto">Go to Event →</button>
         <button class="btn" id="event-sim">Sim the Day</button>
       </div>
     </div>
@@ -547,6 +629,16 @@ function showEventChoiceModal(evt, resumeTarget){
   if(evt.watchUrl) document.getElementById('event-watch').onclick = ()=>{
     logEventResult(evt, true);
     window.location.href = evt.watchUrl;
+  };
+  // Lands the clock on the event day, same as Sim the Day, but instead of resolving it
+  // silently and staying on the Home dock, this drops the player straight into Free Roam
+  // on that day — most events (season opens/closes, playoffs, trade deadlines) don't have
+  // a dedicated screen to watch, so "being there" means walking around and seeing it play
+  // out through the normal Free Roam systems, not a canned result.
+  document.getElementById('event-goto').onclick = ()=>{
+    logEventResult(evt, false);
+    const c = loadClock(); c.day = evt.day; saveClock(c);
+    window.location.href = 'iifl_free_roam.html';
   };
   document.getElementById('event-sim').onclick = ()=>{
     logEventResult(evt, false);
@@ -1650,6 +1742,8 @@ function renderApp(){
     </div>
   `;
   wireEvents(cycleYear, roster, playable);
+  const offSeasonLines = ensureOffSeasonApplied(roster, today);
+  if(offSeasonLines && offSeasonLines.length) showOffSeasonReportModal(offSeasonLines);
 }
 
 /* =========================================================================
@@ -1796,8 +1890,7 @@ function wireEvents(cycleYear, roster, playable){
     const tierKey = ({'Junior League':'junior','Amateur':'amateur','Juvenile':'juvenile'})[fighterStatusLine(playable)] || 'juvenile';
     const s = resolveTierSeason(tierKey, getCurrentDay());
     const target = s.phase === 'regular' ? s.regularEndDay : s.phase === 'playoffs' ? s.playoffEndDay : s.nextStartDay;
-    const c = loadClock(); c.day = target; saveClock(c);
-    renderApp();
+    advanceWithEventChecks(target);
   };
 
   const findMateBtn = document.getElementById('btn-find-mate');
@@ -1873,22 +1966,13 @@ function wireEvents(cycleYear, roster, playable){
 
   const offseasonBtn = document.getElementById('btn-offseason');
   if(offseasonBtn) offseasonBtn.onclick = ()=>{
-    const lines = [];
-    const updatedRoster = roster.map(f=>{
-      const before = { ...f, stats:{...f.stats} };
-      applyOffSeasonToFighter(f);
-      reclassifyWeightClass(f);
-      const retired = checkRetirement(f);
-      const injured = checkOffSeasonInjury(f);
-      lines.push(`${f.name}: conditioning + training applied${retired ? ' — RETIRED this off-season' : ''}${injured ? ' — ' + f.offSeasonInjuryNote : ''}`);
-      return f;
-    });
-    saveRoster(updatedRoster);
-    const walkedAway = processFAWalkAway(getCurrentDay());
-    if(walkedAway) lines.push(`${walkedAway} free agent(s) walked away from the sport this off-season.`);
-    lines.push('Off-season activities beyond this (training camps, roster moves) are still being built — for now this just applies the calendar-driven effects.');
+    const lines = ensureOffSeasonApplied(roster, getCurrentDay());
     const log = document.getElementById('offseason-log');
-    if(log) log.textContent = lines.join('\n');
+    if(log){
+      log.textContent = lines && lines.length
+        ? lines.map(l=> l.name ? `${l.name}: ${l.detail}${l.retired ? ' — RETIRED this off-season' : ''}${l.injuryNote ? ' — ' + l.injuryNote : ''}` : l.detail).join('\n')
+        : 'Off-season for this cycle has already been applied — nothing new to report until the next one.';
+    }
   };
 
   const advanceBtn = document.getElementById('btn-advance');
