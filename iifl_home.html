@@ -102,12 +102,13 @@
   .info-row b{ color:var(--bone); font-weight:600; }
 
   .pit-membership-row{
-    display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+    display:flex; flex-direction:column; gap:2px;
     padding:9px 0; border-bottom:1px solid var(--line);
   }
   .pit-membership-row:last-child{ border-bottom:none; }
-  .pmr-info{ min-width:0; flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--body); font-size:12.5px; color:var(--bone-dim); }
-  .pmr-info b{ color:var(--bone); font-weight:600; }
+  .pmr-pit{ font-family:var(--body); font-size:12.5px; color:var(--bone); font-weight:600; }
+  .pmr-bottom{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+  .pmr-info{ min-width:0; font-family:var(--body); font-size:11.5px; color:var(--bone-dim); }
   .pmr-record{ flex:0 0 auto; white-space:nowrap; font-family:var(--mono); font-size:12.5px; color:var(--bone); }
 
   .sim-row{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
@@ -204,6 +205,10 @@ function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
   which save's namespace it's actually reading/writing.
 */
 const SAVE_REGISTRY_KEY = 'iifl_save_registry_v1';
+const DISCIPLINE_NAMES = {
+  boxer:'Boxer', brawler:'Street Brawler', wrestler:'Wrestler', sambo:'Russian Sambo',
+  mma:'MMA', karate:'Karate', judo:'Judo', catch:'Catch Wrestling'
+};
 const CREATED_FIGHTERS_KEY = 'iifl_created_fighters_v1'; // global catalog, NOT save-namespaced
 
 function loadSaveRegistry(){
@@ -1477,7 +1482,10 @@ function renderApp(){
   const membershipsHtml = memberships.length
     ? memberships.map(m=>{
         const prov = PROVINCES.find(p=> p.id === m.provinceId);
-        return `<div class="pit-membership-row"><span class="pmr-info" title="${m.pitName || 'Local Pit'} — ${m.settlementName || ''}${prov ? ', '+prov.name : ''}"><b>${m.pitName || 'Local Pit'}</b> — ${m.settlementName || ''}${prov ? ', '+prov.name : ''}</span><span class="pmr-record">${m.record ? m.record.wins+'-'+m.record.losses : ''}</span></div>`;
+        return `<div class="pit-membership-row">
+          <div class="pmr-pit">${m.pitName || 'Local Pit'}</div>
+          <div class="pmr-bottom"><span class="pmr-info">${m.settlementName || ''}${prov ? ', '+prov.name : ''}</span><span class="pmr-record">${m.record ? m.record.wins+'-'+m.record.losses : ''}</span></div>
+        </div>`;
       }).join('')
     : `<div class="empty-note">Not signed anywhere yet.</div>`;
 
@@ -1558,6 +1566,9 @@ function renderApp(){
             ` : `<div class="gc-value" id="btn-edit-age" style="cursor:pointer;">${playable.age || '?'} <span style="opacity:0.5; font-size:9px;">✎ fix</span></div>`}
           </div>
           <div class="glance-chip"><div class="gc-label">Weight Class</div><div class="gc-value">${playable.weightLb ? weightClassOf(playable.weightLb) : '—'}</div></div>
+          <div class="glance-chip"><div class="gc-label">Height</div><div class="gc-value">${playable.heightIn ? heightLabel(playable.heightIn) : '—'}</div></div>
+          <div class="glance-chip"><div class="gc-label">Weight</div><div class="gc-value">${playable.weightLb ? playable.weightLb+' lb' : '—'}</div></div>
+          <div class="glance-chip"><div class="gc-label">Fight Style</div><div class="gc-value">${DISCIPLINE_NAMES[playable.primaryDisc] || playable.primaryDisc || '—'}</div></div>
           <div class="glance-chip"><div class="gc-label">Home Province</div><div class="gc-value">${homeProvince ? homeProvince.name : '—'}</div></div>
           <div class="glance-chip"><div class="gc-label">Currently In</div><div class="gc-value">${playable.currentSettlementName ? playable.currentSettlementName : '—'}${playable.currentProvinceId && playable.currentProvinceId !== homeProvinceIdFor(playable) ? ` <span style="opacity:0.6; font-size:9px;">(${(PROVINCES.find(p=>p.id===playable.currentProvinceId)||{}).name || ''})</span>` : ''}</div></div>
           <div class="glance-chip"><div class="gc-label">Provincial Rank</div><div class="gc-value">${rank ? `#${rank.rank} of ${rank.outOf}` : '—'}</div></div>
