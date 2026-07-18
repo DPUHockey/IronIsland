@@ -410,7 +410,21 @@ function resolveJuniorPlayoffSubPhase(todayDay){
 // (Home Hub, newspaper, etc) should read from rather than re-deriving offsets by hand.
 function tierKeyDates(cycleYear){
   const may1 = dayForCalendarDate(cycleYear, 5, 1);
-  const jrDraft = may1 + 14;
+  // Three separate draft nights, one per league tier, always Monday/Tuesday/Wednesday of
+  // the same week — anchored to the nearest Monday on/after may1+14 so it lands on a real
+  // Monday no matter what weekday May 1 itself falls on that year. Tier 1 (Ironbound)
+  // drafts Monday, tier 2 (Northgate) Tuesday, tier 3 (Tidewater) Wednesday — deliberately
+  // sequential so a lower league can never draft a player the higher league already took;
+  // see runLeagueDraftForCycle / runDraftForFighter in junior_league.html.
+  // Signing deadline is the Friday of that same week.
+  const draftAnchorTarget = may1 + 14;
+  const anchorWeekdayIdx = (draftAnchorTarget - 1) % 7; // WEEKDAY_NAMES[0] === 'Monday'
+  const toMonday = (7 - anchorWeekdayIdx) % 7;
+  const jrDraftIronbound = draftAnchorTarget + toMonday;   // Monday — tier 1
+  const jrDraftNorthgate = jrDraftIronbound + 1;            // Tuesday — tier 2
+  const jrDraftTidewater = jrDraftIronbound + 2;            // Wednesday — tier 3
+  const jrSignDeadline = jrDraftIronbound + 4;              // Friday, same week
+  const jrDraft = jrDraftIronbound; // kept as the "draft week has begun" anchor for juniorOpen below
   const jrOpen = jrDraft + 14;
   const amOpen = may1 + 31;
   const proOpen = dayForCalendarDate(cycleYear, 8, 1);
@@ -427,7 +441,10 @@ function tierKeyDates(cycleYear){
     jrChampHostBidDue: may1,
     jrChampHostAnnounced: may1 + 7,
     juniorDraftDeclareDeadline: may1,
-    juniorDraftDay: jrDraft,
+    juniorDraftDayIronbound: jrDraftIronbound,
+    juniorDraftDayNorthgate: jrDraftNorthgate,
+    juniorDraftDayTidewater: jrDraftTidewater,
+    juniorSignDeadline: jrSignDeadline,
     juniorOpen: jrOpen,
     juniorTradeDeadline: jrOpen + 10*7,
     juniorRegEnd: jrRegEnd,
@@ -1315,52 +1332,157 @@ function draftFighterIntoRoster(leagueId, teamIndex, fighter){
   saveJrState(s);
 }
 
-// The real engine. Call once per island-year on Draft Day (gated by the calendar at
-// the call site, not in here) — gathers every fighter who declared this cycle across
-// every province's Juvenile pool, runs the full 3-league x 3-round draft, assigns
-// picks onto real team rosters, and removes drafted fighters from the Juvenile pool.
-// Returns a results/board structure shaped like runDraftForFighter's so the same
-// Draft Day screen can display both a player pick (if any) and the full NPC board.
-function runJuniorDraftDayBulk(cycleYear){
+// ============ THREE-NIGHT DRAFT CYCLE ============
+// Restores the original design (from an earlier session, never fully wired up): each
+// league drafts on its OWN night (Ironbound Monday, Northgate Tuesday, Tidewater
+// Wednesday — see tierKeyDates), and each draws from the SAME frozen, non-depleting
+// declared pool — a lower tier can "reach" for a prospect a higher tier already took.
+// That's intentional risk, not a bug: whoever ends up drafted by more than one league
+// signs with the highest tier that took them (resolved at the Friday sign deadline);
+// any other league that reached for them just wasted the pick. The declared pool is
+// snapshotted ONCE when the cycle begins so all three leagues are drafting the same
+// island-wide board, not three different pools depleted in sequence.
+
+function findFighterInPools(pools, id){
+  for(const provinceId in (pools.juvenile||{})){
+    const f = pools.juvenile[provinceId].find(x=> x.id === id);
+    if(f) return f;
+  }
+  return null;
+}
+
+function beginDraftCycleIfNeeded(cycleYear){
+  const s = loadJrState();
+  if(s.draftCycle && s.draftCycle.cycleYear === cycleYear) return s;
   const pools = loadFieldPools();
   const declared = [];
   Object.keys(pools.juvenile || {}).forEach(provinceId=>{
     pools.juvenile[provinceId].forEach(f=>{
-      if(f.juniorDraftDeclaredYear === cycleYear && f.juniorDraftDeclaration === 'declared'){
-        declared.push(f);
-      }
+      if(f.juniorDraftDeclaredYear === cycleYear && f.juniorDraftDeclaration === 'declared') declared.push(f);
     });
   });
-  declared.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats)); // best-available pool, island-wide
-  const available = [...declared];
-  const board = {};
-  const results = [];
+  declared.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats)); // frozen, best-available, shared by all 3 leagues
+  s.draftCycle = {
+    cycleYear,
+    declaredIds: declared.map(f=>f.id),
+    boards: {},        // leagueId -> { board:[[pick,pick,...]x3rounds], picks:[{round,teamIndex,fighterId,name}] }
+    completedLeagues: [],
+    signed: false,
+  };
+  saveJrState(s);
+  return s;
+}
 
-  [...JR_LEAGUES].sort((a,b)=> a.draftOrder-b.draftOrder).forEach(league=>{
-    const order = resolveTeamDraftOrder(league.id);
-    board[league.id] = [];
-    for(let r=0; r<3; r++){
-      const roundPicks = [];
-      order.forEach(teamIndex=>{
-        const prospect = available.shift(); // best remaining fighter, island-wide
-        if(!prospect){ roundPicks.push(null); return; }
-        draftFighterIntoRoster(league.id, teamIndex, prospect);
-        results.push({ leagueId: league.id, round: r+1, teamIndex, fighterId: prospect.id, name: prospect.name });
-        roundPicks.push({ team: jrTeamName(league.id, teamIndex), name: prospect.name, isPlayer:false, fighterId: prospect.id });
-      });
-      board[league.id].push(roundPicks);
+function runLeagueDraftForCycle(league, dc, pools){
+  const declaredFighters = dc.declaredIds.map(id=> findFighterInPools(pools, id)).filter(Boolean);
+  const order = resolveTeamDraftOrder(league.id);
+  const board = [];
+  const picks = [];
+  let idx = 0;
+  for(let r=0; r<3; r++){
+    const roundPicks = [];
+    order.forEach(teamIndex=>{
+      const prospect = declaredFighters[idx]; idx++; // same shared list every league draws from — NOT depleted between leagues
+      if(!prospect){ roundPicks.push(null); return; }
+      picks.push({ round:r+1, teamIndex, fighterId: prospect.id, name: prospect.name });
+      roundPicks.push({ team: jrTeamName(league.id, teamIndex), name: prospect.name, isPlayer:false, fighterId: prospect.id });
+    });
+    board.push(roundPicks);
+  }
+  dc.boards[league.id] = { board, picks };
+  dc.completedLeagues.push(league.id);
+}
+
+// Friday: every fighter drafted by more than one league signs with the highest tier
+// that took them (lowest draftOrder wins); every other league that picked them just
+// wasted that roster slot for the cycle — a real, visible cost for reaching. Only NOW
+// do fighters actually leave the Juvenile pool and get placed on real rosters.
+// Not every multi-drafted fighter takes the top offer. Real pulls toward a lower tier:
+// wanting to play near home, and a marginal prospect who'd ride the bench in the higher
+// league preferring a real role (earlier round) in a lower one. Capped so the top tier
+// still wins the clear majority of the time — this is a real minority outcome, not 50/50.
+function pickSigningOffer(fighter, offersSortedByTier){
+  let chosen = offersSortedByTier[0]; // start from the highest tier that drafted them
+  for(let i=1; i<offersSortedByTier.length; i++){
+    const lower = offersSortedByTier[i];
+    const lowerLeague = getJrLeague(lower.leagueId);
+    const chosenLeague = getJrLeague(chosen.leagueId);
+    let pull = 0.10; // baseline homebody/comfort preference even with no special reason
+    if(lowerLeague.provinces.includes(fighter.provinceId) && !chosenLeague.provinces.includes(fighter.provinceId)){
+      pull += 0.25; // this lower league actually plays near their hometown, the higher one doesn't
     }
+    if(lower.round <= chosen.round - 2){
+      pull += 0.20; // clear starting role down here vs. a late-round bench spot up there
+    } else if(lower.round < chosen.round){
+      pull += 0.10; // meaningfully better opportunity, not just a marginal one
+    }
+    if(Math.random() < Math.min(0.55, pull)) chosen = lower; // top tier still wins the clear majority of the time
+  }
+  return chosen;
+}
+
+function resolveDraftSigningsForCycle(dc){
+  const byFighter = {}; // fighterId -> [{leagueId, teamIndex, round}]
+  [...JR_LEAGUES].forEach(league=>{
+    const b = dc.boards[league.id];
+    if(!b) return;
+    b.picks.forEach(p=>{
+      if(!byFighter[p.fighterId]) byFighter[p.fighterId] = [];
+      byFighter[p.fighterId].push({ leagueId: league.id, teamIndex: p.teamIndex, round: p.round });
+    });
   });
 
-  // Drafted fighters come off the Juvenile board entirely — remove by id from every
-  // province's pool in one pass.
-  const draftedIds = new Set(results.map(r=> r.fighterId));
+  const pools = loadFieldPools();
+  const signedIds = new Set();
+  Object.keys(byFighter).forEach(fighterId=>{
+    const fighter = findFighterInPools(pools, fighterId);
+    if(!fighter) return;
+    const offersSortedByTier = byFighter[fighterId].slice().sort((a,b)=> getJrLeague(a.leagueId).draftOrder - getJrLeague(b.leagueId).draftOrder);
+    const winner = offersSortedByTier.length > 1 ? pickSigningOffer(fighter, offersSortedByTier) : offersSortedByTier[0];
+    draftFighterIntoRoster(winner.leagueId, winner.teamIndex, fighter);
+    signedIds.add(fighterId);
+  });
+
+  // Drafted-and-signed fighters come off the Juvenile board entirely.
   Object.keys(pools.juvenile || {}).forEach(provinceId=>{
-    pools.juvenile[provinceId] = pools.juvenile[provinceId].filter(f=> !draftedIds.has(f.id));
+    pools.juvenile[provinceId] = pools.juvenile[provinceId].filter(f=> !signedIds.has(f.id));
   });
   saveFieldPools(pools);
+}
 
-  return { results, board, totalDeclared: declared.length, totalDrafted: results.length };
+// Orchestrates the whole cycle: begins it once Ironbound's night arrives, runs each
+// league's draft on its own night as the days pass, and resolves signings once the
+// Friday deadline hits and all three leagues have drafted.
+function ensureNpcDraftRunForYear(){
+  const cycleYear = currentIslandYear();
+  const dates = tierKeyDates(cycleYear);
+  const today = getCurrentDay();
+  if(today < dates.juniorDraftDayIronbound) return;
+
+  const s = beginDraftCycleIfNeeded(cycleYear);
+  const dc = s.draftCycle;
+  if(dc.signed) return;
+
+  const leagueDayMap = {
+    kolsati_jr: dates.juniorDraftDayIronbound,
+    northern_jr: dates.juniorDraftDayNorthgate,
+    eastern_jr: dates.juniorDraftDayTidewater,
+  };
+  const pools = loadFieldPools();
+  let changed = false;
+  [...JR_LEAGUES].sort((a,b)=> a.draftOrder-b.draftOrder).forEach(league=>{
+    if(dc.completedLeagues.includes(league.id)) return;
+    if(today < leagueDayMap[league.id]) return;
+    runLeagueDraftForCycle(league, dc, pools);
+    changed = true;
+  });
+  if(changed) saveJrState(s);
+
+  if(dc.completedLeagues.length === JR_LEAGUES.length && today >= dates.juniorSignDeadline){
+    resolveDraftSigningsForCycle(dc);
+    dc.signed = true;
+    saveJrState(s);
+  }
 }
 
 /* ============================ JUNIOR PLAYOFFS ============================ */
@@ -1963,23 +2085,8 @@ function currentIslandYear(){
 function isDraftEligible(f){
   const petitionedEarly = f.juvenilePetitionStatus === 'approved-pending-draft';
   const ageOk = petitionedEarly || (f.age >= 14 && f.age <= 17);
-  const draftDayArrived = getCurrentDay() >= tierKeyDates(currentIslandYear()).juniorDraftDay;
-  return !!f.juvenileHomeProvinceId && ageOk && !f.juniorTeamId && draftDayArrived;
-}
-
-// Runs the island-wide NPC bulk draft exactly once per cycle, the moment Draft Day
-// arrives — guarded so revisiting the screen later in the cycle doesn't re-draft
-// everyone. Safe to call liberally (e.g. every time the select screen renders); it
-// no-ops instantly once already resolved for the current year.
-function ensureNpcDraftRunForYear(){
-  const cycleYear = currentIslandYear();
-  const s = loadJrState();
-  if(s.npcDraftResolvedYear === cycleYear) return;
-  if(getCurrentDay() < tierKeyDates(cycleYear).juniorDraftDay) return;
-  runJuniorDraftDayBulk(cycleYear);
-  const s2 = loadJrState();
-  s2.npcDraftResolvedYear = cycleYear;
-  saveJrState(s2);
+  const draftWeekArrived = getCurrentDay() >= tierKeyDates(currentIslandYear()).juniorDraftDayIronbound;
+  return !!f.juvenileHomeProvinceId && ageOk && !f.juniorTeamId && draftWeekArrived;
 }
 
 function getFighterScouting(f){
@@ -1997,7 +2104,12 @@ function runDraftForFighter(f){
   const results = [];
   const board = {};
 
-  JR_LEAGUES.forEach(league=>{
+  // Each league drafts independently against the SAME pool — a lower tier can "reach" for
+  // a player a higher tier already took. That's intentional risk, not a bug: if multiple
+  // leagues draft the player, they get to choose which offer to actually sign with (see the
+  // 'offers' screen), naturally favoring the higher tier — a lower-tier team that reached
+  // for someone with a better offer on the table just wasted a pick, same as real drafts.
+  [...JR_LEAGUES].sort((a,b)=> a.draftOrder-b.draftOrder).forEach(league=>{
     const thresholds = TIER_ROUND_THRESHOLDS[league.tier];
     board[league.id] = [];
     let drafted = false;
@@ -2387,7 +2499,7 @@ function renderSelect(){
   const rows = roster.map(f=>{
     const prov = PROVINCES.find(p=>p.id===f.provinceId);
     const ageBandOk = f.juvenilePetitionStatus === 'approved-pending-draft' || (f.age >= 14 && f.age <= 17);
-    const draftDayArrived = getCurrentDay() >= tierKeyDates(currentIslandYear()).juniorDraftDay;
+    const draftDayArrived = getCurrentDay() >= tierKeyDates(currentIslandYear()).juniorDraftDayIronbound;
     let status, canAct = false;
     if(f.juniorTeamId){
       status = `Signed — ${jrTeamName(f.juniorLeagueId, f.juniorTeamId)}`;
@@ -2402,7 +2514,7 @@ function renderSelect(){
     } else if(!ageBandOk){
       status = `Not Draft Age (currently ${f.age})`;
     } else if(!draftDayArrived){
-      status = `Draft eligible — Draft Day is ${formatCalendarDateShort(tierKeyDates(currentIslandYear()).juniorDraftDay)}`;
+      status = `Draft eligible — draft week begins ${formatCalendarDateShort(tierKeyDates(currentIslandYear()).juniorDraftDayIronbound)}`;
     } else {
       status = 'Not Eligible';
     }
@@ -3094,13 +3206,13 @@ function wireEvents(){
 render();
 try{
   const urlScreen = new URLSearchParams(window.location.search).get('screen');
-  if(urlScreen === 'draft-day' && getCurrentDay() >= tierKeyDates(currentIslandYear()).juniorDraftDay){
+  if(urlScreen === 'draft-day' && getCurrentDay() >= tierKeyDates(currentIslandYear()).juniorDraftDayIronbound){
     state.screen = 'draft-day';
     render();
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V23 · 2026-07-17</div>
+<div class="version-badge">JUNIOR LEAGUE · V25 · 2026-07-17</div>
 </body>
 </html>
 
