@@ -101,6 +101,15 @@
   .info-row:last-child{ border-bottom:none; }
   .info-row b{ color:var(--bone); font-weight:600; }
 
+  .pit-membership-row{
+    display:flex; align-items:baseline; justify-content:space-between; gap:10px;
+    padding:9px 0; border-bottom:1px solid var(--line);
+  }
+  .pit-membership-row:last-child{ border-bottom:none; }
+  .pmr-info{ min-width:0; flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--body); font-size:12.5px; color:var(--bone-dim); }
+  .pmr-info b{ color:var(--bone); font-weight:600; }
+  .pmr-record{ flex:0 0 auto; white-space:nowrap; font-family:var(--mono); font-size:12.5px; color:var(--bone); }
+
   .sim-row{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
   .sim-row .btn{ flex:1; padding:9px 8px; font-size:10px; white-space:nowrap; }
   .btn:disabled{ opacity:.4; cursor:not-allowed; }
@@ -1168,6 +1177,19 @@ function provincialRank(f){
   return { rank, outOf, provinceName: province ? province.name : 'your province' };
 }
 
+// Same idea as provincialRank but pooled across every province — same Juvenile-only
+// restriction, since that's the only tier with a real island-wide field pool right now.
+function worldRank(f){
+  if(fighterStatusLine(f) !== 'Juvenile') return null;
+  const pools = loadFieldPools();
+  let peers = [];
+  Object.values(pools.juvenile || {}).forEach(list=>{ peers = peers.concat(list); });
+  if(!peers.length) return null;
+  const myOvr = calcOVR(f.stats);
+  const better = peers.filter(p=> calcOVR(p.stats) > myOvr).length;
+  return { rank: better + 1, outOf: peers.length + 1 };
+}
+
 /* ============================ FAMILY (mate / children) ============================ */
 const MIN_MARRIAGE_AGE = 17;
 const FEMALE_FIRST_NAMES = ['Dot','Marge','Vi','Peg','Ruth','Alma','Frannie','Gale','Nell','June','Sal','Roz','Trudy','Iris','Bev','Lorraine','Connie','Edie','Mavis','Pearl','Dolores','Shirley','Norma','Wanda','Eileen'];
@@ -1441,6 +1463,7 @@ function renderApp(){
   /* ---------- Career at a Glance ---------- */
   const rec = playable.record || { wins:0, losses:0 };
   const rank = provincialRank(playable);
+  const wRank = worldRank(playable);
   const homeProvince = PROVINCES.find(p=> p.id === homeProvinceIdFor(playable));
 
   /* ---------- Recent Headlines ---------- */
@@ -1454,7 +1477,7 @@ function renderApp(){
   const membershipsHtml = memberships.length
     ? memberships.map(m=>{
         const prov = PROVINCES.find(p=> p.id === m.provinceId);
-        return `<div class="info-row"><span><b>${m.pitName || 'Local Pit'}</b> — ${m.settlementName || ''}${prov ? ', '+prov.name : ''}</span><span>${m.record ? m.record.wins+'-'+m.record.losses : ''}</span></div>`;
+        return `<div class="pit-membership-row"><span class="pmr-info" title="${m.pitName || 'Local Pit'} — ${m.settlementName || ''}${prov ? ', '+prov.name : ''}"><b>${m.pitName || 'Local Pit'}</b> — ${m.settlementName || ''}${prov ? ', '+prov.name : ''}</span><span class="pmr-record">${m.record ? m.record.wins+'-'+m.record.losses : ''}</span></div>`;
       }).join('')
     : `<div class="empty-note">Not signed anywhere yet.</div>`;
 
@@ -1521,6 +1544,8 @@ function renderApp(){
       <section>
         <div class="section-label">Career at a Glance</div>
         <div class="glance-grid">
+          <div class="glance-chip"><div class="gc-label">Fame</div><div class="gc-value">${playable.fame || 0}</div></div>
+          <div class="glance-chip"><div class="gc-label">Birthdate</div><div class="gc-value">${playable.birthDay !== undefined && playable.birthDay !== null ? formatCalendarDate(playable.birthDay) : '—'}</div></div>
           <div class="glance-chip"><div class="gc-label">Tier</div><div class="gc-value">${tier}</div></div>
           <div class="glance-chip"><div class="gc-label">Record</div><div class="gc-value">${rec.wins}-${rec.losses}</div></div>
           <div class="glance-chip">
@@ -1536,6 +1561,7 @@ function renderApp(){
           <div class="glance-chip"><div class="gc-label">Home Province</div><div class="gc-value">${homeProvince ? homeProvince.name : '—'}</div></div>
           <div class="glance-chip"><div class="gc-label">Currently In</div><div class="gc-value">${playable.currentSettlementName ? playable.currentSettlementName : '—'}${playable.currentProvinceId && playable.currentProvinceId !== homeProvinceIdFor(playable) ? ` <span style="opacity:0.6; font-size:9px;">(${(PROVINCES.find(p=>p.id===playable.currentProvinceId)||{}).name || ''})</span>` : ''}</div></div>
           <div class="glance-chip"><div class="gc-label">Provincial Rank</div><div class="gc-value">${rank ? `#${rank.rank} of ${rank.outOf}` : '—'}</div></div>
+          <div class="glance-chip"><div class="gc-label">World Rank</div><div class="gc-value">${wRank ? `#${wRank.rank} of ${wRank.outOf}` : '—'}</div></div>
         </div>
       </section>
 
