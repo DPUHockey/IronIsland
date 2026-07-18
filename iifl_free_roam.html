@@ -766,6 +766,78 @@ function tierKeyDates(cycleYear){
 // Mirrors the same function in iifl_home.html — kept in sync manually since these files
 // share localStorage but not code. Canonical major-events calendar, built directly off
 // tierKeyDates so it can never drift out of sync with the actual season logic.
+// Off-season improvements (training bonus, conditioning, decline, injury, retirement)
+// used to only ever apply from Home Hub's manual "Enter Off-Season" button — anyone who
+// crossed May 1 purely by walking through Free Roam day by day got none of it, silently.
+// Same guarded catch-up as home.html, sharing the same clock field, so whichever screen
+// notices the crossing first applies it exactly once and both stay in sync.
+function seasonJustEndedYear(today){
+  const s = resolveTierSeason('juvenile', today);
+  return s.phase === 'dead-days' ? s.cycleYear : s.cycleYear - 1;
+}
+function ensureOffSeasonApplied(roster, today){
+  const targetY = seasonJustEndedYear(today);
+  const c = loadClock();
+  if(c.lastOffSeasonAppliedYear === undefined){
+    c.lastOffSeasonAppliedYear = targetY;
+    saveClock(c);
+    return null;
+  }
+  if(targetY <= c.lastOffSeasonAppliedYear) return null;
+  const lines = [];
+  for(let y = c.lastOffSeasonAppliedYear + 1; y <= targetY; y++){
+    roster.forEach(f=>{
+      const beforeStats = { ...(f.stats||{}) };
+      applyOffSeasonToFighter(f);
+      reclassifyWeightClass(f);
+      const retired = checkRetirement(f);
+      const injured = checkOffSeasonInjury(f);
+      const deltas = [];
+      Object.keys(beforeStats).forEach(k=>{
+        const diff = (f.stats[k]||0) - (beforeStats[k]||0);
+        if(diff !== 0) deltas.push(`${k} ${diff>0?'+':''}${diff}`);
+      });
+      lines.push({
+        name: f.name,
+        detail: deltas.length ? deltas.join(', ') : 'no measurable change',
+        retired, injured, injuryNote: injured ? f.offSeasonInjuryNote : null,
+      });
+    });
+    const walkedAway = processFAWalkAway(dayForCalendarDate(y, 5, 1));
+    if(walkedAway) lines.push({ name: null, detail: `${walkedAway} free agent(s) walked away from the sport this off-season.` });
+  }
+  saveRoster(roster);
+  c.lastOffSeasonAppliedYear = targetY;
+  saveClock(c);
+  return lines;
+}
+function showOffSeasonReportModal(lines){
+  if(document.getElementById('offseason-modal-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'offseason-modal-overlay';
+  overlay.style.cssText = 'position:fixed; inset:0; z-index:60; background:rgba(20,17,13,0.9); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; padding:20px;';
+  const rows = lines.map(l=> `
+    <div style="padding:8px 0; border-bottom:1px solid var(--line); font-family:var(--body); font-size:12.5px; color:var(--bone-dim); text-align:left;">
+      ${l.name ? `<b style="color:var(--bone);">${l.name}</b>: ${l.detail}${l.retired ? ' — <span style="color:var(--ink-red);">RETIRED</span>' : ''}${l.injuryNote ? '<br><span style="color:var(--muted); font-size:11px;">'+l.injuryNote+'</span>' : ''}` : l.detail}
+    </div>
+  `).join('');
+  overlay.innerHTML = `
+    <div style="background:var(--bg-panel); border:1px solid var(--brass); max-width:460px; width:100%; padding:24px; max-height:80vh; overflow-y:auto;">
+      <div class="ticket-eyebrow" style="color:var(--brass); text-align:center;">Off-Season Report</div>
+      <div class="ticket-title" style="margin-bottom:14px; text-align:center;">Training Camp Results</div>
+      <div>${rows}</div>
+      <div class="btn-row" style="margin-top:16px; justify-content:center;"><button class="btn btn-primary" id="offseason-report-close">Got It →</button></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('offseason-report-close').onclick = ()=> overlay.remove();
+}
+function checkForOffSeasonCrossing(){
+  const roster = loadRoster();
+  const lines = ensureOffSeasonApplied(roster, getCurrentDay());
+  if(lines && lines.length) showOffSeasonReportModal(lines);
+}
+
 function getMajorEventsForYear(cycleYear){
   const d = tierKeyDates(cycleYear);
   return [
@@ -3353,6 +3425,7 @@ function advanceDay(){
   relocateEventSquares();
   getRoster(); // touches every fighter through ensureFighterDefaults, which syncs age from birthday
   checkForMajorEventToday();
+  checkForOffSeasonCrossing();
 }
 // Home Hub's Sim Day/Sim Week/Advance-to-Next-Season already had a pause-on-major-event
 // check, but normal walking through Free Roam — the way days actually pass most of the
@@ -3380,6 +3453,7 @@ function showEventChoiceModal(evt){
       <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:20px;">${evt.description || (evt.tier + " · a major date on the island calendar has arrived.")}</p>
       <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
         ${evt.watchUrl ? `<button class="btn btn-primary" id="event-watch">Watch It →</button>` : ''}
+        <button class="btn" id="event-goto">Go to Event →</button>
         <button class="btn" id="event-sim">Sim the Day</button>
       </div>
     </div>
@@ -3389,6 +3463,14 @@ function showEventChoiceModal(evt){
     logEventResult(evt, true);
     state.pendingMajorEvent = null;
     window.location.href = evt.watchUrl;
+  };
+  // Already in Free Roam here, so "going to" the event just means staying put on the
+  // event day instead of auto-resolving it — closes the modal without the Sim the Day
+  // silent-resolution step, so the player can walk to a pit, check the newspaper, etc.
+  document.getElementById('event-goto').onclick = ()=>{
+    logEventResult(evt, false);
+    state.pendingMajorEvent = null;
+    overlay.remove();
   };
   document.getElementById('event-sim').onclick = ()=>{
     logEventResult(evt, false);
@@ -4001,7 +4083,14 @@ function projectAdultSize(f){
   return { adultHeightIn, adultWeightLb, isGrown: pct >= 1.0 };
 }
 function growthOutlook(f){
-  const isAmateurTier = !!f.amateurLeagueId || !f.juvenileHomeProvinceId;
+  // juvenileHomeProvinceId is only ever set on the player's OWN roster fighter (it's
+  // stamped during pit sign-up) — NPC field-pool fighters never get it, only a plain
+  // provinceId. The old check (!f.juvenileHomeProvinceId) treated every single NPC
+  // Juvenile as "amateur tier" and graded them against the adult ceiling (e.g. 88 for a
+  // generational 14-year-old instead of the real 50), which is why Growth Outlook could
+  // read "91% of ceiling" for a fighter who was actually already over their real cap.
+  // Age is reliable on both NPCs and the roster fighter, so use that instead.
+  const isAmateurTier = !!f.amateurLeagueId || (f.age !== undefined && f.age !== null && f.age >= 18);
   const ceiling = isAmateurTier ? bandCeiling(18, f.talentTier||'normal') : bandCeiling(f.age||11, f.talentTier||'normal');
   const avgStat = (f.stats.speed+f.stats.quickness+f.stats.toughness+f.stats.power+f.stats.agility)/5;
   const pctOfCeiling = clamp(avgStat/ceiling*100, 0, 100);
