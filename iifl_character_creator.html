@@ -1815,6 +1815,7 @@ function renderModal(){
             <div>
               <div class="mf-name">${f.name}</div>
               <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${f.heightIn?heightLabel(f.heightIn):''}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement||''}${prov?', '+prov.name:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
+              <div class="mf-meta">${f.birthDay !== undefined && f.birthDay !== null ? 'Born '+dateForDay(f.birthDay).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : ''}${f.fame !== undefined ? ' · Fame '+f.fame : ''}</div>
               <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Career ${rec.wins}-${rec.losses}</div>
             </div>
           </div>
@@ -2677,6 +2678,6 @@ function updateNextBasicsDisabled(){
 
 render();
 </script>
-<div class="version-badge">CHARACTER CREATOR · V21 · 2026-07-17</div>
+<div class="version-badge">CHARACTER CREATOR · V22 · 2026-07-17</div>
 </body>
 </html>
