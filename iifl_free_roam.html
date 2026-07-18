@@ -2957,7 +2957,20 @@ function createPitTournament(pit, day, includePlayer, weightClass, kind){
 
 function tournamentFighterById(pit, playerFighter, id){
   if(id === 'player') return playerFighter;
-  return pit.roster.find(r=>r.id===id);
+  const inRoster = pit.roster.find(r=>r.id===id);
+  if(inRoster) return inRoster;
+  // The live roster is filtered to fighters who still have fights left
+  // (attachLiveRosters) — someone who won an earlier match and then hit their career
+  // cap before this screen re-rendered would otherwise vanish from view entirely and
+  // show as "???" despite having a real, resolved result. Fall back to the full,
+  // unfiltered province pool (name/record still intact there) just for display.
+  if(state.provinceId){
+    const pools = loadFieldPools();
+    const full = (pools.juvenile && pools.juvenile[state.provinceId]) || [];
+    const found = full.find(r=>r.id===id);
+    if(found) return found;
+  }
+  return null;
 }
 
 function progressTournament(pit, playerFighter, tourney){
@@ -2970,22 +2983,29 @@ function progressTournament(pit, playerFighter, tourney){
     if(m.aId==='player' || m.bId==='player') return; // wait for the player to actually fight
     const a = tournamentFighterById(pit, playerFighter, m.aId);
     const b = tournamentFighterById(pit, playerFighter, m.bId);
-    if(!a || !b) return;
+    // Pit rosters are a LIVE view of the shared pool (attachLiveRosters) — a fighter
+    // booked into this bracket can vanish before their match comes up (most commonly:
+    // they hit their career fight cap via the same day's island-wide auto-sim), which
+    // used to leave the match stuck on "pending" forever with no way for the bracket to
+    // ever complete. Whoever's still found gets it by forfeit; if neither side can be
+    // found, it's dropped as a no-contest so the round can still close out.
+    if(!a && !b){ m.winnerId = 'no-contest'; changed = true; return; }
+    if(!a || !b){ m.winnerId = a ? m.aId : m.bId; changed = true; return; }
     const { winner } = quickSimBout(a, b);
     m.winnerId = winner.id;
     changed = true;
   });
   const roundDone = round.every(m=>m.winnerId);
   if(roundDone){
-    const winners = round.map(m=>m.winnerId);
-    if(winners.length === 1){
+    const winners = round.map(m=>m.winnerId).filter(id=> id !== 'no-contest');
+    if(winners.length <= 1){
       tourney.complete = true;
-      tourney.championId = winners[0];
+      tourney.championId = winners[0] || null;
       changed = true;
     } else if(tourney.rounds.length < bracketRoundsNeeded(tourney.size)){
       const nextRound = [];
       for(let i=0;i<winners.length;i+=2){
-        nextRound.push({ aId: winners[i], bId: winners[i+1], winnerId: null });
+        nextRound.push({ aId: winners[i], bId: winners[i+1] || null, winnerId: winners[i+1] ? null : winners[i] });
       }
       tourney.rounds.push(nextRound);
       changed = true;
@@ -4959,8 +4979,16 @@ function renderTournamentNight(){
 
   const currentRound = tourney.rounds[tourney.rounds.length-1];
   const playerMatch = !tourney.complete ? currentRound.find(m=> (m.aId==='player'||m.bId==='player') && !m.winnerId) : null;
-  const playerAppeared = tourney.rounds.some(r=> r.some(m=> m.aId==='player'||m.bId==='player'));
-  const eliminated = !tourney.complete && playerAppeared && !playerMatch;
+  // Bug fix: this used to be "player appeared this round and has no pending match right
+  // now" — which is also true the moment the player WINS their round, since the next
+  // round doesn't get generated until every match in the current round (including NPC
+  // matches still pending) has resolved. That's what made a win read as "You're out."
+  // Actual elimination requires the player's own most recent resolved match to have a
+  // winner who isn't them.
+  const playerMatches = tourney.rounds.flatMap(r=> r.filter(m=> m.aId==='player'||m.bId==='player'));
+  const lastPlayerMatch = playerMatches.length ? playerMatches[playerMatches.length-1] : null;
+  const eliminated = !tourney.complete && !!lastPlayerMatch && !!lastPlayerMatch.winnerId && lastPlayerMatch.winnerId !== 'player' && !playerMatch;
+  const advancingWaitingOnBracket = !tourney.complete && !!lastPlayerMatch && lastPlayerMatch.winnerId === 'player' && !playerMatch;
 
   let actionHtml = '';
   if(tourney.complete){
@@ -4968,6 +4996,8 @@ function renderTournamentNight(){
     actionHtml = `<p style="font-family:var(--label); font-size:13px; letter-spacing:1px; text-transform:uppercase; color:var(--brass); text-align:center; margin-top:14px;">🏆 ${championName} takes the ${myWc.toLowerCase()}weight title tonight.</p>`;
   } else if(playerMatch){
     actionHtml = `<div class="btn-row" style="margin-top:10px;"><span></span><button class="btn btn-primary" id="fight-tournament-round">Fight Your Round →</button></div>`;
+  } else if(advancingWaitingOnBracket){
+    actionHtml = `<p style="font-family:var(--mono); font-size:11px; color:var(--brass); text-align:center; margin-top:8px;">You won your round — waiting on the rest of the bracket to finish. Check back once everyone's fought.</p>`;
   } else if(eliminated){
     actionHtml = `<p style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center; margin-top:8px;">You're out — the rest of the bracket plays out on its own. Come back next ${kind==='fiesta'?'Wednesday':'Tuesday'}.</p>`;
   }
