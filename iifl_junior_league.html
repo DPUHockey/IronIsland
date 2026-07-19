@@ -1159,10 +1159,10 @@ function setPlayerIntoRoster(leagueId, teamIndex, fighter){
   if(fighter.juniorSignedYear === undefined){
     updateFighter(fighter.id, ff=>{ ff.juniorSignedYear = currentIslandYear(); });
   }
+  ensureTeamRoster(leagueId, teamIndex); // guarantees the roster exists before we touch it
   const s = loadJrState();
   const key = teamRosterKey(leagueId, teamIndex);
-  if(!s.rosters[key]) ensureTeamRoster(leagueId, teamIndex);
-  const slots = loadJrState().rosters[key];
+  const slots = s.rosters[key];
   const wClass = weightClassOf(fighter.weightLb);
   let slot = slots.find(sl=> sl.weightClass===wClass && !sl.isPlayer);
   if(!slot) slot = slots[0];
@@ -1170,9 +1170,13 @@ function setPlayerIntoRoster(leagueId, teamIndex, fighter){
   slot.name = fighter.name;
   slot.fighterId = fighter.id;
   slot.fighter = null; // player's live stats are always fetched fresh via fighterId
-  const s2 = loadJrState();
-  s2.rosters[key] = slots;
-  saveJrState(s2);
+  saveJrState(s);
+  // Verify the write actually landed — if it didn't, the player's own signing would
+  // silently vanish while their juniorTeamId/juniorLeagueId still claimed they were
+  // signed, which is exactly the bug this replaced.
+  const check = loadJrState();
+  const stillThere = (check.rosters[key]||[]).some(sl=> sl.isPlayer && sl.fighterId===fighter.id);
+  if(!stillThere) console.error('IIFL setPlayerIntoRoster: write did not persist for', fighter.name, key);
 }
 // Resolves a roster slot to a live fighter object — player slots pull fresh from the
 // shared roster (so growth/aging always reflects current state), NPC slots use their
@@ -3856,7 +3860,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V37 · 2026-07-18</div>
+<div class="version-badge">JUNIOR LEAGUE · V38 · 2026-07-18</div>
 </body>
 </html>
 
