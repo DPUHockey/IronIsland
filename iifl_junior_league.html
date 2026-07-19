@@ -2738,12 +2738,13 @@ function recruitRowHtml(f, recruitNumber){
   const doc = projectAdultSize(f);
   return `
     <div class="fighter-row" style="--fr-color:${prov?prov.color:'#C9A23C'}">
+      <div class="fr-status" style="min-width:64px; text-align:left;">Recruit<br>#${recruitNumber}</div>
       <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
       <div style="flex:1;">
         <div class="fr-name clickable-name" data-open-fighter="${f.id}">${f.isPlayable ? '⭐ ' : ''}${f.name}</div>
-        <div class="fr-meta">${prov ? prov.name : (f.settlement||f.hometown||'')} · ${DISCIPLINE_NAMES[f.primaryDisc]} · ${heightLabel(f.heightIn)} · Projects ${weightClassOf(doc.adultWeightLb)}weight</div>
+        <div class="fr-meta">Age ${f.age} · ${prov ? prov.name : (f.settlement||f.hometown||'')} · ${DISCIPLINE_NAMES[f.primaryDisc]} · ${heightLabel(f.heightIn)} · Projects ${weightClassOf(doc.adultWeightLb)}weight</div>
       </div>
-      <div class="fr-status">Recruit #${recruitNumber}<br>OVR ${calcOVR(f.stats)} · ${f.record.wins}-${f.record.losses}</div>
+      <div class="fr-status">OVR ${calcOVR(f.stats)}<br>${f.record.wins}-${f.record.losses}</div>
     </div>
   `;
 }
@@ -3546,7 +3547,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V30 · 2026-07-18</div>
+<div class="version-badge">JUNIOR LEAGUE · V31 · 2026-07-18</div>
 </body>
 </html>
 
