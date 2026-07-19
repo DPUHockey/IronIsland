@@ -1156,6 +1156,9 @@ function ensureTeamRoster(leagueId, teamIndex){
   return slots;
 }
 function setPlayerIntoRoster(leagueId, teamIndex, fighter){
+  if(fighter.juniorSignedYear === undefined){
+    updateFighter(fighter.id, ff=>{ ff.juniorSignedYear = currentIslandYear(); });
+  }
   const s = loadJrState();
   const key = teamRosterKey(leagueId, teamIndex);
   if(!s.rosters[key]) ensureTeamRoster(leagueId, teamIndex);
@@ -1174,6 +1177,13 @@ function setPlayerIntoRoster(leagueId, teamIndex, fighter){
 // Resolves a roster slot to a live fighter object — player slots pull fresh from the
 // shared roster (so growth/aging always reflects current state), NPC slots use their
 // stored generated stats.
+// R for a fighter's first Junior season, then 2/3/4... for each season after —
+// signed year is stamped once at draft/FA-sign/offer-accept time and never touched again.
+function experienceLabel(fighter){
+  if(!fighter || fighter.juniorSignedYear === undefined) return '';
+  const yr = currentIslandYear() - fighter.juniorSignedYear + 1;
+  return yr <= 1 ? 'R' : String(yr);
+}
 function resolveSlotFighter(slot){
   if(slot.isPlayer && slot.fighterId){
     const f = getFighterById(slot.fighterId);
@@ -1329,6 +1339,7 @@ function draftFighterIntoRoster(leagueId, teamIndex, fighter){
   slot.isDraftedProspect = true;
   slot.name = fighter.name;
   slot.fighterId = null;
+  if(fighter.juniorSignedYear === undefined) fighter.juniorSignedYear = currentIslandYear();
   slot.fighter = fighter;
   s.rosters[key] = slots;
   saveJrState(s);
@@ -1932,9 +1943,27 @@ function aiPickLineup(slots, opponentLineup){
   return lineup;
 }
 
+function pairingKey(leagueId, weekIdx, home, away){ return `${leagueId}|${weekIdx}|${Math.min(home,away)}-${Math.max(home,away)}`; }
+function isPairingPlayed(leagueId, weekIdx, home, away){
+  const s = loadJrState();
+  return !!(s.playedPairings && s.playedPairings[pairingKey(leagueId,weekIdx,home,away)]);
+}
+function markPairingPlayed(leagueId, weekIdx, home, away){
+  const s = loadJrState();
+  if(!s.playedPairings) s.playedPairings = {};
+  s.playedPairings[pairingKey(leagueId,weekIdx,home,away)] = true;
+  saveJrState(s);
+}
+function isWeekFullyPlayed(leagueId, weekIdx){
+  const weeks = ensureLeagueSchedule(leagueId);
+  if(weekIdx >= weeks.length) return true;
+  return weeks[weekIdx].every(p=> isPairingPlayed(leagueId, weekIdx, p.home, p.away));
+}
+
 // Simulates a full 5-bout team game between two AI-controlled teams (no player
 // involved) — used to resolve every other game happening around the league each week.
-function simulateAiTeamGame(leagueId, homeIdx, awayIdx){
+function simulateAiTeamGame(leagueId, homeIdx, awayIdx, weekIdx){
+  if(weekIdx !== undefined && isPairingPlayed(leagueId, weekIdx, homeIdx, awayIdx)) return; // already resolved via another path
   const homeSlots = ensureTeamRoster(leagueId, homeIdx);
   const awaySlots = ensureTeamRoster(leagueId, awayIdx);
   const awayLineup = aiPickLineup(awaySlots, null); // visitor sets first, blind
@@ -1947,6 +1976,7 @@ function simulateAiTeamGame(leagueId, homeIdx, awayIdx){
     if(bout.winner.id === hf.id) homeScore++; else awayScore++;
   });
   recordStandingsResult(leagueId, homeIdx, awayIdx, homeScore > awayScore);
+  if(weekIdx !== undefined) markPairingPlayed(leagueId, weekIdx, homeIdx, awayIdx);
 }
 
 // Resolves every OTHER game in the given week (not involving teamIndex) — keeps the
@@ -1956,7 +1986,7 @@ function resolveOtherGamesThisWeek(leagueId, teamIndex, weekIdx){
   if(weekIdx >= weeks.length) return;
   weeks[weekIdx].forEach(pair=>{
     if(pair.home===teamIndex || pair.away===teamIndex) return;
-    simulateAiTeamGame(leagueId, pair.home, pair.away);
+    simulateAiTeamGame(leagueId, pair.home, pair.away, weekIdx);
   });
 }
 
@@ -2511,6 +2541,7 @@ function renderTeamModal(root){
       <div class="roster-slot ${sl.isPlayer?'you':''}">
         <div class="roster-slot-wc">${sl.weightClass}</div>
         <div class="roster-slot-name ${sl.isPlayer?'you':''} clickable-name" data-open-fighter="${fighter?fighter.id:''}">${sl.isPlayer?'YOU — ':''}${sl.name}</div>
+        <div style="font-family:var(--mono); font-size:10px; color:var(--muted); min-width:16px; text-align:center;" title="Junior experience">${experienceLabel(fighter)}</div>
         <div style="font-family:var(--mono); font-size:11px; color:var(--brass);">OVR ${ovr}</div>
       </div>`;
   }).join('');
@@ -2562,6 +2593,8 @@ function render(){
   if(state.screen==='overview'){ body = renderOverview(); title='JUNIOR LEAGUE'; sub='THREE LEAGUES, EIGHT PROVINCES'; }
   else if(state.screen==='league-detail'){ body = renderLeagueDetail(); const l = getJrLeague(state.viewLeagueId); title = l ? l.name.toUpperCase() : 'LEAGUE'; sub='FRANCHISES & STANDINGS'; }
   else if(state.screen==='select'){ body = renderSelect(); }
+  else if(state.screen==='league-night'){ body = renderLeagueNight(); title='JR FIGHT NIGHT'; sub='THURSDAY'; }
+  else if(state.screen==='league-night-games'){ body = renderLeagueNightGames(); title='THIS WEEK\'S SLATE'; }
   else if(state.screen==='jr-contract'){ body = renderJrContract(); title='JR CONTRACT'; sub='SIGN TO REGISTER'; }
   else if(state.screen==='declared-list'){ body = renderDeclaredList(); title='DECLARED POOL'; sub='THIS YEAR\'S DRAFT CLASS'; }
   else if(state.screen==='fa-pool'){ body = renderFAPool(); title='FREE AGENTS'; sub='JUNIOR ELIGIBLE'; }
@@ -2955,6 +2988,7 @@ function renderRoster(){
     <div class="roster-slot ${sl.isPlayer?'you':''}">
       <div class="roster-slot-wc">${sl.weightClass}</div>
       <div class="roster-slot-name ${sl.isPlayer?'you':''} clickable-name" data-open-fighter="${fighter?fighter.id:''}">${sl.isPlayer?'YOU — ':''}${sl.name}</div>
+      <div style="font-family:var(--mono); font-size:10px; color:var(--muted); min-width:16px; text-align:center;" title="Junior experience">${experienceLabel(fighter)}</div>
       <div style="font-family:var(--mono); font-size:11px; color:var(--brass);">OVR ${ovr}</div>
     </div>
   `;}).join('');
@@ -2969,6 +3003,82 @@ function renderRoster(){
     <div class="btn-row">
       <button class="btn" id="back-to-select-from-roster">← Fighter Select</button>
       <button class="btn btn-primary" id="go-to-season-hub">Team Season →</button>
+    </div>
+  `;
+}
+
+// Thursday's "Jr Fight Night" hub — the entry point for actually pushing all 3 leagues'
+// weeks forward. Before this, only the player's OWN league ever advanced, and only when
+// they manually played through Team Season — the other 2 leagues never moved at all.
+function renderLeagueNight(){
+  const cards = JR_LEAGUES.map(league=>{
+    const weekIdx = getLeagueWeek(league.id);
+    const weeks = ensureLeagueSchedule(league.id);
+    const seasonOver = weekIdx >= weeks.length;
+    const pairings = seasonOver ? [] : weeks[weekIdx];
+    const playedCount = pairings.filter(p=> isPairingPlayed(league.id, weekIdx, p.home, p.away)).length;
+    const roster = getRoster();
+    const mine = roster.find(r=>r.isPlayable);
+    const myGame = mine && mine.juniorLeagueId===league.id ? pairings.find(p=> p.home===mine.juniorTeamId || p.away===mine.juniorTeamId) : null;
+    return `
+      <div class="fighter-row" style="align-items:flex-start; flex-direction:column; gap:8px;">
+        <div style="display:flex; justify-content:space-between; width:100%; align-items:baseline;">
+          <div class="fr-name">${league.name}</div>
+          <div class="fr-meta">${seasonOver ? 'Season complete' : `Week ${weekIdx+1} of ${weeks.length}`}</div>
+        </div>
+        ${myGame ? `<div class="fr-meta" style="color:var(--brass);">Your team plays this week — ${jrTeamName(league.id, myGame.away)} @ ${jrTeamName(league.id, myGame.home)}</div>` : ''}
+        <div class="fr-meta">${seasonOver ? '' : `${playedCount} of ${pairings.length} games resolved this week`}</div>
+        <div class="btn-row" style="width:100%;">
+          <button class="btn btn-small" data-view-league="${league.id}">Standings →</button>
+          ${seasonOver ? '' : `<button class="btn btn-small btn-primary" data-watch-league="${league.id}">Watch This Week →</button>`}
+        </div>
+      </div>
+    `;
+  }).join('');
+  return `
+    <div class="section-label">Jr Fight Night — Thursday</div>
+    <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:16px;">Sim everything at once, or drop into any league to watch or sim its games one at a time.</p>
+    <div class="fighter-grid">${cards}</div>
+    <div class="btn-row" style="margin-top:18px;"><span></span><button class="btn btn-primary" id="sim-all-leagues">⚡ Sim All 3 Leagues →</button></div>
+    <div class="btn-row" style="margin-top:8px;"><a class="btn" href="iifl_home.html" style="text-decoration:none; display:inline-block;">🏠 Home Hub</a><span></span></div>
+  `;
+}
+
+// One league's slate for its current week — sim or watch each pairing individually.
+function renderLeagueNightGames(){
+  const league = getJrLeague(state.viewLeagueId);
+  const weekIdx = getLeagueWeek(league.id);
+  const weeks = ensureLeagueSchedule(league.id);
+  if(weekIdx >= weeks.length){
+    return `<div class="empty-note">${league.name}'s season is already complete.</div><div class="btn-row"><button class="btn" id="back-to-league-night">← Jr Fight Night</button><span></span></div>`;
+  }
+  const roster = getRoster();
+  const mine = roster.find(r=>r.isPlayable);
+  const pairings = weeks[weekIdx];
+  const rows = pairings.map((p,i)=>{
+    const played = isPairingPlayed(league.id, weekIdx, p.home, p.away);
+    const isMyGame = mine && mine.juniorLeagueId===league.id && (p.home===mine.juniorTeamId || p.away===mine.juniorTeamId);
+    const standings = ensureStandings(league.id);
+    return `
+      <div class="pick-row">
+        <span class="pick-team clickable-name" data-open-team="${league.id}|${p.away}">${jrTeamName(league.id,p.away)}</span>
+        <span class="fr-meta">@ <span class="clickable-name" data-open-team="${league.id}|${p.home}">${jrTeamName(league.id,p.home)}</span></span>
+        ${played
+          ? `<span class="pick-fighter">${standings[p.home].wins+standings[p.home].losses>0?'Final':''} ${isMyGame?'⭐':''}</span>`
+          : `<span style="display:flex; gap:6px;">
+               <button class="btn btn-small" data-sim-pairing="${i}">Sim</button>
+               <button class="btn btn-small btn-primary" data-watch-pairing="${i}">Watch →</button>
+             </span>`}
+      </div>
+    `;
+  }).join('');
+  const allPlayed = pairings.every(p=> isPairingPlayed(league.id, weekIdx, p.home, p.away));
+  return `
+    <div class="section-label">${league.name} — Week ${weekIdx+1}</div>
+    ${rows}
+    <div class="btn-row" style="margin-top:16px;">
+      <button class="btn" id="back-to-league-night">← Jr Fight Night</button>
+      ${allPlayed ? `<button class="btn btn-primary" id="advance-week-and-back">Week Done — Continue →</button>` : '<span></span>'}
     </div>
   `;
 }
@@ -3126,6 +3236,21 @@ function renderFightCard(){
       <div class="roster-team-meta"><span class="clickable-name" data-open-team="${gd.leagueId}|${gd.awayIdx}">${awayName}</span> @ <span class="clickable-name" data-open-team="${gd.leagueId}|${gd.homeIdx}">${homeName}</span> · ${wc} Class (${gd.cardIndex+1} of 5)</div>
     </div>
   `;
+
+  if(gd.subPhase === 'choose'){
+    const homeF = gd.homeLineup[wc], awayF = gd.awayLineup[wc];
+    return `
+      ${scoreboardHtml}
+      <div class="pick-row">
+        <span class="pick-team">${wc}</span>
+        <span class="pick-fighter">${awayF.name} vs. ${homeF.name}</span>
+      </div>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn" id="choose-sim-fight">Sim This Fight</button>
+        <button class="btn btn-primary" id="choose-watch-fight">Watch This Fight →</button>
+      </div>
+    `;
+  }
 
   if(gd.subPhase === 'quickresult'){
     const last = gd.cardResults[gd.cardResults.length-1];
@@ -3352,12 +3477,111 @@ function wireEvents(){
   const toggleSimMode = document.getElementById('toggle-sim-mode');
   if(toggleSimMode) toggleSimMode.onchange = (e)=>{ state.simMode = e.target.checked; render(); };
 
+  function simPairingFully(leagueId, weekIdx, pairing){
+    if(isPairingPlayed(leagueId, weekIdx, pairing.home, pairing.away)) return;
+    const roster = getRoster();
+    const mine = roster.find(r=>r.isPlayable);
+    const isMyGame = mine && mine.juniorLeagueId===leagueId && (pairing.home===mine.juniorTeamId || pairing.away===mine.juniorTeamId);
+    if(isMyGame){
+      // Route the player's own game through the real gameday pipeline (so their personal
+      // record/fightLog/stat growth still happens) but in forced sim mode with no screens
+      // shown, and with the automatic week-advance suppressed since this is one game out
+      // of a whole week being resolved together.
+      state.fighterId = mine.id;
+      state.currentGameDay = {
+        leagueId, week: weekIdx, homeIdx: pairing.home, awayIdx: pairing.away,
+        isHome: pairing.home === mine.juniorTeamId, tab:'preview',
+        myLineup:{}, homeLineup:null, awayLineup:null,
+        cardOrder: WEIGHT_CLASSES.slice(), cardIndex:0, cardResults:[], subPhase:'ready',
+        suppressWeekAdvance: true,
+      };
+      const wasSimMode = state.simMode;
+      state.simMode = true;
+      simEntireGameDay();
+      state.simMode = wasSimMode;
+    } else {
+      simulateAiTeamGame(leagueId, pairing.home, pairing.away, weekIdx);
+    }
+  }
+
+  const simAllLeagues = document.getElementById('sim-all-leagues');
+  if(simAllLeagues) simAllLeagues.onclick = ()=>{
+    JR_LEAGUES.forEach(league=>{
+      const weekIdx = getLeagueWeek(league.id);
+      const weeks = ensureLeagueSchedule(league.id);
+      if(weekIdx >= weeks.length) return;
+      weeks[weekIdx].forEach(p=> simPairingFully(league.id, weekIdx, p));
+      if(isWeekFullyPlayed(league.id, weekIdx)) advanceLeagueWeek(league.id);
+    });
+    state.screen = 'league-night'; // simPairingFully may have redirected this via finishTeamGame
+    render();
+  };
+
+  document.querySelectorAll('[data-watch-league]').forEach(btn=>{
+    btn.onclick = ()=>{ state.viewLeagueId = btn.dataset.watchLeague; state.screen = 'league-night-games'; render(); };
+  });
+  const backToLeagueNight = document.getElementById('back-to-league-night');
+  if(backToLeagueNight) backToLeagueNight.onclick = ()=>{ state.screen = 'league-night'; render(); };
+
+  document.querySelectorAll('[data-sim-pairing]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const league = getJrLeague(state.viewLeagueId);
+      const weekIdx = getLeagueWeek(league.id);
+      const weeks = ensureLeagueSchedule(league.id);
+      const p = weeks[weekIdx][parseInt(btn.dataset.simPairing,10)];
+      simPairingFully(league.id, weekIdx, p);
+      state.screen = 'league-night-games'; // simPairingFully may have redirected this via finishTeamGame
+      render();
+    };
+  });
+  document.querySelectorAll('[data-watch-pairing]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const league = getJrLeague(state.viewLeagueId);
+      const weekIdx = getLeagueWeek(league.id);
+      const weeks = ensureLeagueSchedule(league.id);
+      const p = weeks[weekIdx][parseInt(btn.dataset.watchPairing,10)];
+      const roster = getRoster();
+      const mine = roster.find(r=>r.isPlayable);
+      const isMyGame = mine && mine.juniorLeagueId===league.id && (p.home===mine.juniorTeamId || p.away===mine.juniorTeamId);
+      state.fighterId = mine ? mine.id : null;
+      state.currentGameDay = {
+        leagueId: league.id, week: weekIdx, homeIdx: p.home, awayIdx: p.away,
+        isHome: isMyGame ? (p.home === mine.juniorTeamId) : false,
+        tab: 'preview',
+        myLineup: {}, homeLineup: null, awayLineup: null,
+        cardOrder: WEIGHT_CLASSES.slice(), cardIndex: 0, cardResults: [], subPhase: 'ready',
+        suppressWeekAdvance: true,
+        watchMode: !isMyGame, // non-player games get a Sim/Watch choice per fight instead of auto-resolving instantly
+        involvesPlayer: !!isMyGame,
+        returnScreen: 'league-night-games',
+      };
+      state.screen = 'game-day-preview';
+      render();
+    };
+  });
+  const advanceWeekAndBack = document.getElementById('advance-week-and-back');
+  if(advanceWeekAndBack) advanceWeekAndBack.onclick = ()=>{
+    const league = getJrLeague(state.viewLeagueId);
+    const weekIdx = getLeagueWeek(league.id);
+    if(isWeekFullyPlayed(league.id, weekIdx)) advanceLeagueWeek(league.id);
+    state.screen = 'league-night';
+    render();
+  };
+
   const goToGameDay = document.getElementById('go-to-game-day');
   if(goToGameDay) goToGameDay.onclick = ()=>{
     const f = getFighterById(state.fighterId);
     const weekIdx = getLeagueWeek(f.juniorLeagueId);
     const pairing = findWeekPairing(f.juniorLeagueId, f.juniorTeamId, weekIdx);
     if(!pairing) return;
+    if(isPairingPlayed(f.juniorLeagueId, weekIdx, pairing.home, pairing.away)){
+      // Already resolved via the weekly Jr Fight Night flow — don't let it be replayed,
+      // just catch the week counter up and show the result on Standings instead.
+      advanceLeagueWeek(f.juniorLeagueId);
+      state.screen = 'standings';
+      render();
+      return;
+    }
     // Every other game around the league resolves silently the moment gameday starts,
     // so standings for the whole league move together, week to week.
     resolveOtherGamesThisWeek(f.juniorLeagueId, f.juniorTeamId, weekIdx);
@@ -3369,6 +3593,7 @@ function wireEvents(){
       myLineup: {}, homeLineup: null, awayLineup: null,
       cardOrder: WEIGHT_CLASSES.slice(), // Fly first — lightest class opens the card
       cardIndex: 0, cardResults: [], subPhase: 'ready',
+      involvesPlayer: true,
     };
     if(state.simMode){
       simEntireGameDay();
@@ -3385,6 +3610,20 @@ function wireEvents(){
   const toSetLineup = document.getElementById('to-set-lineup');
   if(toSetLineup) toSetLineup.onclick = ()=>{
     const gd = state.currentGameDay;
+    if(!gd.involvesPlayer){
+      // Neither team is the player's — no one to interactively pick for. Auto-pick both
+      // sides (visitor blind, home informed) and jump straight into the fight card.
+      const awaySlots = ensureTeamRoster(gd.leagueId, gd.awayIdx);
+      gd.awayLineup = aiPickLineup(awaySlots, null);
+      const homeSlots = ensureTeamRoster(gd.leagueId, gd.homeIdx);
+      gd.homeLineup = aiPickLineup(homeSlots, gd.awayLineup);
+      gd.cardIndex = 0;
+      gd.subPhase = 'ready';
+      state.screen = 'fight-card';
+      advanceFightCard();
+      render();
+      return;
+    }
     if(gd.isHome){
       // Visitor sets first, blind — resolve that immediately so it can be revealed.
       const awaySlots = ensureTeamRoster(gd.leagueId, gd.awayIdx);
@@ -3451,6 +3690,10 @@ function wireEvents(){
       state.revealedCount = 0;
       gd.subPhase = 'preview';
       gd.pendingLive = { myFighter, oppFighter, homeIsMe: homeF.id===playerId };
+    } else if(gd.watchMode && !state.simMode){
+      // Non-player bout in a watched game — let the player choose per fight instead of
+      // silently auto-resolving it.
+      gd.subPhase = 'choose';
     } else {
       const bout = simulateBout(homeF, awayF, { arena:{floor:'neutral court'}, hometownPit: gd.isHome && homeF.id===playerId });
       const homeWon = bout.winner.id === homeF.id;
@@ -3462,6 +3705,34 @@ function wireEvents(){
       gd.subPhase = 'quickresult';
     }
   }
+
+  const chooseSimFight = document.getElementById('choose-sim-fight');
+  if(chooseSimFight) chooseSimFight.onclick = ()=>{
+    const gd = state.currentGameDay;
+    const wc = gd.cardOrder[gd.cardIndex];
+    const homeF = gd.homeLineup[wc], awayF = gd.awayLineup[wc];
+    const bout = simulateBout(homeF, awayF, { arena:{floor:'neutral court'}, hometownPit:false });
+    const homeWon = bout.winner.id === homeF.id;
+    gd.cardResults.push({
+      weightClass: wc, homeWon, method: bout.method, isPlayerBout:false,
+      winnerName: bout.winner.name, loserName: bout.loser.name,
+      winnerId: bout.winner.id, loserId: bout.loser.id,
+    });
+    gd.subPhase = 'quickresult';
+    render();
+  };
+  const chooseWatchFight = document.getElementById('choose-watch-fight');
+  if(chooseWatchFight) chooseWatchFight.onclick = ()=>{
+    const gd = state.currentGameDay;
+    const wc = gd.cardOrder[gd.cardIndex];
+    const homeF = gd.homeLineup[wc], awayF = gd.awayLineup[wc];
+    const ctx = { arena: generateArena(), hometownPit:false };
+    state.boutResult = simulateBout(homeF, awayF, ctx);
+    state.revealedCount = 0;
+    gd.subPhase = 'preview';
+    gd.pendingLive = { myFighter: homeF, oppFighter: awayF, homeIsMe: true };
+    render();
+  };
 
   const enterArena = document.getElementById('enter-arena');
   if(enterArena) enterArena.onclick = ()=>{ state.currentGameDay.subPhase = 'bout'; render(); };
@@ -3519,7 +3790,8 @@ function wireEvents(){
     });
 
     recordStandingsResult(gd.leagueId, gd.homeIdx, gd.awayIdx, homeWon);
-    advanceLeagueWeek(gd.leagueId);
+    markPairingPlayed(gd.leagueId, gd.week, gd.homeIdx, gd.awayIdx);
+    if(!gd.suppressWeekAdvance) advanceLeagueWeek(gd.leagueId);
 
     if(state.simMode){
       const playerWonBout = playerResult ? (gd.isHome ? playerResult.homeWon : !playerResult.homeWon) : homeWon===gd.isHome;
@@ -3527,7 +3799,7 @@ function wireEvents(){
         won: playerWonBout, score: `${awayScore}-${homeScore}`,
         opponent: jrTeamName(gd.leagueId, gd.isHome ? gd.awayIdx : gd.homeIdx),
       };
-      state.screen = 'season-hub';
+      state.screen = gd.returnScreen || 'season-hub';
     } else {
       state.screen = 'game-result';
     }
@@ -3552,7 +3824,11 @@ function wireEvents(){
   }
 
   const backFromResult = document.getElementById('back-to-hub-from-result');
-  if(backFromResult) backFromResult.onclick = ()=>{ state.screen='season-hub'; render(); };
+  if(backFromResult) backFromResult.onclick = ()=>{
+    const gd = state.currentGameDay;
+    state.screen = (gd && gd.returnScreen) ? gd.returnScreen : 'season-hub';
+    render();
+  };
 }
 
 render();
@@ -3561,10 +3837,13 @@ try{
   if(urlScreen === 'draft-day' && getCurrentDay() >= tierKeyDates(currentIslandYear()).juniorDraftDayIronbound){
     state.screen = 'league-draft-day';
     render();
+  } else if(urlScreen === 'league-night'){
+    state.screen = 'league-night';
+    render();
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V33 · 2026-07-18</div>
+<div class="version-badge">JUNIOR LEAGUE · V36 · 2026-07-18</div>
 </body>
 </html>
 
