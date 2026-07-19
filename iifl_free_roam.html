@@ -1320,8 +1320,12 @@ function saveFieldPools(pools){
       const s = loadRoamState();
       s.pitSchedules = {};
       s.pitTournaments = {};
-      s.grids = {};
       s.newspapers = {};
+      // Deliberately NOT touching s.grids here — wiping it regenerates a brand new
+      // random walking-grid layout, which if this cleanup path fires more than once
+      // (a save that's still over quota after this) means the map re-shuffles under
+      // the player on every single step, making it impossible to navigate anywhere.
+      // Schedules/brackets/newspapers regenerating silently is invisible; this isn't.
       localStorage.setItem(sk(ROAM_STATE_KEY), JSON.stringify(s));
     }catch(roamErr){ console.error('IIFL roam state emergency cleanup failed:', roamErr); }
 
@@ -6075,6 +6079,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V71 · 2026-07-18</div>
+<div class="version-badge">FREE ROAM · V72 · 2026-07-18</div>
 </body>
 </html>
