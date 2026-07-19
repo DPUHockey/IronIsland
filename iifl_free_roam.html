@@ -972,8 +972,9 @@ function getMajorEventsForYear(cycleYear){
       day: d.juniorOpen + 3 + i*7,
       title: `Jr Fight Night — Week ${i+1}`,
       tier: 'Junior', kind: 'league-night',
-      description: 'All three Junior Leagues play their weekly slate tonight.',
-      watchUrl: 'iifl_junior_league.html?screen=league-night',
+      description: 'All three Junior Leagues play their weekly slate tonight — head to your team\'s home arena to check in.',
+      // No watchUrl on purpose: this is informational only now. Actual access is
+      // stadium-only, via a Wednesday-night heads-up and physically walking there.
     })),
     { day: d.juniorTradeDeadline, title: 'Junior Trade Deadline', tier: 'Junior', kind: 'deadline' },
     { day: d.juniorRegEnd, title: 'Junior Regular Season Ends', tier: 'Junior', kind: 'end' },
@@ -1637,6 +1638,20 @@ function readIsPairingPlayed(leagueId, weekIdx, home, away){
 function readGameScore(leagueId, weekIdx, home, away){
   const s = loadJrStateReadOnly();
   return (s.gameScores || {})[pairingKeyReadOnly(leagueId,weekIdx,home,away)] || null;
+}
+// The one deliberate write path from this file into the Junior League's state — everything
+// else here is strictly read-only. Drives the Wednesday-announce/stadium-arrival/missed
+// checkpoint that replaces "Jr Fight Night reachable anytime" with a real weekly ritual.
+function getJrGameWeekStatus(leagueId){
+  const s = loadJrStateReadOnly();
+  return (s.jrGameWeekStatus && s.jrGameWeekStatus[leagueId]) || null;
+}
+function writeJrGameWeekStatus(leagueId, patch){
+  const s = loadJrStateReadOnly();
+  if(!s.jrGameWeekStatus) s.jrGameWeekStatus = {};
+  s.jrGameWeekStatus[leagueId] = { ...(s.jrGameWeekStatus[leagueId]||{}), ...patch };
+  try{ localStorage.setItem(sk(JR_STATE_KEY), JSON.stringify(s)); }catch(err){}
+  return s.jrGameWeekStatus[leagueId];
 }
 // Deterministic attendance — same inputs always produce the same number, so a game's
 // draw doesn't change every time the page re-renders, but different games (or the same
@@ -3788,6 +3803,8 @@ function advanceDay(){
   checkForMajorEventToday();
   checkForOffSeasonCrossing();
   checkForMainEventInvite();
+  checkForJrGameNight();
+  checkForMissedJrGame();
 }
 // Monday morning — a pit you're actually registered at can invite you to headline
 // tonight's League Night main event. Only fires for pits you're signed with, and only
@@ -3807,6 +3824,66 @@ function checkForMainEventInvite(){
   if(Math.random() < 0.25){
     state.pendingMainEventInvite = { pitId: m.pitId, provinceId: m.provinceId, settlementName: m.settlementName, pitName: m.pitName, day: today };
   }
+}
+// Wednesday night — the one real heads-up before a Junior game day. Only fires for the
+// player's own league, only once per week, and carries the actual home/away instruction
+// so there's no ambiguity about where to be or when.
+function checkForJrGameNight(){
+  if(state.pendingJrGameNight) return; // already queued
+  const f = getFighterById(state.fighterId);
+  if(!f || !f.juniorLeagueId) return;
+  const leagueId = f.juniorLeagueId;
+  const weekIdx = readLeagueWeek(leagueId);
+  const weeks = readLeagueSchedule(leagueId);
+  if(!weeks || weekIdx >= weeks.length) return; // no schedule yet, or season over
+  const today = getCurrentDay();
+  const gameDay = jrWeekGameDay(leagueId, weekIdx);
+  if(today !== gameDay - 1) return; // only the night before
+  const status = getJrGameWeekStatus(leagueId);
+  if(status && status.weekIdx === weekIdx && status.announced) return; // already told this week
+  const pairing = weeks[weekIdx].find(p=> p.home===f.juniorTeamId || p.away===f.juniorTeamId);
+  if(!pairing) return;
+  const isHome = pairing.home === f.juniorTeamId;
+  writeJrGameWeekStatus(leagueId, { weekIdx, isHome, announced:true, arrived:false, missed:false });
+  state.pendingJrGameNight = { leagueId, weekIdx, isHome, gameDay };
+}
+// If the day rolls past game day without the player ever reaching the stadium, the
+// deadline is blown — flag it so simPairingFully (junior_league.html) scratches them
+// in favor of their backup instead of trying to interactively involve them.
+function checkForMissedJrGame(){
+  const f = getFighterById(state.fighterId);
+  if(!f || !f.juniorLeagueId) return;
+  const status = getJrGameWeekStatus(f.juniorLeagueId);
+  if(!status || status.weekIdx===undefined || status.weekIdx===null || status.arrived || status.missed) return;
+  const gameDay = jrWeekGameDay(f.juniorLeagueId, status.weekIdx);
+  if(getCurrentDay() > gameDay) writeJrGameWeekStatus(f.juniorLeagueId, { missed:true });
+}
+function showJrGameNightModal(evt){
+  if(document.getElementById('jr-gamenight-overlay')) return;
+  const league = getJrLeague(evt.leagueId);
+  const overlay = document.createElement('div');
+  overlay.id = 'jr-gamenight-overlay';
+  overlay.style.cssText = 'position:fixed; inset:0; z-index:60; background:rgba(20,17,13,0.9); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:var(--bg-panel); border:1px solid var(--brass); max-width:460px; width:100%; padding:24px; text-align:center;">
+      <div class="ticket-eyebrow" style="color:var(--brass);">Wednesday Night</div>
+      <div class="ticket-title" style="margin-bottom:14px;">Game Tomorrow — ${evt.isHome?'HOME':'AWAY'}</div>
+      <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:18px;">
+        ${league.name} — ${evt.isHome
+          ? `get to your home arena by Thursday afternoon to prepare.`
+          : `get to your home stadium first thing Thursday morning to travel with the team.`}
+        Miss it and you're scratched — your backup steps in.
+      </p>
+      <div style="display:flex; gap:10px; justify-content:center;">
+        <button class="btn btn-primary" id="jr-gamenight-ack">Got It</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('jr-gamenight-ack').onclick = ()=>{
+    state.pendingJrGameNight = null;
+    overlay.remove();
+  };
 }
 function showMainEventInviteModal(invite){
   if(document.getElementById('main-event-invite-overlay')) return;
@@ -4048,6 +4125,7 @@ function render(){
   wireEvents();
   if(state.pendingMajorEvent) showEventChoiceModal(state.pendingMajorEvent);
   if(state.pendingMainEventInvite) showMainEventInviteModal(state.pendingMainEventInvite);
+  if(state.pendingJrGameNight) showJrGameNightModal(state.pendingJrGameNight);
 }
 
 let pendingNpcAdds = new Set();
@@ -4329,6 +4407,25 @@ function renderLocStadium(){
   const league = getJrLeague(loc.leagueId);
   const team = league.teams[loc.teamIndex];
   const prov = PROVINCES.find(p=>p.id===team.provinceId);
+
+  // Arrived at YOUR OWN team's stadium during the active Wed-night-through-Thursday
+  // window — this is what "stadium only" access actually means. Mark it and hand off
+  // to Jr Fight Night immediately; nothing else on this screen matters once that fires.
+  const myFighter = getFighterById(state.fighterId);
+  const isMyTeam = myFighter && myFighter.juniorLeagueId===loc.leagueId && myFighter.juniorTeamId===loc.teamIndex;
+  if(isMyTeam){
+    const status = getJrGameWeekStatus(loc.leagueId);
+    if(status && status.announced && !status.missed && status.weekIdx!==null && status.weekIdx!==undefined){
+      const gameDay = jrWeekGameDay(loc.leagueId, status.weekIdx);
+      const today = getCurrentDay();
+      if(today >= gameDay-1 && today <= gameDay){
+        writeJrGameWeekStatus(loc.leagueId, { arrived:true });
+        window.location.href = 'iifl_junior_league.html?screen=league-night';
+        return '<div style="padding:40px; text-align:center; font-family:var(--body); color:var(--muted);">Heading into the arena…</div>';
+      }
+    }
+  }
+
   const box = (title, inner)=> `
     <div style="border:1px solid var(--line); background:var(--bg-raised); padding:8px 10px;">
       <div style="font-family:var(--label); font-size:10.5px; letter-spacing:0.5px; text-transform:uppercase; color:var(--brass); border-bottom:1px solid var(--line); padding-bottom:4px; margin-bottom:6px;">${title}</div>
@@ -4437,11 +4534,13 @@ function renderLocStadium(){
       const htwt = f ? `${heightLabel(f.heightIn)}${f.weightLb?', '+f.weightLb+'lb':''}` : '';
       const style = f ? DISCIPLINE_NAMES[f.primaryDisc] : '';
       const star = sl.isPlayer ? '★ ' : '';
+      const status = f && f.injuryWeeksRemaining > 0 ? ` <span style="color:var(--ink-red);">🤕 ${f.injuryWeeksRemaining}wk</span>`
+        : (f && f.fatigue >= 75 ? ` <span style="color:var(--muted);">😮‍💨 Tired</span>` : '');
       const line2 = f ? `${sr.wins}-${sr.losses}, ${finishes} finishes (${sr.methods.KO} KO, ${sr.methods.TKO} TKO) · ${town?town+(townProv?', '+townProv.name:''):(townProv?townProv.name:'Unknown')} · ${htwt} · ${style}` : '';
       return `
         <div style="padding:3px 0; ${i<roster.length-1?'border-bottom:1px solid var(--line);':''}">
           <div style="display:flex; justify-content:space-between; font-family:var(--body); font-size:10.5px; ${sl.isPlayer?'color:var(--brass);':''}">
-            <span>${star}${sl.weightClass} — ${sl.name}</span>
+            <span>${star}${sl.weightClass} — ${sl.name}${status}</span>
             <span style="font-family:var(--mono); color:var(--muted);">OVR ${ovr}</span>
           </div>
           <div style="font-family:var(--mono); font-size:9px; color:var(--muted); margin-top:1px;">${line2}</div>
@@ -4473,10 +4572,15 @@ function renderLocStadium(){
       </div>
     </div>
     <div style="font-family:var(--mono); font-size:9.5px; color:var(--muted); margin-bottom:8px;">Owner: ${team.owner||'—'} · GM: ${team.gm||'—'} · Coach: ${team.coach||'—'}</div>
+    ${isMyTeam ? `
     <div class="btn-row" style="margin-bottom:10px;">
-      <a class="btn btn-small btn-primary" href="iifl_junior_league.html?screen=league-night" style="text-decoration:none; display:inline-block;">🏟 Jr Fight Night →</a>
+      <span class="fr-meta" style="color:var(--muted);">🏟 This is your team's home arena — next game ${(function(){
+        const wIdx = readLeagueWeek(loc.leagueId);
+        const weeks = readLeagueSchedule(loc.leagueId);
+        return (weeks && wIdx < weeks.length) ? formatCalendarDateShort(jrWeekGameDay(loc.leagueId, wIdx)) : 'TBD';
+      })()}. You'll be walked in automatically on game day.</span>
       <span></span>
-    </div>
+    </div>` : ''}
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
       ${box('Standings', standingsInner)}
       ${box('Schedule', scheduleInner)}
