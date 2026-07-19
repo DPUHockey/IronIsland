@@ -1322,7 +1322,9 @@ function draftFighterIntoRoster(leagueId, teamIndex, fighter){
   const slots = s.rosters[key];
   const wClass = weightClassOf(fighter.weightLb);
   let slot = slots.find(sl=> sl.weightClass===wClass && !sl.isPlayer && !sl.isDraftedProspect);
-  if(!slot) slot = slots.find(sl=> !sl.isPlayer && !sl.isDraftedProspect) || slots[0];
+  if(!slot) slot = slots.find(sl=> !sl.isPlayer && !sl.isDraftedProspect);
+  if(!slot) slot = slots.find(sl=> !sl.isPlayer); // last resort — never overwrite the player's own roster spot
+  if(!slot) return; // roster is genuinely full of real bodies including the player — nowhere safe to put this pick
   slot.isPlayer = false;
   slot.isDraftedProspect = true;
   slot.name = fighter.name;
@@ -1412,7 +1414,23 @@ function findFakeFillerSlot(leagueId, teamIndex){
   return slots.find(sl=> !sl.isPlayer && !sl.isDraftedProspect) || null;
 }
 
+// Draft first, free agency second — same order real leagues use, and not just a style
+// choice here: draftFighterIntoRoster falls back to overwriting slots[0] if it can't find
+// an open "still generated filler" slot, with no check for what's already sitting there.
+// If FA had already filled every open slot before draft night, a draft pick landing on
+// that team would silently bulldoze an FA signee (or another draft pick). Pausing FA for
+// a league while its current-cycle draft is declared-but-not-yet-signed avoids that.
+function draftCycleBlocksFAForLeague(){
+  const cycleYear = currentIslandYear();
+  const s = loadJrState();
+  const dc = s.draftCycle;
+  if(!dc || dc.cycleYear !== cycleYear) return false; // this year's draft hasn't started yet
+  if(dc.signed) return false; // resolved — FA is open again
+  return true; // mid-draft-week, not yet signed
+}
+
 function processFAWaiverForLeague(league, pools){
+  if(draftCycleBlocksFAForLeague()) return;
   const s = loadJrState();
   const queue = ensureFAQueue(s, league.id);
   const teamIndex = queue[0];
@@ -2309,6 +2327,15 @@ function findFighterAnywhere(id){
     const found = s.rosters[key].find(sl=> !sl.isPlayer && sl.fighter && sl.fighter.id===id);
     if(found) return { f: found.fighter, isField:true };
   }
+  // Not on any team yet — check the declared Juvenile pool and the Junior free-agent
+  // pool, so a name can be clicked straight from the Declared or FA Pool screens too.
+  const pools = loadFieldPools();
+  for(const provinceId in (pools.juvenile||{})){
+    const found = pools.juvenile[provinceId].find(x=> x.id === id);
+    if(found) return { f: found, isField:true };
+  }
+  const faFound = (pools.juniorFA||[]).find(x=> x.id === id);
+  if(faFound) return { f: faFound, isField:true };
   return { f:null, isField:false };
 }
 
@@ -2694,6 +2721,33 @@ function renderJrContract(){
   `;
 }
 
+// A recruit's real draft stock isn't just their current OVR — a Generational-tier 14
+// year old sitting at a modest current OVR is still a much better long-term bet than a
+// Normal-tier fighter already close to their ceiling. This blends projected adult
+// ceiling (talent tier) with current production to rank recruits the way a scout would,
+// which is why "Recruit #N" can land in a different order than a straight OVR sort.
+function recruitScoutingScore(f){
+  const ceiling = bandCeiling(18, f.talentTier || 'normal');
+  return ceiling * 0.65 + calcOVR(f.stats) * 0.35;
+}
+function rankRecruits(list){
+  return list.slice().sort((a,b)=> recruitScoutingScore(b) - recruitScoutingScore(a));
+}
+function recruitRowHtml(f, recruitNumber){
+  const prov = PROVINCES.find(p=>p.id===f.provinceId);
+  const doc = projectAdultSize(f);
+  return `
+    <div class="fighter-row" style="--fr-color:${prov?prov.color:'#C9A23C'}">
+      <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
+      <div style="flex:1;">
+        <div class="fr-name clickable-name" data-open-fighter="${f.id}">${f.isPlayable ? '⭐ ' : ''}${f.name}</div>
+        <div class="fr-meta">${prov ? prov.name : (f.settlement||f.hometown||'')} · ${DISCIPLINE_NAMES[f.primaryDisc]} · ${heightLabel(f.heightIn)} · Projects ${weightClassOf(doc.adultWeightLb)}weight</div>
+      </div>
+      <div class="fr-status">Recruit #${recruitNumber}<br>OVR ${calcOVR(f.stats)} · ${f.record.wins}-${f.record.losses}</div>
+    </div>
+  `;
+}
+
 // All real fighters currently declared for the upcoming/most recent draft cycle —
 // NPCs and the player alike — pulled straight from the real draft cycle state.
 function renderDeclaredList(){
@@ -2710,16 +2764,11 @@ function renderDeclaredList(){
     if(f.juniorDraftDeclaredYear === cycleYear && f.juniorDraftDeclaration === 'declared') declared.push(f);
   });
   declared.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats));
-  const rows = declared.length ? declared.map(f=>`
-    <div class="pick-row">
-      <span class="pick-team">${f.isPlayable ? '⭐ ' : ''}${f.name}</span>
-      <span class="fr-meta">${f.settlement || f.hometown || ''} · Age ${f.age} · OVR ${calcOVR(f.stats)}</span>
-      <span class="pick-fighter">${f.record.wins}-${f.record.losses}</span>
-    </div>
-  `).join('') : `<div class="empty-note">Nobody's declared for the ${cycleYear} draft yet.</div>`;
+  const ranked = rankRecruits(declared);
+  const rows = ranked.length ? ranked.map((f,i)=> recruitRowHtml(f, i+1)).join('') : `<div class="empty-note">Nobody's declared for the ${cycleYear} draft yet.</div>`;
   return `
     <div class="section-label">Declared for the ${cycleYear} Draft (${declared.length})</div>
-    ${rows}
+    <div class="fighter-grid">${rows}</div>
     <div class="btn-row" style="margin-top:16px;"><button class="btn" id="back-to-select-from-declared">← Back</button><span></span></div>
   `;
 }
@@ -2730,17 +2779,12 @@ function renderFAPool(){
   ensureJuniorFAWaiverCaughtUp();
   const pools = loadFieldPools();
   const fa = (pools.juniorFA || []).slice().sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats));
-  const rows = fa.length ? fa.map(f=>`
-    <div class="pick-row">
-      <span class="pick-team">${f.name}</span>
-      <span class="fr-meta">${f.settlement || f.hometown || ''} · Age ${f.age} · ${weightClassOf(f.weightLb)} · OVR ${calcOVR(f.stats)}</span>
-      <span class="pick-fighter">${f.record.wins}-${f.record.losses}</span>
-    </div>
-  `).join('') : `<div class="empty-note">Free agent pool is empty right now.</div>`;
+  const ranked = rankRecruits(fa);
+  const rows = ranked.length ? ranked.map((f,i)=> recruitRowHtml(f, i+1)).join('') : `<div class="empty-note">Free agent pool is empty right now.</div>`;
   return `
     <div class="section-label">Junior Free Agent Pool (${fa.length})</div>
     <p style="font-family:var(--body); font-size:12.5px; color:var(--bone-dim); margin-bottom:14px;">Aged out of Juvenile without getting drafted — still Junior-eligible through age 19. Teams sign from this pool automatically every Tuesday.</p>
-    ${rows}
+    <div class="fighter-grid">${rows}</div>
     <div class="btn-row" style="margin-top:16px;"><button class="btn" id="back-to-select-from-fa">← Back</button><span></span></div>
   `;
 }
@@ -3502,7 +3546,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V28 · 2026-07-18</div>
+<div class="version-badge">JUNIOR LEAGUE · V30 · 2026-07-18</div>
 </body>
 </html>
 
