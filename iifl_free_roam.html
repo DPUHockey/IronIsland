@@ -867,17 +867,21 @@ function tierKeyDates(cycleYear){
   };
 }
 
-// Mirrors jrWeekGameDay/jrSeasonFirstThursday in iifl_junior_league.html — same math,
-// kept in sync manually. Used here only for display (the actual sim/watch lock lives
-// over in the junior league file).
-function jrSeasonFirstThursday(cycleYear){
+// Mirrors jrWeekGameDay/jrSeasonFirstThursday/leagueSeasonOpenDay in
+// iifl_junior_league.html — same math, kept in sync manually. Used here only for
+// display (the actual sim/watch lock lives over in the junior league file).
+function leagueSeasonOpenDay(leagueId, cycleYear){
   const dates = tierKeyDates(cycleYear);
-  const openWeekdayIdx = (dates.juniorOpen - 1) % 7; // WEEKDAY_NAMES[0] === 'Monday'
+  return leagueId === 'kolsati_jr' ? dates.juniorOpen : dates.juniorOpen + 28;
+}
+function jrSeasonFirstThursday(leagueId, cycleYear){
+  const openDay = leagueSeasonOpenDay(leagueId, cycleYear);
+  const openWeekdayIdx = (openDay - 1) % 7; // WEEKDAY_NAMES[0] === 'Monday'
   const toThursday = (3 - openWeekdayIdx + 7) % 7;
-  return dates.juniorOpen + toThursday;
+  return openDay + toThursday;
 }
 function jrWeekGameDay(leagueId, weekIdx){
-  return jrSeasonFirstThursday(currentIslandYear()) + weekIdx*7;
+  return jrSeasonFirstThursday(leagueId, currentIslandYear()) + weekIdx*7;
 }
 function jrWeekIsUnlockedReadOnly(leagueId, weekIdx){
   return getCurrentDay() >= jrWeekGameDay(leagueId, weekIdx);
@@ -978,8 +982,19 @@ function getMajorEventsForYear(cycleYear){
     })),
     { day: d.juniorTradeDeadline, title: 'Junior Trade Deadline', tier: 'Junior', kind: 'deadline' },
     { day: d.juniorRegEnd, title: 'Junior Regular Season Ends', tier: 'Junior', kind: 'end' },
-    { day: d.jrLeaguePlayoffStart, title: 'Junior League Playoffs Begin', tier: 'Junior', kind: 'playoffs' },
-    { day: d.jrLeaguePlayoffEnd, title: 'Junior League Playoffs End', tier: 'Junior', kind: 'playoffs' },
+    // Each league starts ITS OWN playoffs the Thursday right after ITS OWN regular
+    // season ends — Ironbound (16 teams, 15 weeks) naturally finishes later than
+    // Northgate/Tidewater (12 teams, 11 weeks each), so these three genuinely land on
+    // different real dates rather than one shared assumed date.
+    ...JR_LEAGUES.flatMap(league=>{
+      const shortName = league.name.replace('The ','').replace(' Junior League','');
+      const semiDay = jrWeekGameDay(league.id, regularSeasonWeeks(league));
+      const finalDay = semiDay + 7;
+      return [
+        { day: semiDay, title: `${shortName} Semifinals`, tier: 'Junior', kind: 'playoffs' },
+        { day: finalDay, title: `${shortName} Final`, tier: 'Junior', kind: 'playoffs' },
+      ];
+    }),
     { day: d.jrIslandChampStart, title: 'Junior Island Championship Begins', tier: 'Junior', kind: 'championship' },
     { day: d.jrIslandChampEnd, title: 'Junior Island Championship Ends', tier: 'Junior', kind: 'championship' },
     { day: d.amateurOpen, title: 'Amateur Circuit Opens', tier: 'Amateur', kind: 'open' },
@@ -1656,6 +1671,9 @@ function readLeaguePlayoffHost(leagueId){
   const s = loadJrStateReadOnly();
   return (s.leaguePlayoffHost && s.leaguePlayoffHost[leagueId]) ? s.leaguePlayoffHost[leagueId].teamIndex : null;
 }
+// Mirrors regularSeasonWeeks/isPlayoffWeek in iifl_junior_league.html.
+function regularSeasonWeeks(league){ return league.teams.length - 1; }
+function isPlayoffWeek(leagueId, weekIdx){ return weekIdx >= regularSeasonWeeks(getJrLeague(leagueId)); }
 function readLeaguePlayoffs(leagueId){
   const s = loadJrStateReadOnly();
   return (s.leaguePlayoffs && s.leaguePlayoffs[leagueId]) ? s.leaguePlayoffs[leagueId] : null;
@@ -1686,6 +1704,97 @@ function writeJrGameWeekStatus(leagueId, patch){
   s.jrGameWeekStatus[leagueId] = { ...(s.jrGameWeekStatus[leagueId]||{}), ...patch };
   try{ localStorage.setItem(sk(JR_STATE_KEY), JSON.stringify(s)); }catch(err){}
   return s.jrGameWeekStatus[leagueId];
+}
+// ---- Hosting bids + resolution — mirrors iifl_junior_league.html exactly, including
+// the same idempotent "already resolved this cycle? just return it" guard, so it's safe
+// for this file to independently resolve a host if the player hasn't opened the Junior
+// League screens by the announcement date — whichever file's code runs first performs
+// the one-time random roll, the other just reads what's already there. ----
+function writeJrHostBid(cycleYear, patch){
+  const s = loadJrStateReadOnly();
+  if(!s.jrHostBids) s.jrHostBids = {};
+  s.jrHostBids[cycleYear] = { ...(s.jrHostBids[cycleYear]||{}), ...patch };
+  try{ localStorage.setItem(sk(JR_STATE_KEY), JSON.stringify(s)); }catch(err){}
+  return s.jrHostBids[cycleYear];
+}
+function ensureAllTimeStandingsRW(leagueId){
+  const s = loadJrStateReadOnly();
+  if(!s.allTimeStandings) s.allTimeStandings = {};
+  if(!s.allTimeStandings[leagueId]){
+    const league = getJrLeague(leagueId);
+    s.allTimeStandings[leagueId] = league.teams.map(()=> ({ wins:0, losses:0 }));
+    try{ localStorage.setItem(sk(JR_STATE_KEY), JSON.stringify(s)); }catch(err){}
+  }
+  return s.allTimeStandings[leagueId];
+}
+function allJuniorTeamsFlatRO(){
+  const flat = [];
+  JR_LEAGUES.forEach(league=> league.teams.forEach((_,teamIndex)=> flat.push({ leagueId: league.id, teamIndex })));
+  return flat;
+}
+function pickLeaguePlayoffHostRW(qualifyingTeams, allTimeStandings, lastHostedYear, cycleYear, bidTeamKey){
+  if(!qualifyingTeams.length) return null;
+  const weighted = qualifyingTeams.map(t=>{
+    const rec = allTimeStandings[t.teamIndex] || { wins:0, losses:0 };
+    const winPct = (rec.wins + rec.losses) ? rec.wins/(rec.wins+rec.losses) : 0.5;
+    const key = `${t.leagueId}_${t.teamIndex}`;
+    const yearsSinceHosted = lastHostedYear[key] ? Math.min(cycleYear - lastHostedYear[key], 5) : 5;
+    let weight = Math.max(0.05, winPct) * (yearsSinceHosted / 5);
+    if(bidTeamKey && key === bidTeamKey) weight *= 3;
+    return { ...t, weight };
+  });
+  const total = weighted.reduce((s,t)=> s+t.weight, 0);
+  let roll = Math.random() * total;
+  for(const t of weighted){ roll -= t.weight; if(roll <= 0) return t; }
+  return weighted[weighted.length-1];
+}
+function ensureLeaguePlayoffHostsForYearRW(cycleYear){
+  const s = loadJrStateReadOnly();
+  if(getCurrentDay() < tierKeyDates(cycleYear).jrChampHostAnnounced) return;
+  if(!s.lastHostedYear) s.lastHostedYear = {};
+  if(!s.leaguePlayoffHost) s.leaguePlayoffHost = {};
+  let changed = false;
+  JR_LEAGUES.forEach(league=>{
+    const existing = s.leaguePlayoffHost[league.id];
+    if(existing && existing.cycleYear === cycleYear) return;
+    const allTeams = league.teams.map((_,teamIndex)=> ({ leagueId: league.id, teamIndex }));
+    const allTime = ensureAllTimeStandingsRW(league.id);
+    const bids = s.jrHostBids && s.jrHostBids[cycleYear];
+    const bidTeamKey = (bids && bids.leagueBid && bids.leagueBid.leagueId===league.id) ? `${league.id}_${bids.leagueBid.teamIndex}` : null;
+    const picked = pickLeaguePlayoffHostRW(allTeams, allTime, s.lastHostedYear, cycleYear, bidTeamKey);
+    const teamIndex = picked ? picked.teamIndex : 0;
+    s.lastHostedYear[`${league.id}_${teamIndex}`] = cycleYear;
+    s.leaguePlayoffHost[league.id] = { cycleYear, teamIndex };
+    changed = true;
+  });
+  if(changed){ try{ localStorage.setItem(sk(JR_STATE_KEY), JSON.stringify(s)); }catch(err){} }
+}
+function ensureIslandChampHostForYearRW(cycleYear){
+  const s = loadJrStateReadOnly();
+  if(s.islandChampHost && s.islandChampHost.cycleYear === cycleYear) return s.islandChampHost;
+  if(getCurrentDay() < tierKeyDates(cycleYear).jrChampHostAnnounced) return null;
+  if(!s.islandChampHostHistory) s.islandChampHostHistory = {};
+  const allTeams = allJuniorTeamsFlatRO();
+  const bids = s.jrHostBids && s.jrHostBids[cycleYear];
+  const bidTeamKey = bids && bids.islandBid ? `${bids.islandBid.leagueId}_${bids.islandBid.teamIndex}` : null;
+  const weighted = allTeams.map(t=>{
+    const allTime = ensureAllTimeStandingsRW(t.leagueId);
+    const rec = allTime[t.teamIndex] || { wins:0, losses:0 };
+    const winPct = (rec.wins+rec.losses) ? rec.wins/(rec.wins+rec.losses) : 0.5;
+    const key = `${t.leagueId}_${t.teamIndex}`;
+    const yearsSince = s.islandChampHostHistory[key] ? Math.min(cycleYear - s.islandChampHostHistory[key], 5) : 5;
+    let weight = Math.max(0.05, winPct) * (yearsSince/5);
+    if(bidTeamKey && key === bidTeamKey) weight *= 3;
+    return { ...t, weight };
+  });
+  const total = weighted.reduce((sum,t)=> sum+t.weight, 0);
+  let roll = Math.random()*total;
+  let picked = weighted[weighted.length-1];
+  for(const t of weighted){ roll -= t.weight; if(roll <= 0){ picked = t; break; } }
+  s.islandChampHostHistory[`${picked.leagueId}_${picked.teamIndex}`] = cycleYear;
+  s.islandChampHost = { cycleYear, leagueId: picked.leagueId, teamIndex: picked.teamIndex };
+  try{ localStorage.setItem(sk(JR_STATE_KEY), JSON.stringify(s)); }catch(err){}
+  return s.islandChampHost;
 }
 // Deterministic attendance — same inputs always produce the same number, so a game's
 // draw doesn't change every time the page re-renders, but different games (or the same
@@ -3839,6 +3948,8 @@ function advanceDay(){
   checkForMainEventInvite();
   checkForJrGameNight();
   checkForMissedJrGame();
+  checkForHostBidWindow();
+  checkForHostAnnouncement();
 }
 // The one real time-control mechanism in the whole game now — every "sim ahead" button
 // (Sim a Day, Sim to Next Week, Sim to Season End) routes through this instead of its
@@ -3893,9 +4004,11 @@ function checkForJrGameNight(){
   if(status && status.weekIdx === weekIdx && status.announced) return; // already told this week
   const pairing = weeks[weekIdx].find(p=> p.home===f.juniorTeamId || p.away===f.juniorTeamId);
   if(!pairing) return;
-  const isHome = pairing.home === f.juniorTeamId;
-  writeJrGameWeekStatus(leagueId, { weekIdx, isHome, announced:true, arrived:false, missed:false });
-  state.pendingJrGameNight = { leagueId, weekIdx, isHome, gameDay };
+  const playoffWk = isPlayoffWeek(leagueId, weekIdx);
+  const hostTeamIdx = playoffWk ? readLeaguePlayoffHost(leagueId) : null;
+  const isHome = playoffWk ? (hostTeamIdx === f.juniorTeamId) : (pairing.home === f.juniorTeamId);
+  writeJrGameWeekStatus(leagueId, { weekIdx, isHome, hostTeamIdx, announced:true, arrived:false, missed:false });
+  state.pendingJrGameNight = { leagueId, weekIdx, isHome, gameDay, playoffWk };
 }
 // If the day rolls past game day without the player ever reaching the stadium, the
 // deadline is blown — flag it so simPairingFully (junior_league.html) scratches them
@@ -3908,18 +4021,133 @@ function checkForMissedJrGame(){
   const gameDay = jrWeekGameDay(f.juniorLeagueId, status.weekIdx);
   if(getCurrentDay() > gameDay) writeJrGameWeekStatus(f.juniorLeagueId, { missed:true });
 }
+// May 1st — bid window opens for hosting rights: your own league's playoff host slot
+// (if you're signed to a team) and/or the IronIsland Cup host slot (any team, any
+// league, is eligible to host the Cup). A submitted bid meaningfully improves your odds
+// via the weighted rotation, but never guarantees it.
+function checkForHostBidWindow(){
+  if(state.pendingHostBid) return;
+  const cycleYear = currentIslandYear();
+  const dueDay = tierKeyDates(cycleYear).jrChampHostBidDue;
+  if(getCurrentDay() !== dueDay) return; // only the one day bids are due
+  const s = loadJrStateReadOnly();
+  if(s.jrHostBids && s.jrHostBids[cycleYear] && s.jrHostBids[cycleYear].submitted) return; // already handled this cycle
+  const f = getFighterById(state.fighterId);
+  if(!f) return;
+  state.pendingHostBid = { cycleYear, hasTeam: !!f.juniorLeagueId, leagueId: f.juniorLeagueId||null, teamIndex: f.juniorTeamId!==undefined?f.juniorTeamId:null };
+}
+function showHostBidModal(evt){
+  if(document.getElementById('host-bid-overlay')) return;
+  const league = evt.hasTeam ? getJrLeague(evt.leagueId) : null;
+  const team = league ? league.teams[evt.teamIndex] : null;
+  const teamName = team ? `${team.city} ${team.nickname}` : null;
+  const overlay = document.createElement('div');
+  overlay.id = 'host-bid-overlay';
+  overlay.style.cssText = 'position:fixed; inset:0; z-index:60; background:rgba(20,17,13,0.9); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:var(--bg-panel); border:1px solid var(--brass); max-width:460px; width:100%; padding:24px; text-align:center;">
+      <div class="ticket-eyebrow" style="color:var(--brass);">May 1st — Bids Due</div>
+      <div class="ticket-title" style="margin-bottom:14px;">Hosting Bids</div>
+      <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:16px;">
+        Destinations get announced May 8th. A bid meaningfully improves your odds — it doesn't guarantee it.
+      </p>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;">
+        ${teamName ? `
+        <label style="display:flex; align-items:center; gap:9px; font-family:var(--body); font-size:13px; color:var(--bone-dim); text-align:left;">
+          <input type="checkbox" id="bid-league" style="width:16px; height:16px; accent-color:var(--ink-red);">
+          Bid ${teamName} to host ${league.name}'s playoffs
+        </label>` : `<p style="font-family:var(--body); font-size:12.5px; color:var(--muted);">You're not signed to a Junior team, so there's no league playoff bid to make.</p>`}
+        <label style="display:flex; align-items:center; gap:9px; font-family:var(--body); font-size:13px; color:var(--bone-dim); text-align:left;">
+          <input type="checkbox" id="bid-island" style="width:16px; height:16px; accent-color:var(--ink-red);" ${teamName?'':'disabled'}>
+          Bid ${teamName||'your team'} to host the IronIsland Cup
+        </label>
+      </div>
+      <div style="display:flex; gap:10px; justify-content:center;">
+        <button class="btn btn-primary" id="host-bid-submit">Submit</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('host-bid-submit').onclick = ()=>{
+    const bidLeague = document.getElementById('bid-league');
+    const bidIsland = document.getElementById('bid-island');
+    const patch = { submitted: true };
+    if(evt.hasTeam && bidLeague && bidLeague.checked) patch.leagueBid = { leagueId: evt.leagueId, teamIndex: evt.teamIndex };
+    if(evt.hasTeam && bidIsland && bidIsland.checked) patch.islandBid = { leagueId: evt.leagueId, teamIndex: evt.teamIndex };
+    writeJrHostBid(evt.cycleYear, patch);
+    state.pendingHostBid = null;
+    overlay.remove();
+  };
+}
+// May 8th — the 4 hosting destinations get announced together: each league's own
+// playoff host, plus the IronIsland Cup host. Resolves the actual picks itself if they
+// haven't happened yet (e.g. the player hasn't opened the Junior League screens since
+// bids closed), so this always has something real to show regardless of navigation.
+function checkForHostAnnouncement(){
+  if(state.pendingHostAnnouncement) return;
+  const cycleYear = currentIslandYear();
+  const announceDay = tierKeyDates(cycleYear).jrChampHostAnnounced;
+  if(getCurrentDay() !== announceDay) return; // only the one day this fires
+  const s = loadJrStateReadOnly();
+  if(s.jrHostAnnouncementShown && s.jrHostAnnouncementShown[cycleYear]) return; // already shown this cycle
+  ensureLeaguePlayoffHostsForYearRW(cycleYear);
+  ensureIslandChampHostForYearRW(cycleYear);
+  const fresh = loadJrStateReadOnly();
+  const leagueHosts = JR_LEAGUES.map(league=>{
+    const h = fresh.leaguePlayoffHost && fresh.leaguePlayoffHost[league.id];
+    if(!h || h.cycleYear !== cycleYear) return null;
+    const team = league.teams[h.teamIndex];
+    return { leagueName: league.name, teamName: `${team.city} ${team.nickname}`, stadium: team.stadium };
+  });
+  const ich = fresh.islandChampHost;
+  let islandHost = null;
+  if(ich && ich.cycleYear === cycleYear){
+    const team = getJrLeague(ich.leagueId).teams[ich.teamIndex];
+    islandHost = { teamName: `${team.city} ${team.nickname}`, stadium: team.stadium };
+  }
+  if(!s.jrHostAnnouncementShown) s.jrHostAnnouncementShown = {};
+  s.jrHostAnnouncementShown[cycleYear] = true;
+  try{ localStorage.setItem(sk(JR_STATE_KEY), JSON.stringify(s)); }catch(err){}
+  state.pendingHostAnnouncement = { cycleYear, leagueHosts, islandHost };
+}
+function showHostAnnouncementModal(evt){
+  if(document.getElementById('host-announce-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'host-announce-overlay';
+  overlay.style.cssText = 'position:fixed; inset:0; z-index:60; background:rgba(20,17,13,0.9); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; padding:20px;';
+  const rows = evt.leagueHosts.filter(Boolean).map(h=> `<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--line); font-family:var(--body); font-size:13px;"><span style="color:var(--bone-dim);">${h.leagueName}</span><span style="color:var(--brass);">${h.teamName} — ${h.stadium}</span></div>`).join('');
+  const islandRow = evt.islandHost ? `<div style="display:flex; justify-content:space-between; padding:6px 0; font-family:var(--body); font-size:13px;"><span style="color:var(--bone-dim);">IronIsland Cup</span><span style="color:var(--brass);">${evt.islandHost.teamName} — ${evt.islandHost.stadium}</span></div>` : '';
+  overlay.innerHTML = `
+    <div style="background:var(--bg-panel); border:1px solid var(--brass); max-width:460px; width:100%; padding:24px; text-align:center;">
+      <div class="ticket-eyebrow" style="color:var(--brass);">May 8th</div>
+      <div class="ticket-title" style="margin-bottom:14px;">Hosting Destinations Announced</div>
+      <div style="text-align:left; margin-bottom:18px;">${rows}${islandRow}</div>
+      <div style="display:flex; gap:10px; justify-content:center;">
+        <button class="btn btn-primary" id="host-announce-ack">Got It</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('host-announce-ack').onclick = ()=>{
+    state.pendingHostAnnouncement = null;
+    overlay.remove();
+  };
+}
 function showJrGameNightModal(evt){
   if(document.getElementById('jr-gamenight-overlay')) return;
   const league = getJrLeague(evt.leagueId);
+  const roundLabel = evt.playoffWk ? (evt.weekIdx === regularSeasonWeeks(league) ? 'Semifinal' : evt.weekIdx === regularSeasonWeeks(league)+1 ? 'Final' : 'Playoff') : null;
+  const hostIdx = evt.playoffWk ? readLeaguePlayoffHost(evt.leagueId) : null;
+  const hostTeam = hostIdx!==null ? league.teams[hostIdx] : null;
   const overlay = document.createElement('div');
   overlay.id = 'jr-gamenight-overlay';
   overlay.style.cssText = 'position:fixed; inset:0; z-index:60; background:rgba(20,17,13,0.9); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; padding:20px;';
   overlay.innerHTML = `
     <div style="background:var(--bg-panel); border:1px solid var(--brass); max-width:460px; width:100%; padding:24px; text-align:center;">
-      <div class="ticket-eyebrow" style="color:var(--brass);">Wednesday Night</div>
+      <div class="ticket-eyebrow" style="color:var(--brass);">${roundLabel ? `${league.name.replace('The ','').replace(' League','')} ${roundLabel} — Wednesday Night` : 'Wednesday Night'}</div>
       <div class="ticket-title" style="margin-bottom:14px;">Game Tomorrow — ${evt.isHome?'HOME':'AWAY'}</div>
       <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:18px;">
-        ${league.name} — ${evt.isHome
+        ${league.name}${roundLabel ? ` ${roundLabel}` : ''}${hostTeam ? ` — hosted at ${hostTeam.stadium}` : ''} — ${evt.isHome
           ? `get to your home arena by Thursday afternoon to prepare.`
           : `get to your home stadium first thing Thursday morning to travel with the team.`}
         Miss it and you're scratched — your backup steps in.
@@ -4180,6 +4408,8 @@ function render(){
   if(state.pendingMajorEvent) showEventChoiceModal(state.pendingMajorEvent);
   if(state.pendingMainEventInvite) showMainEventInviteModal(state.pendingMainEventInvite);
   if(state.pendingJrGameNight) showJrGameNightModal(state.pendingJrGameNight);
+  if(state.pendingHostBid) showHostBidModal(state.pendingHostBid);
+  if(state.pendingHostAnnouncement) showHostAnnouncementModal(state.pendingHostAnnouncement);
 }
 
 let pendingNpcAdds = new Set();
@@ -6691,6 +6921,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V78 · 2026-07-19</div>
+<div class="version-badge">FREE ROAM · V80 · 2026-07-19</div>
 </body>
 </html>
