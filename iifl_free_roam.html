@@ -3991,7 +3991,11 @@ function checkForMajorEventToday(){
   if(state.pendingMajorEvent && state.pendingMajorEvent.day === today) return; // already queued
   const y = resolveTierSeason('juvenile', today).cycleYear;
   const events = [...getMajorEventsForYear(y), ...getMajorEventsForYear(y-1), ...getMajorEventsForYear(y+1)];
-  const evt = events.find(e=> e.day === today);
+  // Jr Fight Night weeks are owned entirely by checkForJrGameNight()/the stadium-arrival
+  // flow now — this generic pop-up used to double up on the same event with a dead-end
+  // "Go to Event" button that didn't actually take you anywhere, competing with the real
+  // system instead of deferring to it.
+  const evt = events.find(e=> e.day === today && e.kind !== 'league-night');
   if(!evt) return;
   if(loadEventLog().some(e=> e.day === evt.day)) return; // already surfaced (watched or simmed) once
   state.pendingMajorEvent = evt;
@@ -4467,14 +4471,21 @@ function renderLocStadium(){
   // Arrived at YOUR OWN team's stadium during the active Wed-night-through-Thursday
   // window — this is what "stadium only" access actually means. Mark it and hand off
   // to Jr Fight Night immediately; nothing else on this screen matters once that fires.
+  // CRITICAL: once a week is marked missed, this must still let the player back in —
+  // walking in any day after was previously blocked entirely (arrival required
+  // !status.missed AND today<=gameDay), which permanently froze the whole league on
+  // that one game with no way to ever reach it again. Missing the deadline should
+  // scratch you from that one game, not brick the season.
   const myFighter = getFighterById(state.fighterId);
   const isMyTeam = myFighter && myFighter.juniorLeagueId===loc.leagueId && myFighter.juniorTeamId===loc.teamIndex;
   if(isMyTeam){
     const status = getJrGameWeekStatus(loc.leagueId);
-    if(status && status.announced && !status.missed && status.weekIdx!==null && status.weekIdx!==undefined){
+    if(status && status.announced && status.weekIdx!==null && status.weekIdx!==undefined){
       const gameDay = jrWeekGameDay(loc.leagueId, status.weekIdx);
       const today = getCurrentDay();
-      if(today >= gameDay-1 && today <= gameDay){
+      const inNormalWindow = today >= gameDay-1 && today <= gameDay;
+      const arrivingLateAfterMiss = status.missed && today > gameDay;
+      if(inNormalWindow || arrivingLateAfterMiss){
         writeJrGameWeekStatus(loc.leagueId, { arrived:true });
         window.location.href = 'iifl_junior_league.html?screen=league-night';
         return '<div style="padding:40px; text-align:center; font-family:var(--body); color:var(--muted);">Heading into the arena…</div>';
@@ -6680,6 +6691,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V77 · 2026-07-19</div>
+<div class="version-badge">FREE ROAM · V78 · 2026-07-19</div>
 </body>
 </html>
