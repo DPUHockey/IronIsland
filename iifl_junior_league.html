@@ -819,8 +819,8 @@ const JUVENILE_AGE_WEIGHTS = { 11:0.20, 12:0.19, 13:0.16, 14:0.13, 15:0.11, 16:0
 function loadFieldPools(){
   try{
     const raw = localStorage.getItem(sk(FIELD_KEY));
-    return raw ? JSON.parse(raw) : { amateur:{}, juvenile:{} };
-  }catch(err){ console.error('IIFL field pool load failed:', err); return { amateur:{}, juvenile:{} }; }
+    return raw ? JSON.parse(raw) : { amateur:{}, juvenile:{}, juniorFA:[] };
+  }catch(err){ console.error('IIFL field pool load failed:', err); return { amateur:{}, juvenile:{}, juniorFA:[] }; }
 }
 function saveFieldPools(pools){
   try{ localStorage.setItem(sk(FIELD_KEY), JSON.stringify(pools)); return true; }
@@ -1351,9 +1351,98 @@ function findFighterInPools(pools, id){
   return null;
 }
 
+const JUNIOR_DRAFT_ROUNDS = 4;
+
+// The actual bug that made every Junior draft cycle draft nobody: beginDraftCycleIfNeeded
+// only ever looks at fighters already stamped juniorDraftDeclaredYear/juniorDraftDeclaration
+// for the current cycle — but nothing was EVER calling resolveJuniorDraftDeclaration to
+// stamp them. This runs once per cycle, right before the declared pool is snapshotted,
+// and stamps every real Juvenile-pool fighter aged 14-17 with this cycle's declaration —
+// mandatory at 17, otherwise the same growth-based default NPCs already used everywhere
+// else in this codebase.
+function ensureJuniorDeclarationsForYear(cycleYear){
+  const pools = loadFieldPools();
+  let changed = false;
+  Object.keys(pools.juvenile || {}).forEach(provinceId=>{
+    pools.juvenile[provinceId].forEach(f=>{
+      if(f.age >= 14 && f.age <= 17 && f.juniorDraftDeclaredYear !== cycleYear){
+        f.juniorDraftDeclaredYear = cycleYear;
+        f.juniorDraftDeclaration = resolveJuniorDraftDeclaration(f);
+        changed = true;
+      }
+    });
+  });
+  if(changed) saveFieldPools(pools);
+}
+
+/* ============================ JUNIOR FREE AGENT WAIVER WIRE ============================ */
+/*
+  Aged-out Juveniles who never got drafted land in pools.juniorFA (see syncJuvenilePoolAges
+  in free_roam.html) instead of just vanishing at 18. Every Tuesday, each league runs a
+  single "Indian run" waiver turn: whichever team is at the front of that league's queue
+  either signs the best-fit available free agent to fill an open (still-generated-filler)
+  roster slot, or passes — passing keeps them at the front for next Tuesday, signing sends
+  them to the back. A team with no open slot just sits out that week without losing a turn.
+*/
+function ensureFAQueue(s, leagueId){
+  if(!s.faQueue) s.faQueue = {};
+  if(!s.faQueue[leagueId] || s.faQueue[leagueId].length !== getJrLeague(leagueId).teams.length){
+    s.faQueue[leagueId] = resolveTeamDraftOrder(leagueId); // worst-record-first initial priority
+  }
+  return s.faQueue[leagueId];
+}
+
+function findFakeFillerSlot(leagueId, teamIndex){
+  const slots = ensureTeamRoster(leagueId, teamIndex);
+  return slots.find(sl=> !sl.isPlayer && !sl.isDraftedProspect) || null;
+}
+
+function processFAWaiverForLeague(league, pools){
+  const s = loadJrState();
+  const queue = ensureFAQueue(s, league.id);
+  const teamIndex = queue[0];
+  const openSlot = findFakeFillerSlot(league.id, teamIndex);
+  if(!openSlot) return; // roster's already all real bodies (or the one open spot is the player's) — sits out, keeps its queue spot
+  const candidates = (pools.juniorFA || []).filter(f=> !f.juniorTeamId);
+  if(!candidates.length) return; // nobody on the wire to sign
+  if(Math.random() < 0.25) return; // team passes this week, stays at the front
+
+  let best = candidates.filter(f=> weightClassOf(f.weightLb)===openSlot.weightClass).sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats))[0];
+  if(!best) best = candidates.slice().sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats))[0];
+
+  draftFighterIntoRoster(league.id, teamIndex, best);
+  pools.juniorFA = (pools.juniorFA || []).filter(f=> f.id !== best.id);
+
+  const s2 = loadJrState();
+  const q2 = ensureFAQueue(s2, league.id);
+  q2.push(q2.shift());
+  saveJrState(s2);
+}
+
+function ensureJuniorFAWaiverCaughtUp(){
+  const s = loadJrState();
+  const today = getCurrentDay();
+  if(s.lastFAWaiverDay === undefined){ s.lastFAWaiverDay = today; saveJrState(s); return; } // baseline on first run, no retroactive catch-up
+  let day = s.lastFAWaiverDay + 1;
+  let iterations = 0;
+  const pools = loadFieldPools();
+  if(!pools.juniorFA) pools.juniorFA = [];
+  while(day <= today && iterations < 400){
+    if(weekdayNameForDay(day) === 'Tuesday'){
+      JR_LEAGUES.forEach(league=> processFAWaiverForLeague(league, pools));
+    }
+    day++; iterations++;
+  }
+  saveFieldPools(pools);
+  const s2 = loadJrState();
+  s2.lastFAWaiverDay = today;
+  saveJrState(s2);
+}
+
 function beginDraftCycleIfNeeded(cycleYear){
   const s = loadJrState();
   if(s.draftCycle && s.draftCycle.cycleYear === cycleYear) return s;
+  ensureJuniorDeclarationsForYear(cycleYear);
   const pools = loadFieldPools();
   const declared = [];
   Object.keys(pools.juvenile || {}).forEach(provinceId=>{
@@ -1365,7 +1454,7 @@ function beginDraftCycleIfNeeded(cycleYear){
   s.draftCycle = {
     cycleYear,
     declaredIds: declared.map(f=>f.id),
-    boards: {},        // leagueId -> { board:[[pick,pick,...]x3rounds], picks:[{round,teamIndex,fighterId,name}] }
+    boards: {},        // leagueId -> { board:[[pick,pick,...]xN rounds], picks:[{round,teamIndex,fighterId,name,hometown,record}] }
     completedLeagues: [],
     signed: false,
   };
@@ -1379,12 +1468,15 @@ function runLeagueDraftForCycle(league, dc, pools){
   const board = [];
   const picks = [];
   let idx = 0;
-  for(let r=0; r<3; r++){
+  for(let r=0; r<JUNIOR_DRAFT_ROUNDS; r++){
     const roundPicks = [];
     order.forEach(teamIndex=>{
       const prospect = declaredFighters[idx]; idx++; // same shared list every league draws from — NOT depleted between leagues
       if(!prospect){ roundPicks.push(null); return; }
-      picks.push({ round:r+1, teamIndex, fighterId: prospect.id, name: prospect.name });
+      picks.push({
+        round:r+1, teamIndex, fighterId: prospect.id, name: prospect.name,
+        hometown: prospect.hometown, record: { wins: prospect.record.wins, losses: prospect.record.losses },
+      });
       roundPicks.push({ team: jrTeamName(league.id, teamIndex), name: prospect.name, isPlayer:false, fighterId: prospect.id });
     });
     board.push(roundPicks);
@@ -2402,6 +2494,7 @@ function render(){
   else if(state.screen==='league-detail'){ body = renderLeagueDetail(); const l = getJrLeague(state.viewLeagueId); title = l ? l.name.toUpperCase() : 'LEAGUE'; sub='FRANCHISES & STANDINGS'; }
   else if(state.screen==='select'){ body = renderSelect(); }
   else if(state.screen==='draft-day'){ body = renderDraftDay(); title='DRAFT DAY'; }
+  else if(state.screen==='league-draft-day'){ body = renderLeagueDraftDay(); title='DRAFT NIGHT'; sub='PICK BY PICK'; }
   else if(state.screen==='offers'){ body = renderOffers(); title='DRAFT RESULTS'; }
   else if(state.screen==='no-offers'){ body = renderNoOffers(); title='DRAFT RESULTS'; }
   else if(state.screen==='roster'){ body = renderRoster(); title='TEAM ROSTER'; }
@@ -2427,6 +2520,8 @@ function render(){
 // overview) instead of being the first thing you see whether or not you have anyone
 // draft-eligible.
 function renderOverview(){
+  ensureNpcDraftRunForYear();
+  ensureJuniorFAWaiverCaughtUp();
   const roster = getRoster();
   const leagueCards = JR_LEAGUES.map(league=>{
     const standings = ensureStandings(league.id);
@@ -2488,6 +2583,7 @@ function renderLeagueDetail(){
 
 function renderSelect(){
   ensureNpcDraftRunForYear(); // resolves the NPC bulk draft the moment Draft Day arrives, once per cycle
+  ensureJuniorFAWaiverCaughtUp(); // catches up any Tuesdays that passed since this was last open
   const cycleYearNow = currentIslandYear();
   ensureLeaguePlayoffHostsForYear(cycleYearNow);
   ensureLeaguePlayoffsRunForYear(cycleYearNow);
@@ -2565,6 +2661,60 @@ function renderDraftDay(){
     </p>
     ${boardHtml}
     <div class="btn-row"><span></span><button class="btn btn-primary" id="see-results">See My Results →</button></div>
+  `;
+}
+
+// The real, island-wide draft reveal — every actual pick, across all 3 leagues, sourced
+// straight from the real declared-pool draft cycle (not the player's own flavor board).
+// This is what "Watch It" on a Junior Draft calendar event routes to.
+function renderLeagueDraftDay(){
+  ensureNpcDraftRunForYear();
+  ensureJuniorFAWaiverCaughtUp();
+  const s = loadJrState();
+  const dc = s.draftCycle;
+  if(!dc || !dc.completedLeagues.length){
+    return `
+      <div class="empty-note">Draft night hasn't happened yet — check back once the calendar actually reaches it.</div>
+      <div class="btn-row" style="margin-top:14px;"><span></span><a class="btn btn-primary" href="iifl_home.html" style="text-decoration:none; display:inline-block;">🏠 Home Hub</a></div>
+    `;
+  }
+  const leaguesHtml = [...JR_LEAGUES].sort((a,b)=> a.draftOrder-b.draftOrder).map(league=>{
+    const b = dc.boards[league.id];
+    if(!b){
+      return `
+        <div class="league-board">
+          <div class="league-head"><div class="league-name">${league.name}</div><div class="league-tier">Hasn't drafted yet</div></div>
+        </div>
+      `;
+    }
+    let overall = 0;
+    const picksHtml = b.picks.map(p=>{
+      overall++;
+      const ord = overall===1?'1st':overall===2?'2nd':overall===3?'3rd':overall+'th';
+      return `
+        <div class="pick-row">
+          <span class="pick-team">${ord} pick, Rd ${p.round}</span>
+          <span class="pick-fighter">${jrTeamName(league.id, p.teamIndex)} select <b>${p.name}</b> from ${p.hometown||'Unknown'}, with a Juvenile record of ${p.record.wins}-${p.record.losses}</span>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="league-board">
+        <div class="league-head">
+          <div class="league-name">${dc.cycleYear} Jr ${league.name} Draft</div>
+          <div class="league-tier">Tier ${league.tier} · Drafted ${league.draftOrder===1?'1st':league.draftOrder===2?'2nd':'3rd'}</div>
+        </div>
+        ${picksHtml}
+      </div>
+    `;
+  }).join('');
+
+  const notSignedYet = !dc.signed;
+  return `
+    <div class="section-label">Draft Night — ${dc.cycleYear}</div>
+    ${notSignedYet ? `<p style="font-family:var(--body); font-size:12.5px; color:var(--bone-dim); margin-bottom:14px;">Signings resolve at the Friday deadline — anyone taken by more than one league is still a "reach" until then.</p>` : ''}
+    ${leaguesHtml}
+    <div class="btn-row" style="margin-top:16px;"><span></span><a class="btn btn-primary" href="iifl_home.html" style="text-decoration:none; display:inline-block;">🏠 Home Hub</a></div>
   `;
 }
 
@@ -3207,12 +3357,12 @@ render();
 try{
   const urlScreen = new URLSearchParams(window.location.search).get('screen');
   if(urlScreen === 'draft-day' && getCurrentDay() >= tierKeyDates(currentIslandYear()).juniorDraftDayIronbound){
-    state.screen = 'draft-day';
+    state.screen = 'league-draft-day';
     render();
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V25 · 2026-07-17</div>
+<div class="version-badge">JUNIOR LEAGUE · V26 · 2026-07-18</div>
 </body>
 </html>
 
