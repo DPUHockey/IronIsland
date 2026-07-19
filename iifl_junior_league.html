@@ -3319,13 +3319,16 @@ function renderLeagueNight(){
     `;
   }).join('');
 
-  // Every league's current week has to be fully resolved before Thursday can close out
-  // — this is the one deliberate choke point that replaces free-form simming with a
-  // single moment where everything actually locks in together.
+  // Only leagues that actually have something outstanding as of tonight should be able
+  // to hold up Finish Thursday — a league whose season is already over, or whose current
+  // week isn't even unlocked yet (its real Thursday hasn't arrived), has nothing to do
+  // with "finishing Thursday" and must not block it just because it exists.
   const allDone = JR_LEAGUES.every(league=>{
     const weekIdx = getLeagueWeek(league.id);
     const weeks = ensureLeagueSchedule(league.id);
-    if(weekIdx >= weeks.length) return true; // season already over for this league
+    if(weekIdx >= weeks.length) return true; // season over for this league — not relevant tonight
+    const gameDay = jrWeekGameDay(league.id, weekIdx);
+    if(gameDay > getCurrentDay()) return true; // still locked for a future date — not relevant tonight either
     return weeks[weekIdx].every(p=> isPairingPlayed(league.id, weekIdx, p.home, p.away));
   });
   const todayLabel = formatCalendarDateShort(getCurrentDay());
@@ -3337,7 +3340,7 @@ function renderLeagueNight(){
     <div class="btn-row" style="margin-top:18px;"><span></span><button class="btn btn-primary" id="sim-all-leagues">⚡ Sim All 3 Leagues →</button></div>
     <div class="section-label" style="margin-top:20px;">Close Out The Night</div>
     <p style="font-family:var(--body); font-size:12.5px; color:var(--bone-dim); margin-bottom:10px;">
-      ${allDone ? 'Every league is settled for this week — lock it in and head back out for Friday morning.' : 'Still games left to sim or watch across the three leagues before Thursday can close out.'}
+      ${allDone ? "Nothing outstanding for tonight — lock it in and head back out for Friday morning." : 'Still games left to sim or watch tonight before Thursday can close out.'}
     </p>
     <div class="btn-row">
       <span></span>
@@ -4299,7 +4302,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V44 · 2026-07-19</div>
+<div class="version-badge">JUNIOR LEAGUE · V45 · 2026-07-19</div>
 </body>
 </html>
 
