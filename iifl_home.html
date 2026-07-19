@@ -1746,22 +1746,8 @@ function renderApp(){
 
       <section>
         <div class="section-label">Sim Time</div>
-        <div class="sim-row">
-          <button class="btn" id="btn-sim-day">Sim a Day</button>
-          <button class="btn" id="btn-sim-week">Sim to Next Week</button>
-          <button class="btn" id="btn-sim-season">Sim to Season End</button>
-        </div>
-        ${showSeasonControls ? `
-        <p style="font-family:var(--body); font-size:12px; color:var(--bone-dim); margin:10px 0;">
-          The island's between seasons right now. Run your fighters through an off-season, or jump straight to next year.
-        </p>
-        <div class="btn-row">
-          <button class="btn" id="btn-stay">Stay &amp; Browse</button>
-          <button class="btn" id="btn-offseason">Enter Off-Season</button>
-          <button class="btn btn-primary" id="btn-advance">Advance to Next Season →</button>
-        </div>
-        <div class="offseason-log" id="offseason-log"></div>
-        ` : ''}
+        <div class="empty-note">Time only passes one place now — head to Free Roam and use the Sim Time controls at the top of the walking screen. Every one of them stops for anything that needs your attention (major events, invites, Junior Game Day), the same as walking day to day does.</div>
+        <div class="btn-row"><span></span><a class="btn btn-small" href="iifl_free_roam.html">Go to Free Roam →</a></div>
       </section>
 
       <section>
@@ -1923,21 +1909,9 @@ function wireEvents(cycleYear, roster, playable){
     renderApp();
   };
 
-  const simDayBtn = document.getElementById('btn-sim-day');
-  if(simDayBtn) simDayBtn.onclick = ()=>{ advanceWithEventChecks(getCurrentDay() + 1); };
+  // Sim Time controls moved to Free Roam — see the Sim Time section note above.
 
-  const simWeekBtn = document.getElementById('btn-sim-week');
-  if(simWeekBtn) simWeekBtn.onclick = ()=>{ advanceWithEventChecks(getCurrentDay() + 7); };
 
-  const simSeasonBtn = document.getElementById('btn-sim-season');
-  if(simSeasonBtn) simSeasonBtn.onclick = ()=>{
-    // Jump to whatever's next on the calendar for the fighter's own tier — regular season
-    // end, playoff end, or next opening day, whichever phase they're currently in.
-    const tierKey = ({'Junior League':'junior','Amateur':'amateur','Juvenile':'juvenile'})[fighterStatusLine(playable)] || 'juvenile';
-    const s = resolveTierSeason(tierKey, getCurrentDay());
-    const target = s.phase === 'regular' ? s.regularEndDay : s.phase === 'playoffs' ? s.playoffEndDay : s.nextStartDay;
-    advanceWithEventChecks(target);
-  };
 
   const findMateBtn = document.getElementById('btn-find-mate');
   if(findMateBtn) findMateBtn.onclick = ()=>{
@@ -2001,30 +1975,6 @@ function wireEvents(cycleYear, roster, playable){
     }
     editingAge = false;
     renderApp();
-  };
-
-  const stayBtn = document.getElementById('btn-stay');
-  if(stayBtn) stayBtn.onclick = ()=>{
-    // View-only — nothing to do here but acknowledge. Nothing on the calendar moves.
-    const log = document.getElementById('offseason-log');
-    if(log) log.textContent = "Staying put — look around the other screens whenever you're ready to move on.";
-  };
-
-  const offseasonBtn = document.getElementById('btn-offseason');
-  if(offseasonBtn) offseasonBtn.onclick = ()=>{
-    const lines = ensureOffSeasonApplied(roster, getCurrentDay());
-    const log = document.getElementById('offseason-log');
-    if(log){
-      log.textContent = lines && lines.length
-        ? lines.map(l=> l.name ? `${l.name}: ${l.detail}${l.retired ? ' — RETIRED this off-season' : ''}${l.injuryNote ? ' — ' + l.injuryNote : ''}` : l.detail).join('\n')
-        : 'Off-season for this cycle has already been applied — nothing new to report until the next one.';
-    }
-  };
-
-  const advanceBtn = document.getElementById('btn-advance');
-  if(advanceBtn) advanceBtn.onclick = ()=>{
-    const target = nextJuvenileOpeningDay(getCurrentDay());
-    advanceWithEventChecks(target);
   };
 }
 
