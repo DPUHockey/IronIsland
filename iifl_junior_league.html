@@ -1348,7 +1348,10 @@ function findFighterInPools(pools, id){
     const f = pools.juvenile[provinceId].find(x=> x.id === id);
     if(f) return f;
   }
-  return null;
+  // A signed, registered player fighter is declared straight off the roster, not the
+  // NPC pool — check there too so the draft functions can resolve either kind of pick.
+  const roster = loadRoster();
+  return roster.find(r=> r.id === id) || null;
 }
 
 const JUNIOR_DRAFT_ROUNDS = 4;
@@ -1373,6 +1376,18 @@ function ensureJuniorDeclarationsForYear(cycleYear){
     });
   });
   if(changed) saveFieldPools(pools);
+  // A player fighter who's signed the Jr Contract is declared automatically every
+  // cycle from then on (no re-signing needed) until they're drafted or age out at 18.
+  const roster = loadRoster();
+  let rosterChanged = false;
+  roster.forEach(f=>{
+    if(f.juniorDraftRegistered && f.age >= 14 && f.age <= 17 && !f.juniorTeamId && f.juniorDraftDeclaredYear !== cycleYear){
+      f.juniorDraftDeclaredYear = cycleYear;
+      f.juniorDraftDeclaration = 'declared';
+      rosterChanged = true;
+    }
+  });
+  if(rosterChanged) saveRoster(roster);
 }
 
 /* ============================ JUNIOR FREE AGENT WAIVER WIRE ============================ */
@@ -1450,6 +1465,9 @@ function beginDraftCycleIfNeeded(cycleYear){
       if(f.juniorDraftDeclaredYear === cycleYear && f.juniorDraftDeclaration === 'declared') declared.push(f);
     });
   });
+  loadRoster().forEach(f=>{
+    if(f.juniorDraftDeclaredYear === cycleYear && f.juniorDraftDeclaration === 'declared') declared.push(f);
+  });
   declared.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats)); // frozen, best-available, shared by all 3 leagues
   s.draftCycle = {
     cycleYear,
@@ -1475,7 +1493,8 @@ function runLeagueDraftForCycle(league, dc, pools){
       if(!prospect){ roundPicks.push(null); return; }
       picks.push({
         round:r+1, teamIndex, fighterId: prospect.id, name: prospect.name,
-        hometown: prospect.hometown, record: { wins: prospect.record.wins, losses: prospect.record.losses },
+        hometown: prospect.settlement || prospect.hometown, record: { wins: prospect.record.wins, losses: prospect.record.losses },
+        isPlayer: !!prospect.isPlayable,
       });
       roundPicks.push({ team: jrTeamName(league.id, teamIndex), name: prospect.name, isPlayer:false, fighterId: prospect.id });
     });
@@ -1525,17 +1544,31 @@ function resolveDraftSigningsForCycle(dc){
   });
 
   const pools = loadFieldPools();
+  const roster = loadRoster();
   const signedIds = new Set();
+  let rosterChanged = false;
   Object.keys(byFighter).forEach(fighterId=>{
-    const fighter = findFighterInPools(pools, fighterId);
+    const rosterFighter = roster.find(r=> r.id === fighterId);
+    const fighter = rosterFighter || findFighterInPools(pools, fighterId);
     if(!fighter) return;
     const offersSortedByTier = byFighter[fighterId].slice().sort((a,b)=> getJrLeague(a.leagueId).draftOrder - getJrLeague(b.leagueId).draftOrder);
     const winner = offersSortedByTier.length > 1 ? pickSigningOffer(fighter, offersSortedByTier) : offersSortedByTier[0];
-    draftFighterIntoRoster(winner.leagueId, winner.teamIndex, fighter);
+    if(rosterFighter){
+      // The player's own fighter: link the roster slot live (fighterId reference, not a
+      // frozen snapshot) so growth/aging keep reflecting the real, current fighter.
+      setPlayerIntoRoster(winner.leagueId, winner.teamIndex, rosterFighter);
+      rosterFighter.juniorTeamId = winner.teamIndex;
+      rosterFighter.juniorLeagueId = winner.leagueId;
+      rosterChanged = true;
+    } else {
+      draftFighterIntoRoster(winner.leagueId, winner.teamIndex, fighter);
+    }
     signedIds.add(fighterId);
   });
+  if(rosterChanged) saveRoster(roster);
 
-  // Drafted-and-signed fighters come off the Juvenile board entirely.
+  // Drafted-and-signed NPCs come off the Juvenile board entirely (the player's fighter
+  // was never in it, so this is a no-op for them).
   Object.keys(pools.juvenile || {}).forEach(provinceId=>{
     pools.juvenile[provinceId] = pools.juvenile[provinceId].filter(f=> !signedIds.has(f.id));
   });
@@ -2493,6 +2526,9 @@ function render(){
   if(state.screen==='overview'){ body = renderOverview(); title='JUNIOR LEAGUE'; sub='THREE LEAGUES, EIGHT PROVINCES'; }
   else if(state.screen==='league-detail'){ body = renderLeagueDetail(); const l = getJrLeague(state.viewLeagueId); title = l ? l.name.toUpperCase() : 'LEAGUE'; sub='FRANCHISES & STANDINGS'; }
   else if(state.screen==='select'){ body = renderSelect(); }
+  else if(state.screen==='jr-contract'){ body = renderJrContract(); title='JR CONTRACT'; sub='SIGN TO REGISTER'; }
+  else if(state.screen==='declared-list'){ body = renderDeclaredList(); title='DECLARED POOL'; sub='THIS YEAR\'S DRAFT CLASS'; }
+  else if(state.screen==='fa-pool'){ body = renderFAPool(); title='FREE AGENTS'; sub='JUNIOR ELIGIBLE'; }
   else if(state.screen==='draft-day'){ body = renderDraftDay(); title='DRAFT DAY'; }
   else if(state.screen==='league-draft-day'){ body = renderLeagueDraftDay(); title='DRAFT NIGHT'; sub='PICK BY PICK'; }
   else if(state.screen==='offers'){ body = renderOffers(); title='DRAFT RESULTS'; }
@@ -2594,26 +2630,25 @@ function renderSelect(){
   }
   const rows = roster.map(f=>{
     const prov = PROVINCES.find(p=>p.id===f.provinceId);
-    const ageBandOk = f.juvenilePetitionStatus === 'approved-pending-draft' || (f.age >= 14 && f.age <= 17);
-    const draftDayArrived = getCurrentDay() >= tierKeyDates(currentIslandYear()).juniorDraftDayIronbound;
-    let status, canAct = false;
+    let status, canAct = false, action = null;
     if(f.juniorTeamId){
       status = `Signed — ${jrTeamName(f.juniorLeagueId, f.juniorTeamId)}`;
+      action = 'roster'; canAct = true;
     } else if(rightsStillActive(f)){
       status = `Exclusive Rights Held — Ready to Sign`;
-      canAct = true;
-    } else if(isDraftEligible(f)){
-      status = 'Eligible — Enter Draft Day';
-      canAct = true;
-    } else if(!f.amateurLeagueId){
-      status = 'Not Amateur-Active';
-    } else if(!ageBandOk){
-      status = `Not Draft Age (currently ${f.age})`;
-    } else if(!draftDayArrived){
-      status = `Draft eligible — draft week begins ${formatCalendarDateShort(tierKeyDates(currentIslandYear()).juniorDraftDayIronbound)}`;
+      action = 'old-draft'; canAct = true;
+    } else if(f.age < 14){
+      status = `Too young — Junior Draft opens at 14 (currently ${f.age})`;
+    } else if(f.age > 17){
+      status = f.juniorDraftRegistered ? 'Went undrafted and has aged out of Junior eligibility.' : 'Aged out without ever registering for the draft.';
+    } else if(f.juniorDraftRegistered){
+      status = `Registered — in this year's declared pool, waiting on draft night`;
+      action = 'status'; canAct = true;
     } else {
-      status = 'Not Eligible';
+      status = 'Eligible — Sign the Jr Contract to register';
+      action = 'contract'; canAct = true;
     }
+    const btnLabel = action==='roster' ? 'View Roster' : action==='contract' ? 'Sign Contract →' : action==='status' ? 'View Status →' : action==='old-draft' ? 'Go →' : 'Go →';
     return `
       <div class="fighter-row" style="--fr-color:${prov?prov.color:'#C9A23C'}">
         <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
@@ -2622,12 +2657,91 @@ function renderSelect(){
           <div class="fr-meta">Age ${f.age} · ${DISCIPLINE_NAMES[f.primaryDisc]} · OVR ${calcOVR(f.stats)} · ${f.settlement}</div>
         </div>
         <div class="fr-status">${status}</div>
-        <button class="fr-btn" data-select-fighter="${f.id}" ${canAct||f.juniorTeamId?'':'disabled'}>${f.juniorTeamId?'View Roster':'Go →'}</button>
+        <button class="fr-btn" data-fighter-action="${action||''}" data-select-fighter="${f.id}" ${canAct?'':'disabled'}>${btnLabel}</button>
       </div>
     `;
   }).join('');
 
-  return `<div class="section-label">Pick a Fighter</div><div class="fighter-grid">${rows}</div>`;
+  return `
+    <div class="section-label">Pick a Fighter</div><div class="fighter-grid">${rows}</div>
+    <div class="btn-row" style="margin-top:18px;">
+      <button class="btn" id="go-to-declared-list">📋 Declared for the Draft</button>
+      <button class="btn" id="go-to-fa-pool">🆓 Free Agent Pool</button>
+    </div>
+  `;
+}
+
+// One-page flavor contract — signing it is what actually registers a fighter into the
+// real declared pool (see ensureJuniorDeclarationsForYear). This replaces the old dead
+// end where an age-eligible fighter just said "Not Eligible" with nothing to do about it.
+function renderJrContract(){
+  const f = getFighterById(state.fighterId);
+  const cycleYear = currentIslandYear();
+  return `
+    <div class="section-label">Iron Island Jr. Fight League — Entry Draft Contract</div>
+    <div style="background:var(--bg-raised); border:1px solid var(--brass); padding:24px; font-family:var(--body); font-size:13.5px; color:var(--bone-dim); line-height:1.7;">
+      <p style="text-align:center; font-family:var(--label); letter-spacing:1.5px; text-transform:uppercase; color:var(--brass); font-size:12px; margin-bottom:16px;">Iron Island &amp; Deck Hockey Federation · Junior Draft Registration</p>
+      <p>This certifies that <b style="color:var(--bone);">${f.name}</b>, of ${f.settlement || 'Iron Island'}, hereby declares eligibility for selection in the ${cycleYear} Junior Fight League entry draft.</p>
+      <p>By signing below, the fighter is entered into the shared declared pool reviewed by all three Junior Leagues — Ironbound, Northgate, and Tidewater — for the remainder of their Juvenile-tier eligibility. This declaration carries forward automatically each year it is not resolved, and remains active until the fighter is drafted, or ages out of Junior eligibility.</p>
+      <p>The fighter understands that more than one league may select their rights, and that the final signing will be resolved in the fighter's own best interest at the league sign deadline.</p>
+      <p style="margin-top:18px; text-align:center; font-family:var(--label); letter-spacing:1px; color:var(--bone); font-size:11px;">— X ______________________ —<br><span style="color:var(--muted); font-size:10px;">Fighter's Signature</span></p>
+    </div>
+    <div class="btn-row" style="margin-top:16px;">
+      <button class="btn" id="back-to-select-from-contract">← Back</button>
+      <button class="btn btn-primary" id="sign-jr-contract">Sign &amp; Register →</button>
+    </div>
+  `;
+}
+
+// All real fighters currently declared for the upcoming/most recent draft cycle —
+// NPCs and the player alike — pulled straight from the real draft cycle state.
+function renderDeclaredList(){
+  const cycleYear = currentIslandYear();
+  ensureJuniorDeclarationsForYear(cycleYear);
+  const pools = loadFieldPools();
+  const declared = [];
+  Object.keys(pools.juvenile || {}).forEach(provinceId=>{
+    pools.juvenile[provinceId].forEach(f=>{
+      if(f.juniorDraftDeclaredYear === cycleYear && f.juniorDraftDeclaration === 'declared') declared.push(f);
+    });
+  });
+  loadRoster().forEach(f=>{
+    if(f.juniorDraftDeclaredYear === cycleYear && f.juniorDraftDeclaration === 'declared') declared.push(f);
+  });
+  declared.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats));
+  const rows = declared.length ? declared.map(f=>`
+    <div class="pick-row">
+      <span class="pick-team">${f.isPlayable ? '⭐ ' : ''}${f.name}</span>
+      <span class="fr-meta">${f.settlement || f.hometown || ''} · Age ${f.age} · OVR ${calcOVR(f.stats)}</span>
+      <span class="pick-fighter">${f.record.wins}-${f.record.losses}</span>
+    </div>
+  `).join('') : `<div class="empty-note">Nobody's declared for the ${cycleYear} draft yet.</div>`;
+  return `
+    <div class="section-label">Declared for the ${cycleYear} Draft (${declared.length})</div>
+    ${rows}
+    <div class="btn-row" style="margin-top:16px;"><button class="btn" id="back-to-select-from-declared">← Back</button><span></span></div>
+  `;
+}
+
+// The Junior free-agent pool — aged-out Juveniles who never got drafted, still Junior-
+// eligible, browsable at any time to see who's actually out there for a team to sign.
+function renderFAPool(){
+  ensureJuniorFAWaiverCaughtUp();
+  const pools = loadFieldPools();
+  const fa = (pools.juniorFA || []).slice().sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats));
+  const rows = fa.length ? fa.map(f=>`
+    <div class="pick-row">
+      <span class="pick-team">${f.name}</span>
+      <span class="fr-meta">${f.settlement || f.hometown || ''} · Age ${f.age} · ${weightClassOf(f.weightLb)} · OVR ${calcOVR(f.stats)}</span>
+      <span class="pick-fighter">${f.record.wins}-${f.record.losses}</span>
+    </div>
+  `).join('') : `<div class="empty-note">Free agent pool is empty right now.</div>`;
+  return `
+    <div class="section-label">Junior Free Agent Pool (${fa.length})</div>
+    <p style="font-family:var(--body); font-size:12.5px; color:var(--bone-dim); margin-bottom:14px;">Aged out of Juvenile without getting drafted — still Junior-eligible through age 19. Teams sign from this pool automatically every Tuesday.</p>
+    ${rows}
+    <div class="btn-row" style="margin-top:16px;"><button class="btn" id="back-to-select-from-fa">← Back</button><span></span></div>
+  `;
 }
 
 function renderDraftDay(){
@@ -3068,7 +3182,12 @@ function wireEvents(){
     btn.onclick = ()=>{
       state.fighterId = btn.dataset.selectFighter;
       const f = getFighterById(state.fighterId);
-      if(f.juniorTeamId){
+      const action = btn.dataset.fighterAction;
+      if(action === 'contract'){
+        state.screen = 'jr-contract';
+      } else if(action === 'status'){
+        state.screen = 'declared-list';
+      } else if(f.juniorTeamId){
         state.screen = 'season-hub';
       } else if(rightsStillActive(f)){
         state.pendingOffers = f.juniorRightsHolders.map(r=> ({ leagueId:r.leagueId, teamIndex:r.teamIndex, round:null }));
@@ -3080,6 +3199,26 @@ function wireEvents(){
       render();
     };
   });
+
+  const goToDeclaredList = document.getElementById('go-to-declared-list');
+  if(goToDeclaredList) goToDeclaredList.onclick = ()=>{ state.screen = 'declared-list'; render(); };
+  const goToFAPool = document.getElementById('go-to-fa-pool');
+  if(goToFAPool) goToFAPool.onclick = ()=>{ state.screen = 'fa-pool'; render(); };
+  const backFromContract = document.getElementById('back-to-select-from-contract');
+  if(backFromContract) backFromContract.onclick = ()=>{ state.screen = 'select'; render(); };
+  const backFromDeclared = document.getElementById('back-to-select-from-declared');
+  if(backFromDeclared) backFromDeclared.onclick = ()=>{ state.screen = 'select'; render(); };
+  const backFromFA = document.getElementById('back-to-select-from-fa');
+  if(backFromFA) backFromFA.onclick = ()=>{ state.screen = 'select'; render(); };
+  const signContract = document.getElementById('sign-jr-contract');
+  if(signContract) signContract.onclick = ()=>{
+    updateFighter(state.fighterId, (f)=>{
+      f.juniorDraftRegistered = true;
+      f.juniorDraftRegisteredYear = currentIslandYear();
+    });
+    state.screen = 'select';
+    render();
+  };
 
   const seeResults = document.getElementById('see-results');
   if(seeResults) seeResults.onclick = ()=>{
@@ -3362,7 +3501,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V26 · 2026-07-18</div>
+<div class="version-badge">JUNIOR LEAGUE · V27 · 2026-07-18</div>
 </body>
 </html>
 
