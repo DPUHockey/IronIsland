@@ -4835,7 +4835,9 @@ function renderModal(){
   if(!f){ root.innerHTML = ''; return; }
 
   const prov = PROVINCES.find(p=>p.id===f.provinceId);
-  const rec = f.record || f.allTimeRecord || { wins:0, losses:0 };
+  const jrRec = f.jrSeasonRecord;
+  const hasJrRec = jrRec && (jrRec.wins + jrRec.losses) > 0;
+  const rec = f.record || f.allTimeRecord || (hasJrRec ? jrRec : { wins:0, losses:0 });
 
   const commentaryHtml = f.stats ? generateCommentatorTakes(f).map(t=>`
     <div class="mf-quote"><span class="mf-quote-name">${t.name}:</span> "${t.quote}"</div>
@@ -4881,8 +4883,12 @@ function renderModal(){
     const count = t==='All' ? log.length : log.filter(e=>e.tier===t).length;
     return `<button class="mf-tier-tab ${modalActiveTier===t?'active':''}" data-mf-tab="${t}">${t} (${count})</button>`;
   }).join('');
-  let bodyExtra = `<div class="mf-tier-tabs">${tabsHtml}</div><div class="mf-history">${historyHtml}</div>`;
-  if(isEphemeral && !f.fightLog && !f.age){
+  const jrSummaryHtml = hasJrRec ? `
+    <div class="mf-section-title">This Junior Season</div>
+    <div class="mf-tier-summary"><span>Junior</span><span>${jrRec.wins}-${jrRec.losses} · ${jrRec.methods.KO+jrRec.methods.TKO} finishes (${jrRec.methods.KO} KO, ${jrRec.methods.TKO} TKO)</span></div>
+  ` : '';
+  let bodyExtra = `${jrSummaryHtml}<div class="mf-tier-tabs">${tabsHtml}</div><div class="mf-history">${historyHtml}</div>`;
+  if(isEphemeral && !f.fightLog && !f.age && !hasJrRec){
     bodyExtra = `<div class="mf-empty">Procedural fighter — no persistent career record kept.</div>`;
   }
 
@@ -4900,7 +4906,7 @@ function renderModal(){
               <div class="mf-name">${f.name}</div>
               <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${f.heightIn?heightLabel(f.heightIn):''}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement || f.hometown || ''}${prov?', '+prov.name:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
               <div class="mf-meta">${f.birthDay !== undefined && f.birthDay !== null ? 'Born '+formatCalendarDate(f.birthDay) : ''}${f.fame !== undefined ? ' · Fame '+f.fame : ''}</div>
-              <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Career ${rec.wins}-${rec.losses}</div>
+              <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · ${(f.record||f.allTimeRecord) ? 'Career' : (hasJrRec ? 'Junior Season' : 'Career')} ${rec.wins}-${rec.losses}</div>
             </div>
           </div>
           ${f.stats ? `
