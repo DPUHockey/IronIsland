@@ -2580,9 +2580,10 @@ function renderOverview(){
   if(roster.length){
     const mine = roster.find(f=> f.isPlayable) || roster[0];
     if(mine.juniorTeamId){ draftLine = `${mine.name} is signed with ${jrTeamName(mine.juniorLeagueId, mine.juniorTeamId)}.`; }
-    else if(mine.age >= 14 && mine.age <= 17 && mine.amateurLeagueId){ draftLine = `${mine.name} is Junior Draft eligible.`; }
     else if(mine.age < 14){ draftLine = `${mine.name} is age ${mine.age} — Junior Draft opens at 14.`; }
-    else { draftLine = `${mine.name} isn't currently draft-eligible.`; }
+    else if(mine.age > 17){ draftLine = mine.juniorDraftRegistered ? `${mine.name} went undrafted and has aged out of Junior eligibility.` : `${mine.name} aged out without ever registering for the draft.`; }
+    else if(mine.juniorDraftRegistered){ draftLine = `${mine.name} is registered and in this year's declared pool, waiting on draft night.`; }
+    else { draftLine = `${mine.name} is eligible — sign the Jr Contract to register for the draft.`; }
   }
 
   return `
@@ -3501,7 +3502,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V27 · 2026-07-18</div>
+<div class="version-badge">JUNIOR LEAGUE · V28 · 2026-07-18</div>
 </body>
 </html>
 
