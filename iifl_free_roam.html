@@ -1290,8 +1290,8 @@ const JUVENILE_AGE_WEIGHTS = { 11:0.20, 12:0.19, 13:0.16, 14:0.13, 15:0.11, 16:0
 function loadFieldPools(){
   try{
     const raw = localStorage.getItem(sk(FIELD_KEY));
-    return raw ? JSON.parse(raw) : { amateur:{}, juvenile:{} };
-  }catch(err){ console.error('IIFL field pool load failed:', err); return { amateur:{}, juvenile:{} }; }
+    return raw ? JSON.parse(raw) : { amateur:{}, juvenile:{}, juniorFA:[] };
+  }catch(err){ console.error('IIFL field pool load failed:', err); return { amateur:{}, juvenile:{}, juniorFA:[] }; }
 }
 function saveFieldPools(pools){
   try{ localStorage.setItem(sk(FIELD_KEY), JSON.stringify(pools)); return true; }
@@ -2076,14 +2076,24 @@ function healLegacyJuvenileBloat(pools, today){
 }
 
 function syncJuvenilePoolAges(pools, today){
+  if(!pools.juniorFA) pools.juniorFA = [];
   PROVINCES.forEach(p=>{
     const pool = pools.juvenile[p.id];
     if(!pool) return;
     pools.juvenile[p.id] = pool.filter(f=>{
       syncFighterAge(f, today);
-      return f.age < 18;
+      if(f.age < 18) return true;
+      // Aged out of Juvenile. Junior eligibility doesn't end at 18 — Junior rosters
+      // play through 19 (mandatory Pro declare hits at 20) — so anyone who never got
+      // drafted still has real value to a team short on bodies. Land them in the
+      // Junior free-agent pool instead of just deleting them.
+      if(f.age < 20 && !f.juniorTeamId) pools.juniorFA.push(f);
+      return false;
     });
   });
+  // The FA pool ages out the same way — once someone crosses 20 with nobody having
+  // signed them, their Junior window is closed for good.
+  pools.juniorFA = pools.juniorFA.filter(f=>{ syncFighterAge(f, today); return f.age < 20 && !f.juniorTeamId; });
 }
 
 function catchUpJuvenileSimulation(){
@@ -5877,6 +5887,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V62 · 2026-07-18</div>
+<div class="version-badge">FREE ROAM · V63 · 2026-07-18</div>
 </body>
 </html>
