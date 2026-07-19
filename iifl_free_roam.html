@@ -1979,11 +1979,30 @@ function enforceProvincePoolCap(pools, provinceId, capOverride){
   if(!pool) return;
   const cap = capOverride || provincePoolCap(provinceId);
   if(pool.length <= cap) return;
-  // Trim the longest-tenured, weakest performers first — "aging out of the scene,"
-  // abstracted, since standing-pool NPCs don't actually age up like the player does.
-  const sorted = [...pool].sort((a,b)=> (a.entryDay-b.entryDay) || (calcOVR(a.stats)-calcOVR(b.stats)));
-  const removeIds = new Set(sorted.slice(0, pool.length-cap).map(f=>f.id));
-  pools.juvenile[provinceId] = pool.filter(f=> !removeIds.has(f.id));
+  // Trim fairly per-settlement instead of one flat province-wide oldest-first sort — a
+  // global sort let whichever settlement's fighters happened to have older entryDay
+  // values get disproportionately wiped out while a settlement seeded more recently
+  // (elsewhere in the same province) kept its full population untouched. That's how a
+  // pit could go from 30+ fighters to almost none between visits for reasons that had
+  // nothing to do with that settlement's own activity.
+  const locs = pitLocationsForProvince(provinceId);
+  const totalTarget = locs.reduce((s,l)=> s + l.perClass*3, 0) || 1;
+  const byHometown = {};
+  pool.forEach(f=>{ (byHometown[f.hometown] = byHometown[f.hometown] || []).push(f); });
+  const matchedHometowns = new Set();
+  const keep = [];
+  locs.forEach(loc=>{
+    const members = loc.hometownPool.flatMap(h=>{ matchedHometowns.add(h); return byHometown[h] || []; });
+    if(!members.length) return;
+    const shareCap = Math.max(1, Math.round((loc.perClass*3 / totalTarget) * cap));
+    if(members.length <= shareCap){ keep.push(...members); return; }
+    const sorted = [...members].sort((a,b)=> (b.entryDay-a.entryDay) || (calcOVR(b.stats)-calcOVR(a.stats))); // newest/best kept first
+    keep.push(...sorted.slice(0, shareCap));
+  });
+  // Safety net: any fighter whose hometown wasn't covered by pitLocationsForProvince
+  // (shouldn't normally happen) is kept rather than silently dropped.
+  Object.keys(byHometown).forEach(h=>{ if(!matchedHometowns.has(h)) keep.push(...byHometown[h]); });
+  pools.juvenile[provinceId] = keep;
 }
 
 // Proactively bounds roam state (tournament brackets, newspapers, cached grids) on
@@ -6024,6 +6043,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V68 · 2026-07-18</div>
+<div class="version-badge">FREE ROAM · V69 · 2026-07-18</div>
 </body>
 </html>
