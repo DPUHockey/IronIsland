@@ -853,62 +853,80 @@ const JR_LEAGUES = [
     id:'kolsati_jr', name:'The Ironbound Junior League', tier:1, draftOrder:1,
     provinces:['kolsati','ditiero'],
     teams:[
-      { city:'Kolsati', nickname:'Ironclads', provinceId:'kolsati' },
-      { city:'St. Johnson', nickname:'Wolves', provinceId:'kolsati' },
-      { city:'Bakii', nickname:'Foundry', provinceId:'ditiero' },
-      { city:'Briggston', nickname:'Vipers', provinceId:'kolsati' },
-      { city:'Castellan Heights', nickname:'Sentinels', provinceId:'kolsati' },
-      { city:'Marrow Hill', nickname:'Marauders', provinceId:'kolsati' },
-      { city:"Pell's Crossing", nickname:'Drifters', provinceId:'kolsati' },
-      { city:'Dunmore', nickname:'Rebels', provinceId:'kolsati' },
-      { city:'Iron Wharf', nickname:'Stormguard', provinceId:'kolsati' },
-      { city:'Di Tiero', nickname:'Tideburners', provinceId:'ditiero' },
-      { city:'South Bender', nickname:'Grinders', provinceId:'ditiero' },
-      { city:'Bellechasse', nickname:'Wardens', provinceId:'ditiero' },
-      { city:'Port Maray', nickname:'Outriders', provinceId:'ditiero' },
-      { city:'Cane Hollow', nickname:'Long Shots', provinceId:'ditiero' },
-      { city:'Marsh Landing', nickname:'Brawlers', provinceId:'ditiero' },
-      { city:'Bayou Verte', nickname:'Hollow Kings', provinceId:'ditiero' },
+      { city:'Kolsati', nickname:'Ironclads', provinceId:'kolsati', stadium:'The Ironclad Works' },
+      { city:'St. Johnson', nickname:'Wolves', provinceId:'kolsati', stadium:'Wolfsden Arena' },
+      { city:'Bakii', nickname:'Foundry', provinceId:'ditiero', stadium:'The Bakii Furnace' },
+      { city:'Briggston', nickname:'Vipers', provinceId:'kolsati', stadium:'Pit Row Coliseum' },
+      { city:'Castellan Heights', nickname:'Sentinels', provinceId:'kolsati', stadium:'Castellan Keep' },
+      { city:'Marrow Hill', nickname:'Marauders', provinceId:'kolsati', stadium:'Marrow Hill Grounds' },
+      { city:"Pell's Crossing", nickname:'Drifters', provinceId:'kolsati', stadium:'Crossing Station Arena' },
+      { city:'Dunmore', nickname:'Rebels', provinceId:'kolsati', stadium:'Dunmore Armory' },
+      { city:'Iron Wharf', nickname:'Stormguard', provinceId:'kolsati', stadium:'The Stormguard Dockyard' },
+      { city:'Di Tiero', nickname:'Tideburners', provinceId:'ditiero', stadium:'Tideburner Hall' },
+      { city:'South Bender', nickname:'Grinders', provinceId:'ditiero', stadium:'The Grind House' },
+      { city:'Bellechasse', nickname:'Wardens', provinceId:'ditiero', stadium:'Bellechasse Bastion' },
+      { city:'Port Maray', nickname:'Outriders', provinceId:'ditiero', stadium:'Port Maray Fairgrounds' },
+      { city:'Cane Hollow', nickname:'Long Shots', provinceId:'ditiero', stadium:'Cane Hollow Range' },
+      { city:'Marsh Landing', nickname:'Brawlers', provinceId:'ditiero', stadium:'Marsh Landing Pit' },
+      { city:'Bayou Verte', nickname:'Hollow Kings', provinceId:'ditiero', stadium:'The Hollow Court' },
     ],
   },
   {
     id:'northern_jr', name:'The Northgate Junior League', tier:2, draftOrder:2,
     provinces:['sherwood','alexandretta','bay'],
     teams:[
-      { city:'Frontenac City', nickname:'Anchors', provinceId:'sherwood' },
-      { city:'Lawrenceville', nickname:'Timberwolves', provinceId:'sherwood' },
-      { city:'Millbrook Heights', nickname:'Ashborn', provinceId:'sherwood' },
-      { city:'Williamsburg', nickname:'Ridge Runners', provinceId:'alexandretta' },
-      { city:'St. Anne', nickname:'Sentries', provinceId:'alexandretta' },
-      { city:'Nattingham', nickname:'Longbows', provinceId:'alexandretta' },
-      { city:'Wolverbridge', nickname:'Ironhide', provinceId:'alexandretta' },
-      { city:'Charleston', nickname:'Seabreakers', provinceId:'bay' },
-      { city:'Bayport', nickname:'Riptide', provinceId:'bay' },
-      { city:'Pinecrest Hollow', nickname:'Rangers', provinceId:'bay' },
-      { city:'Maple Junction', nickname:'Fury', provinceId:'bay' },
-      { city:"Dell's Corner", nickname:'Roughnecks', provinceId:'bay' },
+      { city:'Frontenac City', nickname:'Anchors', provinceId:'sherwood', stadium:'Anchor Point Arena' },
+      { city:'Lawrenceville', nickname:'Timberwolves', provinceId:'sherwood', stadium:'Timberwolf Den' },
+      { city:'Millbrook Heights', nickname:'Ashborn', provinceId:'sherwood', stadium:'Ashborn Hall' },
+      { city:'Williamsburg', nickname:'Ridge Runners', provinceId:'alexandretta', stadium:'Ridgeline Coliseum' },
+      { city:'St. Anne', nickname:'Sentries', provinceId:'alexandretta', stadium:'St. Anne Garrison' },
+      { city:'Nattingham', nickname:'Longbows', provinceId:'alexandretta', stadium:'Longbow Range' },
+      { city:'Wolverbridge', nickname:'Ironhide', provinceId:'alexandretta', stadium:'Ironhide Yard' },
+      { city:'Charleston', nickname:'Seabreakers', provinceId:'bay', stadium:'Seabreaker Pier Arena' },
+      { city:'Bayport', nickname:'Riptide', provinceId:'bay', stadium:'Riptide Docks' },
+      { city:'Pinecrest Hollow', nickname:'Rangers', provinceId:'bay', stadium:'Pinecrest Lodge' },
+      { city:'Maple Junction', nickname:'Fury', provinceId:'bay', stadium:'Maple Junction Depot' },
+      { city:"Dell's Corner", nickname:'Roughnecks', provinceId:'bay', stadium:"Dell's Corner Yard" },
     ],
   },
   {
     id:'eastern_jr', name:'The Tidewater Junior League', tier:3, draftOrder:3,
     provinces:['northeast','carpathia','gazon'],
     teams:[
-      { city:'Mizukoshi', nickname:'Shoguns', provinceId:'northeast' },
-      { city:'Tsubaki Bay', nickname:'Tide', provinceId:'northeast' },
-      { city:'Santorino', nickname:'Ronin', provinceId:'northeast' },
-      { city:'Ineawood', nickname:'Silent Blades', provinceId:'northeast' },
-      { city:'Vyrholm', nickname:'Nightwatch', provinceId:'carpathia' },
-      { city:'Castle Reach', nickname:'Wraiths', provinceId:'carpathia' },
-      { city:'Bukovene', nickname:'Hollowmen', provinceId:'carpathia' },
-      { city:'Greywatch', nickname:'Gravekeepers', provinceId:'carpathia' },
-      { city:'Gazon Main', nickname:'Dust Runners', provinceId:'gazon' },
-      { city:'Gazon Northern', nickname:'Sandstorm', provinceId:'gazon' },
-      { city:'Gazon South', nickname:'Scavengers', provinceId:'gazon' },
-      { city:'Hollowmere', nickname:'Shades', provinceId:'gazon' },
+      { city:'Mizukoshi', nickname:'Shoguns', provinceId:'northeast', stadium:'Mizukoshi Dojo Hall' },
+      { city:'Tsubaki Bay', nickname:'Tide', provinceId:'northeast', stadium:'Tsubaki Tideworks' },
+      { city:'Santorino', nickname:'Ronin', provinceId:'northeast', stadium:"The Ronin's Court" },
+      { city:'Ineawood', nickname:'Silent Blades', provinceId:'northeast', stadium:'Silent Blade Dojo' },
+      { city:'Vyrholm', nickname:'Nightwatch', provinceId:'carpathia', stadium:'Vyrholm Watchtower' },
+      { city:'Castle Reach', nickname:'Wraiths', provinceId:'carpathia', stadium:'Castle Reach Hollow' },
+      { city:'Bukovene', nickname:'Hollowmen', provinceId:'carpathia', stadium:'Bukovene Crypt Arena' },
+      { city:'Greywatch', nickname:'Gravekeepers', provinceId:'carpathia', stadium:'Greywatch Gravehall' },
+      { city:'Gazon Main', nickname:'Dust Runners', provinceId:'gazon', stadium:'Dust Runner Speedway' },
+      { city:'Northern Gazon', nickname:'Sandstorm', provinceId:'gazon', stadium:'Sandstorm Pavilion' },
+      { city:'Gazon South', nickname:'Scavengers', provinceId:'gazon', stadium:"Scavenger's Yard" },
+      { city:'Hollowmere', nickname:'Shades', provinceId:'carpathia', stadium:'Hollowmere Shrine' },
     ],
   },
 ];
 function getJrLeague(id){ return JR_LEAGUES.find(l=>l.id===id); }
+
+// Tier accent = gold/silver/bronze, matching the Ironbound > Northgate > Tidewater
+// prestige ordering used everywhere else (draft order, calendar labels, etc).
+const JR_TIER_ACCENT = { 1:'#D4AF37', 2:'#B8BEC7', 3:'#B08D57' };
+function teamInitials(team){ return team.city.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+// Procedural shield crest — no image assets, just province color + tier accent + initials,
+// consistent with how the rest of the game (flags aside) avoids external art dependencies.
+function teamCrestSvg(team, prov, tier, size){
+  size = size || 56;
+  const base = prov ? prov.color : '#8A6D3B';
+  const accent = JR_TIER_ACCENT[tier] || '#8A6D3B';
+  const initials = teamInitials(team);
+  return `<svg viewBox="0 0 100 116" width="${size}" height="${Math.round(size*1.16)}" xmlns="http://www.w3.org/2000/svg">
+    <path d="M50 2 L96 18 V56 C96 86 76 104 50 114 C24 104 4 86 4 56 V18 Z" fill="${base}" stroke="${accent}" stroke-width="4"/>
+    <path d="M50 10 L88 24 V56 C88 80 72 96 50 105 C28 96 12 80 12 56 V24 Z" fill="none" stroke="${accent}" stroke-width="1.5" opacity="0.5"/>
+    <text x="50" y="66" text-anchor="middle" font-family="Georgia, serif" font-weight="bold" font-size="34" fill="${accent}">${initials}</text>
+  </svg>`;
+}
 
 const JR_LEAGUE_DESCRIPTIONS = {
   kolsati_jr: "The island's flagship junior circuit — 16 clubs out of Kolsati District and Di Tiero Province. Toughest league to get drafted into, and the highest bar for staying on a roster.",
@@ -2549,7 +2567,7 @@ function renderTeamModal(root){
   const rec = standings[teamIndex];
   const allRec = allTime[teamIndex];
   const slots = ensureTeamRoster(leagueId, teamIndex);
-  const initials = team.city.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+
 
   const rosterHtml = slots.map(sl=>{
     const fighter = resolveSlotFighter(sl);
@@ -2572,10 +2590,11 @@ function renderTeamModal(root){
         </div>
         <div class="modal-body">
           <div class="mt-head">
-            <div class="mt-logo" style="border-color:${prov?prov.color:'var(--brass)'}; color:${prov?prov.color:'var(--brass)'};">${initials}</div>
+            <div class="mt-logo" style="border:none; background:none; padding:0;">${teamCrestSvg(team, prov, league.tier, 56)}</div>
             <div>
               <div class="mt-name">${team.city} ${team.nickname}</div>
               <div class="mt-meta">${league.name} · Tier ${league.tier}${prov?' · '+prov.name+' region':''}</div>
+              <div class="mt-meta">${team.stadium || 'Home venue TBD'}</div>
             </div>
           </div>
           <div class="mt-record-grid">
