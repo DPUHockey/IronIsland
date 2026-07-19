@@ -1602,6 +1602,40 @@ function readLeagueSchedule(leagueId){
   const s = loadJrStateReadOnly();
   return (s.leagueSchedules && s.leagueSchedules[leagueId]) ? s.leagueSchedules[leagueId] : null;
 }
+// Mirrors generateRoundRobinSchedule/ensureLeagueSchedule in iifl_junior_league.html —
+// fully deterministic (circle method, zero randomness), so it's safe for either file to
+// create the schedule first. Needed because the Wednesday-popup check now runs from
+// Free Roam BEFORE the player may have ever opened the Junior League screens that used
+// to create this schedule as a side effect — without this, a schedule that doesn't exist
+// yet means the popup can never fire, a real deadlock now that access is stadium-only.
+function generateRoundRobinScheduleRW(teamCount){
+  const teams = Array.from({length: teamCount}, (_,i)=>i);
+  const n = teams.length;
+  const fixed = teams[0];
+  let rotation = teams.slice(1);
+  const weeks = [];
+  for(let w=0; w<n-1; w++){
+    const roundTeams = [fixed, ...rotation];
+    const pairs = [];
+    for(let i=0;i<n/2;i++){
+      const a = roundTeams[i], b = roundTeams[n-1-i];
+      pairs.push(w % 2 === 0 ? { home:a, away:b } : { home:b, away:a });
+    }
+    weeks.push(pairs);
+    rotation.push(rotation.shift());
+  }
+  return weeks;
+}
+function ensureLeagueScheduleRW(leagueId){
+  const s = loadJrStateReadOnly();
+  if(!s.leagueSchedules) s.leagueSchedules = {};
+  if(s.leagueSchedules[leagueId]) return s.leagueSchedules[leagueId];
+  const league = getJrLeague(leagueId);
+  const weeks = generateRoundRobinScheduleRW(league.teams.length);
+  s.leagueSchedules[leagueId] = weeks;
+  try{ localStorage.setItem(sk(JR_STATE_KEY), JSON.stringify(s)); }catch(err){}
+  return weeks;
+}
 function readLeagueWeek(leagueId){
   const s = loadJrStateReadOnly();
   return (s.leagueWeek && s.leagueWeek[leagueId] !== undefined) ? s.leagueWeek[leagueId] : 0;
@@ -3806,6 +3840,22 @@ function advanceDay(){
   checkForJrGameNight();
   checkForMissedJrGame();
 }
+// The one real time-control mechanism in the whole game now — every "sim ahead" button
+// (Sim a Day, Sim to Next Week, Sim to Season End) routes through this instead of its
+// own separate jump logic, so nothing can silently blow past a major event, a main event
+// invite, an off-season report, or a Jr Game Day the way the old Home Hub buttons could.
+// Stops the moment ANY blocking modal condition fires, exactly like real day-by-day
+// walking already does, and reports how many days actually elapsed before it had to stop.
+function simDaysWithChecks(maxDays){
+  let daysRun = 0;
+  for(let i=0;i<maxDays;i++){
+    advanceDay();
+    daysRun++;
+    if(state.pendingMajorEvent || state.pendingMainEventInvite || state.pendingJrGameNight) break;
+    if(document.getElementById('offseason-modal-overlay')) break;
+  }
+  return daysRun;
+}
 // Monday morning — a pit you're actually registered at can invite you to headline
 // tonight's League Night main event. Only fires for pits you're signed with, and only
 // if you can actually get there (province/city access), since the invite is worthless
@@ -3834,8 +3884,8 @@ function checkForJrGameNight(){
   if(!f || !f.juniorLeagueId) return;
   const leagueId = f.juniorLeagueId;
   const weekIdx = readLeagueWeek(leagueId);
-  const weeks = readLeagueSchedule(leagueId);
-  if(!weeks || weekIdx >= weeks.length) return; // no schedule yet, or season over
+  const weeks = ensureLeagueScheduleRW(leagueId); // bootstraps the schedule if it doesn't exist yet — otherwise the popup could never fire at all
+  if(!weeks || weekIdx >= weeks.length) return; // season over
   const today = getCurrentDay();
   const gameDay = jrWeekGameDay(leagueId, weekIdx);
   if(today !== gameDay - 1) return; // only the night before
@@ -4220,6 +4270,12 @@ function renderCityWalk(){
     <div class="time-bar">
       <div><span class="time-day">${formatCalendarDate(getCurrentDay())}</span><span class="time-period">${state.period}</span></div>
       <div class="time-moves">${'●'.repeat(state.movesRemaining)}${'○'.repeat(MOVES_PER_PERIOD-state.movesRemaining)} moves left</div>
+    </div>
+    <div class="btn-row" style="margin-bottom:14px; flex-wrap:wrap; gap:6px;">
+      <button class="btn btn-small" id="sim-time-day">Sim a Day</button>
+      <button class="btn btn-small" id="sim-time-week">Sim to Next Week</button>
+      ${resolveTierSeason('juvenile', getCurrentDay()).phase === 'dead-days' ? `<button class="btn btn-small btn-primary" id="sim-time-season">Sim to Next Season →</button>` : ''}
+      <span></span>
     </div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
       <span class="wallet-badge">$${f.wallet}</span>
@@ -6008,6 +6064,18 @@ function wireEvents(){
   const backFromWalk = document.getElementById('back-to-select-from-walk');
   if(backFromWalk) backFromWalk.onclick = ()=>{ state.screen='select'; render(); };
 
+  const simTimeDay = document.getElementById('sim-time-day');
+  if(simTimeDay) simTimeDay.onclick = ()=>{ simDaysWithChecks(1); render(); };
+  const simTimeWeek = document.getElementById('sim-time-week');
+  if(simTimeWeek) simTimeWeek.onclick = ()=>{ simDaysWithChecks(7); render(); };
+  const simTimeSeason = document.getElementById('sim-time-season');
+  if(simTimeSeason) simTimeSeason.onclick = ()=>{
+    const target = nextJuvenileOpeningDay(getCurrentDay());
+    const maxDays = Math.max(1, Math.min(400, target - getCurrentDay()));
+    simDaysWithChecks(maxDays);
+    render();
+  };
+
   document.querySelectorAll('[data-walk-cell]').forEach(cell=>{
     cell.onclick = ()=>{
       const [r,c] = cell.dataset.walkCell.split('|').map(Number);
@@ -6265,7 +6333,7 @@ function wireEvents(){
   const simToFightNight = document.getElementById('sim-to-fight-night');
   if(simToFightNight) simToFightNight.onclick = ()=>{
     const days = parseInt(simToFightNight.dataset.days, 10) || 1;
-    for(let i=0;i<days;i++) advanceDay();
+    simDaysWithChecks(days);
     state.flashMessage = null;
     state.screen = 'city-walk';
     render();
