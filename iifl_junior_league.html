@@ -467,21 +467,32 @@ function tierKeyDates(cycleYear){
   };
 }
 
+// Ironbound (16 teams) runs a 15-week regular season vs. 11 weeks for Northgate/
+// Tidewater (12 teams each) — a 4-week gap. Starting all three the same week (the old
+// behavior) meant Ironbound finished 4 real weeks after the other two, which meant the
+// IronIsland Cup had to sit around waiting on it. Instead, Northgate and Tidewater now
+// open 4 weeks (28 days) LATER than Ironbound — same signing deadline, same draft week,
+// rosters are ready well before any of this matters — so all three regular seasons (and
+// therefore all three sets of league playoffs) finish in the same real week.
+function leagueSeasonOpenDay(leagueId, cycleYear){
+  const dates = tierKeyDates(cycleYear);
+  return leagueId === 'kolsati_jr' ? dates.juniorOpen : dates.juniorOpen + 28;
+}
 // Junior "Fight Night" is supposed to mean a real Thursday, not just a counter — this
 // pins Week N of a league's schedule to an actual calendar day, anchored off that
-// season's juniorOpen. Without this, Sim This Week / Watch This Week had nothing
-// stopping them from racing the league's week counter arbitrarily far ahead of the
-// real island date (confirmed bug: simmed to Week 5 while the island calendar was
+// league's own season-open date. Without this, Sim This Week / Watch This Week had
+// nothing stopping them from racing the league's week counter arbitrarily far ahead of
+// the real island date (confirmed bug: simmed to Week 5 while the island calendar was
 // still on Week 2) — which also would've silently blown past Amateur/Pro games on
 // the same real dates with no way to go back and watch them.
-function jrSeasonFirstThursday(cycleYear){
-  const dates = tierKeyDates(cycleYear);
-  const openWeekdayIdx = (dates.juniorOpen - 1) % 7; // WEEKDAY_NAMES[0] === 'Monday'
+function jrSeasonFirstThursday(leagueId, cycleYear){
+  const openDay = leagueSeasonOpenDay(leagueId, cycleYear);
+  const openWeekdayIdx = (openDay - 1) % 7; // WEEKDAY_NAMES[0] === 'Monday'
   const toThursday = (3 - openWeekdayIdx + 7) % 7;
-  return dates.juniorOpen + toThursday;
+  return openDay + toThursday;
 }
 function jrWeekGameDay(leagueId, weekIdx){
-  return jrSeasonFirstThursday(currentIslandYear()) + weekIdx*7;
+  return jrSeasonFirstThursday(leagueId, currentIslandYear()) + weekIdx*7;
 }
 function jrWeekIsUnlocked(leagueId, weekIdx){
   return getCurrentDay() >= jrWeekGameDay(leagueId, weekIdx);
@@ -493,7 +504,7 @@ function jrWeekIsUnlocked(leagueId, weekIdx){
 // until there's a real arena/prestige stat) with a recency penalty so the same team
 // doesn't host every single year. lastHostedYear is a { teamKey: year } map the caller
 // persists between cycles (teamKey = `${leagueId}_${teamIndex}`).
-function pickLeaguePlayoffHost(qualifyingTeams, allTimeStandings, lastHostedYear, cycleYear){
+function pickLeaguePlayoffHost(qualifyingTeams, allTimeStandings, lastHostedYear, cycleYear, bidTeamKey){
   if(!qualifyingTeams.length) return null;
   const weighted = qualifyingTeams.map(t=>{
     const rec = allTimeStandings[t.teamIndex] || { wins:0, losses:0 };
@@ -502,7 +513,8 @@ function pickLeaguePlayoffHost(qualifyingTeams, allTimeStandings, lastHostedYear
     const yearsSinceHosted = lastHostedYear[key] ? Math.min(cycleYear - lastHostedYear[key], 5) : 5;
     // Recency penalty tapers back in over 5 years so a strong program isn't locked
     // out forever after one turn, but can't host back-to-back either.
-    const weight = Math.max(0.05, winPct) * (yearsSinceHosted / 5);
+    let weight = Math.max(0.05, winPct) * (yearsSinceHosted / 5);
+    if(bidTeamKey && key === bidTeamKey) weight *= 3; // a submitted bid meaningfully improves your odds — doesn't guarantee it
     return { ...t, weight };
   });
   const total = weighted.reduce((s,t)=> s+t.weight, 0);
@@ -1405,6 +1417,11 @@ function getLeagueWeek(leagueId){
   if(s.leagueWeek[leagueId] === undefined){ s.leagueWeek[leagueId] = 0; saveJrState(s); }
   return s.leagueWeek[leagueId];
 }
+// Regular season is always exactly teamCount-1 weeks (round robin) — playoff weeks get
+// appended onto the SAME schedule array after this, so weeks.length grows over time and
+// this stays the fixed boundary between "regular season" and "playoffs" for a league.
+function regularSeasonWeeks(league){ return league.teams.length - 1; }
+function isPlayoffWeek(leagueId, weekIdx){ return weekIdx >= regularSeasonWeeks(getJrLeague(leagueId)); }
 function advanceLeagueWeek(leagueId){
   const s = loadJrState();
   if(!s.leagueWeek) s.leagueWeek = {};
@@ -1857,7 +1874,9 @@ function resolveLeaguePlayoffHostPreSeason(leagueId, cycleYear){
   const league = getJrLeague(leagueId);
   const allTeams = league.teams.map((_,teamIndex)=> ({ leagueId, teamIndex }));
   const allTime = ensureAllTimeStandings(leagueId);
-  const picked = pickLeaguePlayoffHost(allTeams, allTime, s.lastHostedYear, cycleYear);
+  const bids = s.jrHostBids && s.jrHostBids[cycleYear];
+  const bidTeamKey = (bids && bids.leagueBid && bids.leagueBid.leagueId===leagueId) ? `${leagueId}_${bids.leagueBid.teamIndex}` : null;
+  const picked = pickLeaguePlayoffHost(allTeams, allTime, s.lastHostedYear, cycleYear, bidTeamKey);
   const teamIndex = picked ? picked.teamIndex : 0;
   s.lastHostedYear[`${leagueId}_${teamIndex}`] = cycleYear;
   s.leaguePlayoffHost[leagueId] = { cycleYear, teamIndex };
@@ -1865,11 +1884,12 @@ function resolveLeaguePlayoffHostPreSeason(leagueId, cycleYear){
   return teamIndex;
 }
 
-// Idempotent per-cycle trigger for host selection — gated at Junior's season-open day
-// (well before playoffs, matching "pre-determine... rotates year to year").
+// Retimed to jrChampHostAnnounced (May 8) so all 4 hosting assignments — 3 leagues +
+// the Island Championship — resolve and get announced together, matching the real bid
+// window (May 1 bids due, May 8 destinations announced).
 function ensureLeaguePlayoffHostsForYear(cycleYear){
   const s = loadJrState();
-  if(getCurrentDay() < tierKeyDates(cycleYear).juniorOpen) return;
+  if(getCurrentDay() < tierKeyDates(cycleYear).jrChampHostAnnounced) return;
   JR_LEAGUES.forEach(league=>{
     const existing = s.leaguePlayoffHost && s.leaguePlayoffHost[league.id];
     if(existing && existing.cycleYear === cycleYear) return;
@@ -1877,75 +1897,79 @@ function ensureLeaguePlayoffHostsForYear(cycleYear){
   });
 }
 
-// One playoff game — same 5-weight-class aggregate as the regular season
-// (simulateAiTeamGame), but doesn't touch regular-season standings, and always gives
-// the host team's fighters the hometown-arena edge regardless of which side of the
-// bracket they're on.
-function simulatePlayoffGame(leagueId, teamAIdx, teamBIdx, hostTeamIdx){
-  const slotsA = ensureTeamRoster(leagueId, teamAIdx);
-  const slotsB = ensureTeamRoster(leagueId, teamBIdx);
-  const aIsHost = teamAIdx === hostTeamIdx;
-  const lineupB = aiPickLineup(slotsB, null);
-  const lineupA = aiPickLineup(slotsA, lineupB);
-  let scoreA = 0, scoreB = 0;
-  const competedIds = new Set();
-  WEIGHT_CLASSES.forEach(wc=>{
-    const fA = lineupA[wc], fB = lineupB[wc];
-    if(!fA || !fB) return;
-    const bout = simulateBout(fA, fB, { arena:{floor:'championship court'}, hometownPit: aIsHost ? true : false });
-    if(bout.winner.id === fA.id) scoreA++; else scoreB++;
-    recordJrBoutOutcome(bout.winner, bout.loser, bout.method);
-    applyPostBoutFatigueAndInjury(bout.winner, bout.loser, bout.method);
-    competedIds.add(fA.id); competedIds.add(fB.id);
-  });
-  applyWeeklyRosterMaintenance(slotsA, competedIds);
-  applyWeeklyRosterMaintenance(slotsB, competedIds);
-  persistRosterSlots(leagueId, teamAIdx, slotsA);
-  persistRosterSlots(leagueId, teamBIdx, slotsB);
-  return { winnerIdx: scoreA >= scoreB ? teamAIdx : teamBIdx, scoreA, scoreB };
-}
-
-// Runs one league's entire playoff bracket top to bottom — call once per cycle, gated
-// at the call site by the calendar (jrLeaguePlayoffStart). The host was already locked
-// in back at season-open (ensureLeaguePlayoffHostsForYear) — this just reads it; if for
-// some reason it's missing (an old save, or the season-open trigger never fired), it
-// falls back to resolving one on the spot rather than crashing.
-function runLeaguePlayoffs(leagueId, cycleYear){
-  const qualifiers = getPlayoffQualifiers(leagueId); // [1st,2nd,3rd,4th] seed order
-  const s0 = loadJrState();
-  const preResolved = s0.leaguePlayoffHost && s0.leaguePlayoffHost[leagueId];
-  const hostTeamIdx = (preResolved && preResolved.cycleYear === cycleYear)
-    ? preResolved.teamIndex
-    : resolveLeaguePlayoffHostPreSeason(leagueId, cycleYear);
-  const semiA = simulatePlayoffGame(leagueId, qualifiers[0], qualifiers[3], hostTeamIdx); // 1 vs 4
-  const semiB = simulatePlayoffGame(leagueId, qualifiers[1], qualifiers[2], hostTeamIdx); // 2 vs 3
-  const final = simulatePlayoffGame(leagueId, semiA.winnerIdx, semiB.winnerIdx, hostTeamIdx);
-  const result = {
-    cycleYear, qualifiers, hostTeamIdx,
-    semis: [
-      { a: qualifiers[0], b: qualifiers[3], ...semiA },
-      { a: qualifiers[1], b: qualifiers[2], ...semiB },
-    ],
-    final: { a: semiA.winnerIdx, b: semiB.winnerIdx, ...final },
-    championTeamIdx: final.winnerIdx,
-  };
+// Playoffs now run through the SAME weekly machinery as the regular season — real
+// Wednesday announce, real stadium arrival, real sim/watch/participate — instead of
+// resolving silently and instantly the moment a shared calendar date arrives. Each
+// league starts ITS OWN playoffs immediately after ITS OWN regular season ends (a
+// 16-team league runs 4 weeks longer than a 12-team one, so leagues naturally stagger),
+// by appending real "weeks" onto the same schedule array the round robin already lives
+// in — every bit of existing week-indexed machinery (jrWeekGameDay, isPairingPlayed,
+// aiPickLineup, the fatigue/injury system, fighter records) keeps working unchanged.
+// The final's pairing isn't knowable until the semifinal week actually resolves, so
+// that week gets appended one real week later, once the semis are actually in — not
+// precomputed, since a bracket can't be scheduled before its seeds are known.
+function ensurePlayoffWeeksInjected(cycleYear){
   const s = loadJrState();
   if(!s.leaguePlayoffs) s.leaguePlayoffs = {};
-  s.leaguePlayoffs[leagueId] = result;
-  saveJrState(s);
-  return result;
-}
-
-// Idempotent per-cycle trigger — safe to call every render, only actually runs once
-// the calendar hits jrLeaguePlayoffStart, and only once per league per cycle.
-function ensureLeaguePlayoffsRunForYear(cycleYear){
-  const s = loadJrState();
-  if(getCurrentDay() < tierKeyDates(cycleYear).jrLeaguePlayoffStart) return;
+  let changed = false;
   JR_LEAGUES.forEach(league=>{
-    const existing = s.leaguePlayoffs && s.leaguePlayoffs[league.id];
-    if(existing && existing.cycleYear === cycleYear) return;
-    runLeaguePlayoffs(league.id, cycleYear);
+    const leagueId = league.id;
+    const regWeeks = regularSeasonWeeks(league);
+    const weeks = s.leagueSchedules && s.leagueSchedules[leagueId];
+    if(!weeks) return; // schedule not generated yet — nothing to inject onto
+    const weekIdx = (s.leagueWeek && s.leagueWeek[leagueId]) || 0;
+
+    // Stage 1: regular season just finished — append the semifinal week (real seeds).
+    if(weekIdx === regWeeks && weeks.length === regWeeks){
+      const preResolved = s.leaguePlayoffHost && s.leaguePlayoffHost[leagueId];
+      const hostTeamIdx = (preResolved && preResolved.cycleYear === cycleYear)
+        ? preResolved.teamIndex
+        : resolveLeaguePlayoffHostPreSeason(leagueId, cycleYear); // safety net for an old save
+      const qualifiers = getPlayoffQualifiers(leagueId); // [1st,2nd,3rd,4th] seed order
+      weeks.push([
+        { home: qualifiers[0], away: qualifiers[3] }, // 1 vs 4
+        { home: qualifiers[1], away: qualifiers[2] }, // 2 vs 3
+      ]);
+      s.leaguePlayoffs[leagueId] = { cycleYear, qualifiers, hostTeamIdx, stage:'semis' };
+      changed = true;
+    }
+    // Stage 2: semifinal week just finished — append the final (real winners).
+    else if(weekIdx === regWeeks+1 && weeks.length === regWeeks+1){
+      const lp = s.leaguePlayoffs[leagueId];
+      if(lp && lp.cycleYear === cycleYear && lp.stage === 'semis'){
+        const semiWeek = weeks[regWeeks];
+        const scoreA = getGameScore(leagueId, regWeeks, semiWeek[0].home, semiWeek[0].away);
+        const scoreB = getGameScore(leagueId, regWeeks, semiWeek[1].home, semiWeek[1].away);
+        if(scoreA && scoreB){
+          const winnerA = scoreA.homeScore >= scoreA.awayScore ? semiWeek[0].home : semiWeek[0].away;
+          const winnerB = scoreB.homeScore >= scoreB.awayScore ? semiWeek[1].home : semiWeek[1].away;
+          weeks.push([ { home: winnerA, away: winnerB } ]);
+          lp.stage = 'final';
+          lp.semis = [
+            { a: semiWeek[0].home, b: semiWeek[0].away, winnerIdx: winnerA, scoreA: scoreA.homeScore, scoreB: scoreA.awayScore },
+            { a: semiWeek[1].home, b: semiWeek[1].away, winnerIdx: winnerB, scoreA: scoreB.homeScore, scoreB: scoreB.awayScore },
+          ];
+          changed = true;
+        }
+      }
+    }
+    // Stage 3: final week just finished — crown the champion.
+    else if(weekIdx === regWeeks+2 && weeks.length === regWeeks+2){
+      const lp = s.leaguePlayoffs[leagueId];
+      if(lp && lp.cycleYear === cycleYear && lp.stage === 'final'){
+        const finalWeek = weeks[regWeeks+1];
+        const score = getGameScore(leagueId, regWeeks+1, finalWeek[0].home, finalWeek[0].away);
+        if(score){
+          const championTeamIdx = score.homeScore >= score.awayScore ? finalWeek[0].home : finalWeek[0].away;
+          lp.final = { a: finalWeek[0].home, b: finalWeek[0].away, winnerIdx: championTeamIdx, scoreA: score.homeScore, scoreB: score.awayScore };
+          lp.championTeamIdx = championTeamIdx;
+          lp.stage = 'complete';
+          changed = true;
+        }
+      }
+    }
   });
+  if(changed) saveJrState(s);
 }
 
 /* ---------------------------- ISLAND CHAMPIONSHIP ---------------------------- */
@@ -1965,13 +1989,16 @@ function pickIslandChampionshipHost(cycleYear){
   const s = loadJrState();
   if(!s.islandChampHostHistory) s.islandChampHostHistory = {};
   const allTeams = allJuniorTeamsFlat();
+  const bids = s.jrHostBids && s.jrHostBids[cycleYear];
+  const bidTeamKey = bids && bids.islandBid ? `${bids.islandBid.leagueId}_${bids.islandBid.teamIndex}` : null;
   const weighted = allTeams.map(t=>{
     const allTime = ensureAllTimeStandings(t.leagueId);
     const rec = allTime[t.teamIndex] || { wins:0, losses:0 };
     const winPct = (rec.wins+rec.losses) ? rec.wins/(rec.wins+rec.losses) : 0.5;
     const key = `${t.leagueId}_${t.teamIndex}`;
     const yearsSince = s.islandChampHostHistory[key] ? Math.min(cycleYear - s.islandChampHostHistory[key], 5) : 5;
-    const weight = Math.max(0.05, winPct) * (yearsSince/5);
+    let weight = Math.max(0.05, winPct) * (yearsSince/5);
+    if(bidTeamKey && key === bidTeamKey) weight *= 3; // a submitted bid meaningfully improves your odds — doesn't guarantee it
     return { ...t, weight };
   });
   const total = weighted.reduce((sum,t)=> sum+t.weight, 0);
@@ -2032,9 +2059,9 @@ function runIslandChampionship(cycleYear){
     hostSlot = best || host;
   }
 
-  // Cross-league team match — both sides borrow simulatePlayoffGame's per-weight-class
-  // aggregate, but since the two teams are in different leagues (different roster
-  // pools), we resolve it directly here instead of routing through one league's helper.
+  // Cross-league team match — same per-weight-class aggregate the regular season and
+  // league playoffs use, but since the two teams are in different leagues (different
+  // roster pools), we resolve it directly here instead of routing through a shared helper.
   function crossLeagueGame(teamA, teamB, hostTeam){
     const slotsA = ensureTeamRoster(teamA.leagueId, teamA.teamIndex);
     const slotsB = ensureTeamRoster(teamB.leagueId, teamB.teamIndex);
@@ -2164,6 +2191,13 @@ function isWeekFullyPlayed(leagueId, weekIdx){
 // involved) — used to resolve every other game happening around the league each week.
 function simulateAiTeamGame(leagueId, homeIdx, awayIdx, weekIdx, scratchedFighterId){
   if(weekIdx !== undefined && isPairingPlayed(leagueId, weekIdx, homeIdx, awayIdx)) return; // already resolved via another path
+  const playoffWk = weekIdx !== undefined && isPlayoffWeek(leagueId, weekIdx);
+  let hostIdx = null;
+  if(playoffWk){
+    const s0 = loadJrState();
+    const h = s0.leaguePlayoffHost && s0.leaguePlayoffHost[leagueId];
+    if(h) hostIdx = h.teamIndex;
+  }
   const homeSlots = ensureTeamRoster(leagueId, homeIdx);
   const awaySlots = ensureTeamRoster(leagueId, awayIdx);
   // A scratched fighter (missed the Thursday deadline) is excluded from THIS game's
@@ -2178,7 +2212,8 @@ function simulateAiTeamGame(leagueId, homeIdx, awayIdx, weekIdx, scratchedFighte
   WEIGHT_CLASSES.forEach(wc=>{
     const hf = homeLineup[wc], af = awayLineup[wc];
     if(!hf || !af) return;
-    const bout = simulateBout(hf, af, { arena:{floor:'neutral court'}, hometownPit:true });
+    const hometownPit = playoffWk ? (hostIdx !== null && homeIdx === hostIdx) : true;
+    const bout = simulateBout(hf, af, { arena:{floor: playoffWk ? 'championship court' : 'neutral court'}, hometownPit });
     if(bout.winner.id === hf.id) homeScore++; else awayScore++;
     recordJrBoutOutcome(bout.winner, bout.loser, bout.method);
     applyPostBoutFatigueAndInjury(bout.winner, bout.loser, bout.method);
@@ -2186,7 +2221,7 @@ function simulateAiTeamGame(leagueId, homeIdx, awayIdx, weekIdx, scratchedFighte
   });
   applyWeeklyRosterMaintenance(homeSlots, competedIds);
   applyWeeklyRosterMaintenance(awaySlots, competedIds);
-  recordStandingsResult(leagueId, homeIdx, awayIdx, homeScore > awayScore);
+  if(!playoffWk) recordStandingsResult(leagueId, homeIdx, awayIdx, homeScore > awayScore); // playoff results are tracked separately (semis/final), not folded into regular-season W-L
   if(weekIdx !== undefined){
     markPairingPlayed(leagueId, weekIdx, homeIdx, awayIdx);
     recordGameScore(leagueId, weekIdx, homeIdx, awayIdx, homeScore, awayScore);
@@ -2976,7 +3011,7 @@ function renderSelect(){
   ensureJuniorFAWaiverCaughtUp(); // catches up any Tuesdays that passed since this was last open
   const cycleYearNow = currentIslandYear();
   ensureLeaguePlayoffHostsForYear(cycleYearNow);
-  ensureLeaguePlayoffsRunForYear(cycleYearNow);
+  ensurePlayoffWeeksInjected(cycleYearNow);
   ensureIslandChampionshipRunForYear(cycleYearNow);
   const roster = getRoster();
   if(!roster.length){
@@ -3290,6 +3325,7 @@ function renderRoster(){
 // weeks forward. Before this, only the player's OWN league ever advanced, and only when
 // they manually played through Team Season — the other 2 leagues never moved at all.
 function renderLeagueNight(){
+  ensurePlayoffWeeksInjected(currentIslandYear());
   const cards = JR_LEAGUES.map(league=>{
     const weekIdx = getLeagueWeek(league.id);
     const weeks = ensureLeagueSchedule(league.id);
@@ -3351,6 +3387,7 @@ function renderLeagueNight(){
 
 // One league's slate for its current week — sim or watch each pairing individually.
 function renderLeagueNightGames(){
+  ensurePlayoffWeeksInjected(currentIslandYear());
   const league = getJrLeague(state.viewLeagueId);
   const weekIdx = getLeagueWeek(league.id);
   const weeks = ensureLeagueSchedule(league.id);
@@ -3404,6 +3441,7 @@ function renderLeagueNightGames(){
 }
 
 function renderSeasonHub(){
+  ensurePlayoffWeeksInjected(currentIslandYear());
   const f = getFighterById(state.fighterId);
   const league = getJrLeague(f.juniorLeagueId);
   const teamName = jrTeamName(f.juniorLeagueId, f.juniorTeamId);
@@ -4236,7 +4274,7 @@ function wireEvents(){
     persistRosterSlots(gd.leagueId, gd.homeIdx, homeSlotsForMaint);
     persistRosterSlots(gd.leagueId, gd.awayIdx, awaySlotsForMaint);
 
-    recordStandingsResult(gd.leagueId, gd.homeIdx, gd.awayIdx, homeWon);
+    if(!isPlayoffWeek(gd.leagueId, gd.week)) recordStandingsResult(gd.leagueId, gd.homeIdx, gd.awayIdx, homeWon); // playoff results tracked separately, not folded into regular-season W-L
     recordGameScore(gd.leagueId, gd.week, gd.homeIdx, gd.awayIdx, homeScore, awayScore);
     markPairingPlayed(gd.leagueId, gd.week, gd.homeIdx, gd.awayIdx);
     if(!gd.suppressWeekAdvance) advanceLeagueWeek(gd.leagueId);
@@ -4302,7 +4340,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V45 · 2026-07-19</div>
+<div class="version-badge">JUNIOR LEAGUE · V47 · 2026-07-19</div>
 </body>
 </html>
 
