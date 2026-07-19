@@ -1429,7 +1429,11 @@ function syncFighterAge(f, today){
 // these files share localStorage but not code. Used here only to grey out the map, not
 // to enforce anything (free_roam.html is the actual gatekeeper for entry).
 const FAME_CITY_TIER_UNLOCK = 12;
-const FAME_PROVINCE_UNLOCK = 30;
+const PROVINCE_FAME_UNLOCK = {
+  kolsati: 65, ditiero: 65,
+  sherwood: 40, alexandretta: 40, bay: 40,
+  gazon: 20, carpathia: 20, northeast: 20,
+};
 function settlementTier(provinceId, settlementName){
   const entry = (SETTLEMENT_DATA[provinceId]||[]).find(e=>e.name===settlementName);
   return entry ? entry.tier : 'Village';
@@ -1437,7 +1441,7 @@ function settlementTier(provinceId, settlementName){
 function hasProvinceAccess(f, provinceId){
   if(!provinceId) return false;
   if(provinceId === homeProvinceIdFor(f)) return true;
-  if((f.fame||0) >= FAME_PROVINCE_UNLOCK) return true;
+  if((f.fame||0) >= (PROVINCE_FAME_UNLOCK[provinceId] !== undefined ? PROVINCE_FAME_UNLOCK[provinceId] : 30)) return true;
   return (f.earnedProvinceAccess||[]).includes(provinceId);
 }
 function hasCityTierAccess(f, provinceId, settlementName){
@@ -1737,7 +1741,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-reset-island">🔄 Reset Island (Test Mode) →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V18 · 2026-07-17</div>
+        <div class="version-badge">HOME · V19 · 2026-07-18</div>
       </footer>
     </div>
   `;
@@ -1816,7 +1820,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V18 · 2026-07-17</div>
+        <div class="version-badge">HOME · V19 · 2026-07-18</div>
       </footer>
     </div>
   `;
@@ -2005,8 +2009,8 @@ function showProvinceDetail(provinceId){
         <div class="ticket-title" style="margin-bottom:14px;">🔒 ${province.name}</div>
         <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:18px;">
           Nobody out here knows ${playable ? playable.name : 'your fighter'}'s name yet. Get an invite to fight
-          here, make a connection while walking the streets somewhere, or build up to ${FAME_PROVINCE_UNLOCK} Fame
-          — that's enough of a reputation to open every province, invite or not.
+          here, make a connection while walking the streets somewhere, or build up to ${PROVINCE_FAME_UNLOCK[provinceId] !== undefined ? PROVINCE_FAME_UNLOCK[provinceId] : 30} Fame
+          — that's enough of a reputation to open this province, invite or not.
         </p>
         <button class="btn btn-primary" id="close-province-modal">Close</button>
       </div>
