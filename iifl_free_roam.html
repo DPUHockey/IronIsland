@@ -1330,6 +1330,10 @@ function saveFieldPools(pools){
     }catch(roamErr){ console.error('IIFL roam state emergency cleanup failed:', roamErr); }
 
     if(typeof PROVINCES !== 'undefined' && typeof enforceProvincePoolCap === 'function'){
+      if(pools.juniorFA && pools.juniorFA.length > JUNIOR_FA_POOL_CAP){
+        pools.juniorFA.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats));
+        pools.juniorFA = pools.juniorFA.slice(0, JUNIOR_FA_POOL_CAP);
+      }
       PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 150));
       try{ localStorage.setItem(sk(FIELD_KEY), JSON.stringify(pools)); return true; }
       catch(err2){
@@ -2158,6 +2162,8 @@ function healLegacyJuvenileBloat(pools, today){
   return changed;
 }
 
+const JUNIOR_FA_POOL_CAP = 150; // island-wide, not per-province — this pool never had a cap at all, which is how it reached 8,700+ entries and 4MB on its own
+
 function syncJuvenilePoolAges(pools, today){
   if(!pools.juniorFA) pools.juniorFA = [];
   PROVINCES.forEach(p=>{
@@ -2177,6 +2183,15 @@ function syncJuvenilePoolAges(pools, today){
   // The FA pool ages out the same way — once someone crosses 20 with nobody having
   // signed them, their Junior window is closed for good.
   pools.juniorFA = pools.juniorFA.filter(f=>{ syncFighterAge(f, today); return f.age < 20 && !f.juniorTeamId; });
+  // Cap it. Waiver signings can only ever process a handful of fighters per week
+  // island-wide, nowhere close to the inflow of every province's undrafted 18-year-olds
+  // over real game years — an uncapped pool just grows forever. Keep the best prospects;
+  // a team scanning the wire wants the realistic, useful end of the pool anyway, not a
+  // long tail of fighters no one was ever going to sign.
+  if(pools.juniorFA.length > JUNIOR_FA_POOL_CAP){
+    pools.juniorFA.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats));
+    pools.juniorFA = pools.juniorFA.slice(0, JUNIOR_FA_POOL_CAP);
+  }
 }
 
 function catchUpJuvenileSimulation(){
@@ -6079,6 +6094,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V72 · 2026-07-18</div>
+<div class="version-badge">FREE ROAM · V73 · 2026-07-18</div>
 </body>
 </html>
