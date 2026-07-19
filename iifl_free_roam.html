@@ -860,6 +860,13 @@ function getMajorEventsForYear(cycleYear){
     { day: d.juniorDraftDayTidewater, title: 'Tidewater Jr League Draft', tier: 'Junior', kind: 'draft', description: 'Tier 3 drafts last, same shared pool, same risk.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
     { day: d.juniorSignDeadline, title: 'Junior League Signing Deadline', tier: 'Junior', kind: 'deadline', description: 'Every fighter drafted by more than one league signs with the highest tier that took them — the rest lose that roster spot for the cycle.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
     { day: d.juniorOpen, title: 'Junior League Opens', tier: 'Junior', kind: 'open' },
+    ...Array.from({length:16}, (_,i)=> ({
+      day: d.juniorOpen + 3 + i*7,
+      title: `Jr Fight Night — Week ${i+1}`,
+      tier: 'Junior', kind: 'league-night',
+      description: 'All three Junior Leagues play their weekly slate tonight.',
+      watchUrl: 'iifl_junior_league.html?screen=league-night',
+    })),
     { day: d.juniorTradeDeadline, title: 'Junior Trade Deadline', tier: 'Junior', kind: 'deadline' },
     { day: d.juniorRegEnd, title: 'Junior Regular Season Ends', tier: 'Junior', kind: 'end' },
     { day: d.jrLeaguePlayoffStart, title: 'Junior League Playoffs Begin', tier: 'Junior', kind: 'playoffs' },
@@ -3659,6 +3666,28 @@ function checkForMajorEventToday(){
   if(loadEventLog().some(e=> e.day === evt.day)) return; // already surfaced (watched or simmed) once
   state.pendingMajorEvent = evt;
 }
+// Checks whether the player has an already-booked main event slot TODAY, anywhere —
+// used to warn before Watch It / Sim the Day silently blows past it. Booked slots don't
+// carry a province/settlement back-reference, so this has to scan every cached schedule
+// for today rather than looking one up directly.
+function findTodaysHeadlineBooking(){
+  const today = getCurrentDay();
+  const s = loadRoamState();
+  if(!s.pitSchedules) return null;
+  for(const key of Object.keys(s.pitSchedules)){
+    const parts = key.split('|');
+    const day = parseInt(parts[parts.length-1], 10);
+    if(day !== today) continue;
+    const sched = s.pitSchedules[key];
+    if(!sched || !sched.slots) continue;
+    const mainEventSlots = sched.slots.length >= 6 ? 2 : 1;
+    const idx = sched.slots.findIndex(sl=> sl.bookedByPlayer);
+    if(idx >= 0 && idx >= sched.slots.length - mainEventSlots){
+      return { time: sched.slots[idx].time };
+    }
+  }
+  return null;
+}
 function showEventChoiceModal(evt){
   if(document.getElementById('event-modal-overlay')) return; // already showing
   const overlay = document.createElement('div');
@@ -3677,24 +3706,34 @@ function showEventChoiceModal(evt){
     </div>
   `;
   document.body.appendChild(overlay);
-  if(evt.watchUrl) document.getElementById('event-watch').onclick = ()=>{
+  const proceedWatch = ()=>{
     logEventResult(evt, true);
     state.pendingMajorEvent = null;
     window.location.href = evt.watchUrl;
   };
+  const proceedSim = ()=>{
+    logEventResult(evt, false);
+    state.pendingMajorEvent = null;
+    overlay.remove();
+  };
+  const confirmIfHeadlineConflict = (proceedFn)=>{
+    const booking = findTodaysHeadlineBooking();
+    if(!booking){ proceedFn(); return; }
+    const sure = window.confirm(`You're headlining a main event tonight at ${booking.time} — this will skip it. Miss your headline to do this instead?`);
+    if(sure) proceedFn();
+  };
+  if(evt.watchUrl) document.getElementById('event-watch').onclick = ()=> confirmIfHeadlineConflict(proceedWatch);
   // Already in Free Roam here, so "going to" the event just means staying put on the
   // event day instead of auto-resolving it — closes the modal without the Sim the Day
   // silent-resolution step, so the player can walk to a pit, check the newspaper, etc.
+  // No conflict check needed — staying in Free Roam still lets the player go fight their
+  // booked headline slot themselves.
   document.getElementById('event-goto').onclick = ()=>{
     logEventResult(evt, false);
     state.pendingMajorEvent = null;
     overlay.remove();
   };
-  document.getElementById('event-sim').onclick = ()=>{
-    logEventResult(evt, false);
-    state.pendingMajorEvent = null;
-    overlay.remove();
-  };
+  document.getElementById('event-sim').onclick = ()=> confirmIfHeadlineConflict(proceedSim);
 }
 function logEventResult(evt, watched){
   const log = loadEventLog();
@@ -6094,6 +6133,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V73 · 2026-07-18</div>
+<div class="version-badge">FREE ROAM · V75 · 2026-07-18</div>
 </body>
 </html>
