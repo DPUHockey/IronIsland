@@ -1357,6 +1357,7 @@ function findFighterInPools(pools, id){
 }
 
 const JUNIOR_DRAFT_ROUNDS = 4;
+const INAUGURAL_DRAFT_ROUNDS = 7; // one-time expansion draft, the first cycle this save ever runs — turns the fake starting rosters into real ones fast instead of trickling in over years
 
 // The actual bug that made every Junior draft cycle draft nobody: beginDraftCycleIfNeeded
 // only ever looks at fighters already stamped juniorDraftDeclaredYear/juniorDraftDeclaration
@@ -1452,6 +1453,8 @@ function processFAWaiverForLeague(league, pools){
   saveJrState(s2);
 }
 
+const FA_TURNS_PER_TUESDAY = 3; // some teams need more than one signing to catch up, not just the single front-of-queue pick
+
 function ensureJuniorFAWaiverCaughtUp(){
   const s = loadJrState();
   const today = getCurrentDay();
@@ -1462,7 +1465,9 @@ function ensureJuniorFAWaiverCaughtUp(){
   if(!pools.juniorFA) pools.juniorFA = [];
   while(day <= today && iterations < 400){
     if(weekdayNameForDay(day) === 'Tuesday'){
-      JR_LEAGUES.forEach(league=> processFAWaiverForLeague(league, pools));
+      JR_LEAGUES.forEach(league=>{
+        for(let i=0;i<FA_TURNS_PER_TUESDAY;i++) processFAWaiverForLeague(league, pools);
+      });
     }
     day++; iterations++;
   }
@@ -1487,8 +1492,11 @@ function beginDraftCycleIfNeeded(cycleYear){
     if(f.juniorDraftDeclaredYear === cycleYear && f.juniorDraftDeclaration === 'declared') declared.push(f);
   });
   declared.sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats)); // frozen, best-available, shared by all 3 leagues
+  if(s.firstDraftCycleYear === undefined) s.firstDraftCycleYear = cycleYear; // this save's inaugural draft
+  const rounds = (cycleYear === s.firstDraftCycleYear) ? INAUGURAL_DRAFT_ROUNDS : JUNIOR_DRAFT_ROUNDS;
   s.draftCycle = {
     cycleYear,
+    rounds,
     declaredIds: declared.map(f=>f.id),
     boards: {},        // leagueId -> { board:[[pick,pick,...]xN rounds], picks:[{round,teamIndex,fighterId,name,hometown,record}] }
     completedLeagues: [],
@@ -1504,7 +1512,8 @@ function runLeagueDraftForCycle(league, dc, pools){
   const board = [];
   const picks = [];
   let idx = 0;
-  for(let r=0; r<JUNIOR_DRAFT_ROUNDS; r++){
+  const rounds = dc.rounds || JUNIOR_DRAFT_ROUNDS;
+  for(let r=0; r<rounds; r++){
     const roundPicks = [];
     order.forEach(teamIndex=>{
       const prospect = declaredFighters[idx]; idx++; // same shared list every league draws from — NOT depleted between leagues
@@ -3555,7 +3564,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V32 · 2026-07-18</div>
+<div class="version-badge">JUNIOR LEAGUE · V33 · 2026-07-18</div>
 </body>
 </html>
 
