@@ -467,6 +467,26 @@ function tierKeyDates(cycleYear){
   };
 }
 
+// Junior "Fight Night" is supposed to mean a real Thursday, not just a counter — this
+// pins Week N of a league's schedule to an actual calendar day, anchored off that
+// season's juniorOpen. Without this, Sim This Week / Watch This Week had nothing
+// stopping them from racing the league's week counter arbitrarily far ahead of the
+// real island date (confirmed bug: simmed to Week 5 while the island calendar was
+// still on Week 2) — which also would've silently blown past Amateur/Pro games on
+// the same real dates with no way to go back and watch them.
+function jrSeasonFirstThursday(cycleYear){
+  const dates = tierKeyDates(cycleYear);
+  const openWeekdayIdx = (dates.juniorOpen - 1) % 7; // WEEKDAY_NAMES[0] === 'Monday'
+  const toThursday = (3 - openWeekdayIdx + 7) % 7;
+  return dates.juniorOpen + toThursday;
+}
+function jrWeekGameDay(leagueId, weekIdx){
+  return jrSeasonFirstThursday(currentIslandYear()) + weekIdx*7;
+}
+function jrWeekIsUnlocked(leagueId, weekIdx){
+  return getCurrentDay() >= jrWeekGameDay(leagueId, weekIdx);
+}
+
 // Weighted rotation for which QUALIFYING team hosts its league's own playoff bracket.
 // Hosting is a venue perk, not a playoff-entry mechanic — it's picked from teams that
 // already qualified. Weighted toward "better programs" (all-time win% is the proxy
@@ -3072,24 +3092,28 @@ function renderLeagueNight(){
     const roster = getRoster();
     const mine = roster.find(r=>r.isPlayable);
     const myGame = mine && mine.juniorLeagueId===league.id ? pairings.find(p=> p.home===mine.juniorTeamId || p.away===mine.juniorTeamId) : null;
+    const gameDay = seasonOver ? null : jrWeekGameDay(league.id, weekIdx);
+    const unlocked = seasonOver || jrWeekIsUnlocked(league.id, weekIdx);
     return `
       <div class="fighter-row" style="align-items:flex-start; flex-direction:column; gap:8px;">
         <div style="display:flex; justify-content:space-between; width:100%; align-items:baseline;">
           <div class="fr-name">${league.name}</div>
-          <div class="fr-meta">${seasonOver ? 'Season complete' : `Week ${weekIdx+1} of ${weeks.length}`}</div>
+          <div class="fr-meta">${seasonOver ? 'Season complete' : `Week ${weekIdx+1} of ${weeks.length} · ${formatCalendarDateShort(gameDay)}`}</div>
         </div>
         ${myGame ? `<div class="fr-meta" style="color:var(--brass);">Your team plays this week — ${jrTeamName(league.id, myGame.away)} @ ${jrTeamName(league.id, myGame.home)}</div>` : ''}
         <div class="fr-meta">${seasonOver ? '' : `${playedCount} of ${pairings.length} games resolved this week`}</div>
         <div class="btn-row" style="width:100%;">
           <button class="btn btn-small" data-view-league="${league.id}">Standings →</button>
-          ${seasonOver ? '' : `<button class="btn btn-small" data-sim-league="${league.id}">Sim This Week</button><button class="btn btn-small btn-primary" data-watch-league="${league.id}">Watch This Week →</button>`}
+          ${seasonOver ? '' : unlocked
+            ? `<button class="btn btn-small" data-sim-league="${league.id}">Sim This Week</button><button class="btn btn-small btn-primary" data-watch-league="${league.id}">Watch This Week →</button>`
+            : `<span class="fr-meta" style="color:var(--muted);">🔒 Unlocks ${formatCalendarDateShort(gameDay)}</span>`}
         </div>
       </div>
     `;
   }).join('');
   return `
     <div class="section-label">Jr Fight Night — Thursday</div>
-    <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:16px;">Sim everything at once, sim one league at a time, or drop into any league to watch its games individually.</p>
+    <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:16px;">Sim everything at once, sim one league at a time, or drop into any league to watch its games individually. Each week unlocks on its real Thursday — no racing ahead of the calendar.</p>
     <div class="fighter-grid">${cards}</div>
     <div class="btn-row" style="margin-top:18px;"><span></span><button class="btn btn-primary" id="sim-all-leagues">⚡ Sim All 3 Leagues →</button></div>
     <div class="btn-row" style="margin-top:8px;"><a class="btn" href="iifl_home.html" style="text-decoration:none; display:inline-block;">🏠 Home Hub</a><span></span></div>
@@ -3103,6 +3127,9 @@ function renderLeagueNightGames(){
   const weeks = ensureLeagueSchedule(league.id);
   if(weekIdx >= weeks.length){
     return `<div class="empty-note">${league.name}'s season is already complete.</div><div class="btn-row"><button class="btn" id="back-to-league-night">← Jr Fight Night</button><span></span></div>`;
+  }
+  if(!jrWeekIsUnlocked(league.id, weekIdx)){
+    return `<div class="empty-note">Week ${weekIdx+1} isn't up yet — unlocks ${formatCalendarDateShort(jrWeekGameDay(league.id, weekIdx))}.</div><div class="btn-row"><button class="btn" id="back-to-league-night">← Jr Fight Night</button><span></span></div>`;
   }
   const roster = getRoster();
   const mine = roster.find(r=>r.isPlayable);
@@ -3606,6 +3633,7 @@ function wireEvents(){
       const weekIdx = getLeagueWeek(league.id);
       const weeks = ensureLeagueSchedule(league.id);
       if(weekIdx >= weeks.length) return;
+      if(!jrWeekIsUnlocked(league.id, weekIdx)) return; // still waiting on its real Thursday
       weeks[weekIdx].forEach(p=> simPairingFully(league.id, weekIdx, p));
       if(isWeekFullyPlayed(league.id, weekIdx)) advanceLeagueWeek(league.id);
     });
@@ -3619,6 +3647,7 @@ function wireEvents(){
       const weekIdx = getLeagueWeek(league.id);
       const weeks = ensureLeagueSchedule(league.id);
       if(weekIdx >= weeks.length) return;
+      if(!jrWeekIsUnlocked(league.id, weekIdx)) return; // still waiting on its real Thursday
       weeks[weekIdx].forEach(p=> simPairingFully(league.id, weekIdx, p));
       if(isWeekFullyPlayed(league.id, weekIdx)) advanceLeagueWeek(league.id);
       state.screen = 'league-night'; // simPairingFully may have redirected this via finishTeamGame
@@ -3627,7 +3656,12 @@ function wireEvents(){
   });
 
   document.querySelectorAll('[data-watch-league]').forEach(btn=>{
-    btn.onclick = ()=>{ state.viewLeagueId = btn.dataset.watchLeague; state.screen = 'league-night-games'; render(); };
+    btn.onclick = ()=>{
+      const league = getJrLeague(btn.dataset.watchLeague);
+      const weekIdx = getLeagueWeek(league.id);
+      if(weekIdx < ensureLeagueSchedule(league.id).length && !jrWeekIsUnlocked(league.id, weekIdx)) return; // still waiting on its real Thursday
+      state.viewLeagueId = btn.dataset.watchLeague; state.screen = 'league-night-games'; render();
+    };
   });
   const backToLeagueNight = document.getElementById('back-to-league-night');
   if(backToLeagueNight) backToLeagueNight.onclick = ()=>{ state.screen = 'league-night'; render(); };
