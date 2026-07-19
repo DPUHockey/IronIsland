@@ -556,6 +556,16 @@ function getMajorEventsForYear(cycleYear){
     { day: d.juniorDraftDayTidewater, title: 'Tidewater Jr League Draft', tier: 'Junior', kind: 'draft', description: 'Tier 3 drafts last, same shared pool, same risk.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
     { day: d.juniorSignDeadline, title: 'Junior League Signing Deadline', tier: 'Junior', kind: 'deadline', description: 'Every fighter drafted by more than one league signs with the highest tier that took them — the rest lose that roster spot for the cycle.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
     { day: d.juniorOpen, title: 'Junior League Opens', tier: 'Junior', kind: 'open' },
+    // One entry per week of the 16-week regular season, every Thursday — this is what
+    // actually pushes all 3 leagues' weeks forward. Before this, only the player's own
+    // league ever advanced, and only by manually playing through Team Season.
+    ...Array.from({length:16}, (_,i)=> ({
+      day: d.juniorOpen + 3 + i*7,
+      title: `Jr Fight Night — Week ${i+1}`,
+      tier: 'Junior', kind: 'league-night',
+      description: 'All three Junior Leagues play their weekly slate tonight.',
+      watchUrl: 'iifl_junior_league.html?screen=league-night',
+    })),
     { day: d.juniorTradeDeadline, title: 'Junior Trade Deadline', tier: 'Junior', kind: 'deadline' },
     { day: d.juniorRegEnd, title: 'Junior Regular Season Ends', tier: 'Junior', kind: 'end' },
     { day: d.jrLeaguePlayoffStart, title: 'Junior League Playoffs Begin', tier: 'Junior', kind: 'playoffs' },
@@ -609,6 +619,31 @@ function advanceWithEventChecks(targetDay){
   showEventChoiceModal(evt, targetDay);
   renderApp();
 }
+const ROAM_STATE_KEY_RO = 'iifl_free_roam_v1';
+function loadRoamStateReadOnly(){
+  try{ const raw = localStorage.getItem(sk(ROAM_STATE_KEY_RO)); return raw ? JSON.parse(raw) : { pitSchedules:{} }; }
+  catch(err){ return { pitSchedules:{} }; }
+}
+// Checks whether the player has an already-booked main event slot TODAY, anywhere —
+// used to warn before Watch It / Sim the Day silently blows past it.
+function findTodaysHeadlineBooking(){
+  const today = getCurrentDay();
+  const s = loadRoamStateReadOnly();
+  if(!s.pitSchedules) return null;
+  for(const key of Object.keys(s.pitSchedules)){
+    const parts = key.split('|');
+    const day = parseInt(parts[parts.length-1], 10);
+    if(day !== today) continue;
+    const sched = s.pitSchedules[key];
+    if(!sched || !sched.slots) continue;
+    const mainEventSlots = sched.slots.length >= 6 ? 2 : 1;
+    const idx = sched.slots.findIndex(sl=> sl.bookedByPlayer);
+    if(idx >= 0 && idx >= sched.slots.length - mainEventSlots){
+      return { time: sched.slots[idx].time };
+    }
+  }
+  return null;
+}
 function showEventChoiceModal(evt, resumeTarget){
   const overlay = document.createElement('div');
   overlay.id = 'event-modal-overlay';
@@ -626,21 +661,28 @@ function showEventChoiceModal(evt, resumeTarget){
     </div>
   `;
   document.body.appendChild(overlay);
-  if(evt.watchUrl) document.getElementById('event-watch').onclick = ()=>{
+  const confirmIfHeadlineConflict = (proceedFn)=>{
+    const booking = findTodaysHeadlineBooking();
+    if(!booking){ proceedFn(); return; }
+    const sure = window.confirm(`You're headlining a main event tonight at ${booking.time} — this will skip it. Miss your headline to do this instead?`);
+    if(sure) proceedFn();
+  };
+  if(evt.watchUrl) document.getElementById('event-watch').onclick = ()=> confirmIfHeadlineConflict(()=>{
     logEventResult(evt, true);
     window.location.href = evt.watchUrl;
-  };
+  });
   // Lands the clock on the event day, same as Sim the Day, but instead of resolving it
   // silently and staying on the Home dock, this drops the player straight into Free Roam
   // on that day — most events (season opens/closes, playoffs, trade deadlines) don't have
   // a dedicated screen to watch, so "being there" means walking around and seeing it play
-  // out through the normal Free Roam systems, not a canned result.
+  // out through the normal Free Roam systems, not a canned result. No conflict check
+  // needed — landing in Free Roam still lets the player go fight their booked slot.
   document.getElementById('event-goto').onclick = ()=>{
     logEventResult(evt, false);
     const c = loadClock(); c.day = evt.day; saveClock(c);
     window.location.href = 'iifl_free_roam.html';
   };
-  document.getElementById('event-sim').onclick = ()=>{
+  document.getElementById('event-sim').onclick = ()=> confirmIfHeadlineConflict(()=>{
     logEventResult(evt, false);
     overlay.remove();
     const c = loadClock(); c.day = evt.day; saveClock(c); // land on the event day itself so its effects (draft resolving, etc.) fire
@@ -649,7 +691,7 @@ function showEventChoiceModal(evt, resumeTarget){
     } else {
       renderApp();
     }
-  };
+  });
 }
 
 // Weighted rotation for which QUALIFYING team hosts its league's own playoff bracket.
@@ -1741,7 +1783,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-reset-island">🔄 Reset Island (Test Mode) →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V19 · 2026-07-18</div>
+        <div class="version-badge">HOME · V21 · 2026-07-18</div>
       </footer>
     </div>
   `;
@@ -1820,7 +1862,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V19 · 2026-07-18</div>
+        <div class="version-badge">HOME · V21 · 2026-07-18</div>
       </footer>
     </div>
   `;
