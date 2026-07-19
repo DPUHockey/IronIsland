@@ -1409,7 +1409,12 @@ function seedJuvenilePoolInPlace(pools, provinceId){
   // never converge (and would silently keep regenerating fighters forever) if checked
   // that precisely.
   const totalsByHometown = {};
-  pool.forEach(f=>{ totalsByHometown[f.hometown] = (totalsByHometown[f.hometown]||0) + 1; });
+  // Only count fighters who can still actually fight toward "this settlement already has
+  // enough population" — otherwise a settlement whose population has aged into their
+  // career fight cap (but not yet 18) reads as fully seeded by raw headcount while the
+  // live-filtered roster everything else reads from (juvenileFightsRemaining>0) is
+  // empty or near-empty. That's what an empty pit with no buy-in option actually was.
+  pool.forEach(f=>{ if(juvenileFightsRemaining(f) > 0) totalsByHometown[f.hometown] = (totalsByHometown[f.hometown]||0) + 1; });
   pitLocationsForProvince(provinceId).forEach(loc=>{
     const target = loc.perClass * 3;
     const have = loc.hometownPool.reduce((s,h)=> s + (totalsByHometown[h]||0), 0);
@@ -1432,6 +1437,11 @@ function ensureJuvenileFieldPoolForProvince(provinceId){
   return pools;
 }
 
+const JR_STATE_KEY = 'iifl_junior_league_v1';
+function loadJrStateReadOnly(){
+  try{ const raw = localStorage.getItem(sk(JR_STATE_KEY)); return raw ? JSON.parse(raw) : { rosters:{} }; }
+  catch(err){ return { rosters:{} }; }
+}
 function getFieldFighterById(id){
   const pools = loadFieldPools();
   for(const key of Object.keys(pools.amateur || {})){
@@ -1441,6 +1451,18 @@ function getFieldFighterById(id){
   for(const key of Object.keys(pools.juvenile || {})){
     const f = pools.juvenile[key].find(x=>x.id===id);
     if(f) return f;
+  }
+  const faFound = (pools.juniorFA || []).find(x=>x.id===id);
+  if(faFound) return faFound;
+  // Someone who's since been drafted onto a real Junior team roster comes OFF the
+  // Juvenile pool entirely at signing time (resolveDraftSigningsForCycle in
+  // iifl_junior_league.html) — without checking team rosters too, a clickable name for
+  // an old opponent who got drafted since the fight happened would resolve to nothing
+  // and silently do nothing when clicked.
+  const jrState = loadJrStateReadOnly();
+  for(const key of Object.keys(jrState.rosters || {})){
+    const slot = jrState.rosters[key].find(sl=> !sl.isPlayer && sl.fighter && sl.fighter.id === id);
+    if(slot) return slot.fighter;
   }
   return null;
 }
@@ -6002,6 +6024,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V67 · 2026-07-18</div>
+<div class="version-badge">FREE ROAM · V68 · 2026-07-18</div>
 </body>
 </html>
