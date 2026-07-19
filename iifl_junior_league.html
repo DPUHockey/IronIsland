@@ -2604,21 +2604,29 @@ function renderOverview(){
   }).join('');
 
   let draftLine = 'No fighters saved yet.';
+  let mine = null, action = null;
   if(roster.length){
-    const mine = roster.find(f=> f.isPlayable) || roster[0];
-    if(mine.juniorTeamId){ draftLine = `${mine.name} is signed with ${jrTeamName(mine.juniorLeagueId, mine.juniorTeamId)}.`; }
+    mine = roster.find(f=> f.isPlayable) || roster[0];
+    if(mine.juniorTeamId){ draftLine = `${mine.name} is signed with ${jrTeamName(mine.juniorLeagueId, mine.juniorTeamId)}.`; action = 'roster'; }
     else if(mine.age < 14){ draftLine = `${mine.name} is age ${mine.age} — Junior Draft opens at 14.`; }
     else if(mine.age > 17){ draftLine = mine.juniorDraftRegistered ? `${mine.name} went undrafted and has aged out of Junior eligibility.` : `${mine.name} aged out without ever registering for the draft.`; }
-    else if(mine.juniorDraftRegistered){ draftLine = `${mine.name} is registered and in this year's declared pool, waiting on draft night.`; }
-    else { draftLine = `${mine.name} is eligible — sign the Jr Contract to register for the draft.`; }
+    else if(mine.juniorDraftRegistered){ draftLine = `${mine.name} is registered and in this year's declared pool, waiting on draft night.`; action = 'status'; }
+    else { draftLine = `${mine.name} is eligible — sign the Jr Contract to register for the draft.`; action = 'contract'; }
   }
+  const actionBtnHtml = action==='contract'
+    ? `<button class="btn btn-primary" data-fighter-action="contract" data-select-fighter="${mine.id}">Sign Contract →</button>`
+    : action==='status'
+    ? `<button class="btn" data-fighter-action="status" data-select-fighter="${mine.id}">View Status →</button>`
+    : action==='roster'
+    ? `<button class="btn" data-fighter-action="roster" data-select-fighter="${mine.id}">View Roster →</button>`
+    : '';
 
   return `
     <div class="section-label">The Three Leagues</div>
     <div class="fighter-grid">${leagueCards}</div>
     <div class="section-label" style="margin-top:22px;">Your Draft Status</div>
     <div class="empty-note" style="padding:0 0 12px;">${draftLine}</div>
-    <div class="btn-row"><span></span><button class="btn" id="go-to-draft-select">My Fighters &amp; Draft Status →</button></div>
+    <div class="btn-row">${actionBtnHtml}<button class="btn" id="go-to-draft-select">My Fighters &amp; Draft Status →</button></div>
   `;
 }
 
@@ -2742,7 +2750,7 @@ function recruitRowHtml(f, recruitNumber){
       <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
       <div style="flex:1;">
         <div class="fr-name clickable-name" data-open-fighter="${f.id}">${f.isPlayable ? '⭐ ' : ''}${f.name}</div>
-        <div class="fr-meta">Age ${f.age} · ${prov ? prov.name : (f.settlement||f.hometown||'')} · ${DISCIPLINE_NAMES[f.primaryDisc]} · ${heightLabel(f.heightIn)} · Projects ${weightClassOf(doc.adultWeightLb)}weight</div>
+        <div class="fr-meta">Age ${f.age} · ${f.settlement||f.hometown||'Unknown'}${prov ? ', '+prov.name : ''} · ${DISCIPLINE_NAMES[f.primaryDisc]} · ${heightLabel(f.heightIn)} · Projects ${weightClassOf(doc.adultWeightLb)}weight</div>
       </div>
       <div class="fr-status">OVR ${calcOVR(f.stats)}<br>${f.record.wins}-${f.record.losses}</div>
     </div>
@@ -3547,7 +3555,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V31 · 2026-07-18</div>
+<div class="version-badge">JUNIOR LEAGUE · V32 · 2026-07-18</div>
 </body>
 </html>
 
