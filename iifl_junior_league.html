@@ -3743,7 +3743,24 @@ function wireEvents(){
   const goToDeclaredList = document.getElementById('go-to-declared-list');
   if(goToDeclaredList) goToDeclaredList.onclick = ()=>{ state.screen = 'declared-list'; render(); };
   const goToLeagueNight = document.getElementById('go-to-league-night');
-  if(goToLeagueNight) goToLeagueNight.onclick = ()=>{ state.screen = 'league-night'; render(); };
+  if(goToLeagueNight) goToLeagueNight.onclick = ()=>{
+    const roster = getRoster();
+    const mine = roster.find(r=>r.isPlayable);
+    const myLeagueOver = mine && mine.juniorLeagueId && getLeagueWeek(mine.juniorLeagueId) >= ensureLeagueSchedule(mine.juniorLeagueId).length;
+    const status = mine && mine.juniorLeagueId ? getJrGameWeekStatus(mine.juniorLeagueId) : null;
+    const thisWeek = mine && mine.juniorLeagueId ? getLeagueWeek(mine.juniorLeagueId) : null;
+    const legitArrival = mine && mine.juniorLeagueId && status && status.arrived && status.weekIdx === thisWeek;
+    // Once your own season is done there's no more Wednesday/stadium ritual to complete
+    // for it, ever — the arrival flag can never become true again, so this must not stay
+    // gated behind it or the other two leagues (still live for a signed teammate or not)
+    // become permanently unreachable just to watch, which was never the point.
+    if(legitArrival || myLeagueOver || !mine || !mine.juniorLeagueId){
+      state.screen = 'league-night';
+      render();
+    } else {
+      alert("Jr Fight Night is only open once you've actually made it to the arena — walk there in Free Roam first.");
+    }
+  };
   const goToFAPool = document.getElementById('go-to-fa-pool');
   if(goToFAPool) goToFAPool.onclick = ()=>{ state.screen = 'fa-pool'; render(); };
   const backFromContract = document.getElementById('back-to-select-from-contract');
@@ -4268,22 +4285,21 @@ try{
   } else if(urlScreen === 'league-night'){
     const roster = getRoster();
     const mine = roster.find(r=>r.isPlayable);
+    const myLeagueOver = mine && mine.juniorLeagueId && getLeagueWeek(mine.juniorLeagueId) >= ensureLeagueSchedule(mine.juniorLeagueId).length;
     const status = mine && mine.juniorLeagueId ? getJrGameWeekStatus(mine.juniorLeagueId) : null;
     const thisWeek = mine && mine.juniorLeagueId ? getLeagueWeek(mine.juniorLeagueId) : null;
     const legitArrival = mine && mine.juniorLeagueId && status && status.arrived && status.weekIdx === thisWeek;
-    if(legitArrival){
+    if(legitArrival || myLeagueOver || !mine || !mine.juniorLeagueId){
       state.screen = 'league-night';
     } else {
       state.screen = 'select';
-      alert(mine && mine.juniorLeagueId
-        ? "Jr Fight Night is only open once you've actually made it to the arena — walk there in Free Roam first."
-        : "You're not signed to a Junior team yet — nothing to check in for.");
+      alert("Jr Fight Night is only open once you've actually made it to the arena — walk there in Free Roam first.");
     }
     render();
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V43 · 2026-07-19</div>
+<div class="version-badge">JUNIOR LEAGUE · V44 · 2026-07-19</div>
 </body>
 </html>
 
