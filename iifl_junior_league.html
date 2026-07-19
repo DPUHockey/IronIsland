@@ -2561,9 +2561,55 @@ function renderFighterModal(root){
     <p class="mf-growth-text">${doc.isGrown ? `Fully grown — current size is expected to hold. Fighting at <b>${weightClassOf(doc.adultWeightLb)}weight</b>.` : `Early projection, subject to change: expected adult height ~${heightLabel(doc.adultHeightIn)}, weight ~${doc.adultWeightLb} lb — projects to <b>${weightClassOf(doc.adultWeightLb)}weight</b> as an adult.`}</p>
   `;
 
+  const jrRec = f.jrSeasonRecord;
+  const hasJrRec = jrRec && (jrRec.wins + jrRec.losses) > 0;
+
   let bodyExtra;
   if(isField){
-    bodyExtra = `<div class="mf-empty">Procedural teammate — no persistent multi-tier career record tracked.</div>`;
+    const log = f.fightLog || [];
+    const hasLog = log.length > 0;
+    if(!hasLog && !hasJrRec){
+      bodyExtra = `<div class="mf-empty">No fights on record yet.</div>`;
+    } else {
+      const jrSummaryHtml = hasJrRec ? `
+        <div class="mf-section-title">This Junior Season</div>
+        <div class="mf-tier-summary"><span>Junior</span><span>${jrRec.wins}-${jrRec.losses} · ${jrRec.methods.KO+jrRec.methods.TKO} finishes (${jrRec.methods.KO} KO, ${jrRec.methods.TKO} TKO)</span></div>
+      ` : '';
+      let historySection = '';
+      if(hasLog){
+        // Field fighters (drafted juvenile prospects) only keep their last 10 bouts —
+        // that history rides along with them once drafted, it isn't reset.
+        const tierSummaryHtml = ['Juvenile','Amateur','Junior','Pro'].map(tier=>{
+          const tierLog = log.filter(e=>e.tier===tier);
+          if(!tierLog.length) return '';
+          const w = tierLog.filter(e=>e.result==='W').length;
+          const l = tierLog.filter(e=>e.result==='L').length;
+          return `<div class="mf-tier-summary"><span>${tier}</span><span>${w}-${l} (${tierLog.length} bout${tierLog.length===1?'':'s'})</span></div>`;
+        }).join('');
+        const filtered = modalActiveTier === 'All' ? log : log.filter(e=> e.tier === modalActiveTier);
+        const sorted = [...filtered].sort((a,b)=> new Date(b.date) - new Date(a.date));
+        const historyHtml = sorted.length ? sorted.map(e=>{
+          const dateStr = e.date ? new Date(e.date).toLocaleDateString() : '—';
+          return `
+            <div class="mf-history-row">
+              <div class="mfh-date">${dateStr}</div>
+              <div class="mfh-opp"><b>${e.result==='W'?'def.':'lost to'}</b> ${e.opponentId ? `<span class="clickable-name" data-open-fighter="${e.opponentId}">${e.opponent}</span>` : e.opponent}${e.location?`<span class="mfh-loc">${e.location}</span>`:''}</div>
+              <div class="mfh-result ${e.result==='W'?'win':'loss'}">${e.result} · ${e.method||''}</div>
+            </div>`;
+        }).join('') : `<div class="mf-empty">No fights on record${modalActiveTier==='All'?'':' at this level'} yet.</div>`;
+        const tabsHtml = TIERS.map(t=>{
+          const count = t==='All' ? log.length : log.filter(e=>e.tier===t).length;
+          return `<button class="mf-tier-tab ${modalActiveTier===t?'active':''}" data-mf-tab="${t}">${t} (${count})</button>`;
+        }).join('');
+        historySection = `
+          <div class="mf-section-title" style="margin-top:12px;">Bout-by-Bout (last ${log.length} kept)</div>
+          ${tierSummaryHtml}
+          <div class="mf-tier-tabs" style="margin-top:10px;">${tabsHtml}</div>
+          <div class="mf-history">${historyHtml}</div>
+        `;
+      }
+      bodyExtra = jrSummaryHtml + historySection;
+    }
   } else {
     const log = f.fightLog || [];
     // Per-tier summary (record at a glance) before the filterable bout-by-bout list.
@@ -2612,7 +2658,7 @@ function renderFighterModal(root){
               <div class="mf-name">${f.name}</div>
               <div class="mf-meta">${f.age?'Age '+f.age+' · ':''}${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement || f.hometown || ''}${prov?', '+prov.name:''}</div>
               <div class="mf-meta">${f.birthDay !== undefined && f.birthDay !== null ? 'Born '+formatCalendarDate(f.birthDay) : ''}${f.fame !== undefined ? ' · Fame '+f.fame : ''}</div>
-              <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''}${!isField?' · Career '+rec.wins+'-'+rec.losses:''}</div>
+              <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''}${!isField ? ' · Career '+rec.wins+'-'+rec.losses : (hasJrRec ? ' · Junior '+jrRec.wins+'-'+jrRec.losses : '')}</div>
             </div>
           </div>
           <div class="mf-stats-grid">
