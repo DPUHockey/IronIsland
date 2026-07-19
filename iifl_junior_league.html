@@ -1590,17 +1590,16 @@ function resolveDraftSigningsForCycle(dc){
     const fighter = rosterFighter || findFighterInPools(pools, fighterId);
     if(!fighter) return;
     const offersSortedByTier = byFighter[fighterId].slice().sort((a,b)=> getJrLeague(a.leagueId).draftOrder - getJrLeague(b.leagueId).draftOrder);
-    const winner = offersSortedByTier.length > 1 ? pickSigningOffer(fighter, offersSortedByTier) : offersSortedByTier[0];
     if(rosterFighter){
-      // The player's own fighter: link the roster slot live (fighterId reference, not a
-      // frozen snapshot) so growth/aging keep reflecting the real, current fighter.
-      setPlayerIntoRoster(winner.leagueId, winner.teamIndex, rosterFighter);
-      rosterFighter.juniorTeamId = winner.teamIndex;
-      rosterFighter.juniorLeagueId = winner.leagueId;
+      // The player's own fighter never auto-signs — hold every offer they got and let
+      // them actually choose (or decline), same as the original design intent. This is
+      // the one case that doesn't get resolved automatically like an NPC would.
+      rosterFighter.pendingJuniorOffers = offersSortedByTier;
       rosterChanged = true;
-    } else {
-      draftFighterIntoRoster(winner.leagueId, winner.teamIndex, fighter);
+      return; // nothing to remove from the Juvenile board for them — they were never in it
     }
+    const winner = offersSortedByTier.length > 1 ? pickSigningOffer(fighter, offersSortedByTier) : offersSortedByTier[0];
+    draftFighterIntoRoster(winner.leagueId, winner.teamIndex, fighter);
     signedIds.add(fighterId);
   });
   if(rosterChanged) saveRoster(roster);
@@ -2649,7 +2648,11 @@ function renderOverview(){
   let mine = null, action = null;
   if(roster.length){
     mine = roster.find(f=> f.isPlayable) || roster[0];
-    if(mine.juniorTeamId){ draftLine = `${mine.name} is signed with ${jrTeamName(mine.juniorLeagueId, mine.juniorTeamId)}.`; action = 'roster'; }
+    if(mine.pendingJuniorOffers && mine.pendingJuniorOffers.length){
+      draftLine = `${mine.name} got drafted! ${mine.pendingJuniorOffers.length} offer${mine.pendingJuniorOffers.length===1?'':'s'} waiting on a decision.`;
+      action = 'offers';
+    }
+    else if(mine.juniorTeamId){ draftLine = `${mine.name} is signed with ${jrTeamName(mine.juniorLeagueId, mine.juniorTeamId)}.`; action = 'roster'; }
     else if(mine.age < 14){ draftLine = `${mine.name} is age ${mine.age} — Junior Draft opens at 14.`; }
     else if(mine.age > 17){ draftLine = mine.juniorDraftRegistered ? `${mine.name} went undrafted and has aged out of Junior eligibility.` : `${mine.name} aged out without ever registering for the draft.`; }
     else if(mine.juniorDraftRegistered){ draftLine = `${mine.name} is registered and in this year's declared pool, waiting on draft night.`; action = 'status'; }
@@ -2661,6 +2664,8 @@ function renderOverview(){
     ? `<button class="btn" data-fighter-action="status" data-select-fighter="${mine.id}">View Status →</button>`
     : action==='roster'
     ? `<button class="btn" data-fighter-action="roster" data-select-fighter="${mine.id}">View Roster →</button>`
+    : action==='offers'
+    ? `<button class="btn btn-primary" data-fighter-action="offers" data-select-fighter="${mine.id}">See Offers →</button>`
     : '';
 
   return `
@@ -2709,7 +2714,10 @@ function renderSelect(){
   const rows = roster.map(f=>{
     const prov = PROVINCES.find(p=>p.id===f.provinceId);
     let status, canAct = false, action = null;
-    if(f.juniorTeamId){
+    if(f.pendingJuniorOffers && f.pendingJuniorOffers.length){
+      status = `Got Drafted! ${f.pendingJuniorOffers.length} offer${f.pendingJuniorOffers.length===1?'':'s'} waiting`;
+      action = 'offers'; canAct = true;
+    } else if(f.juniorTeamId){
       status = `Signed — ${jrTeamName(f.juniorLeagueId, f.juniorTeamId)}`;
       action = 'roster'; canAct = true;
     } else if(rightsStillActive(f)){
@@ -2726,7 +2734,7 @@ function renderSelect(){
       status = 'Eligible — Sign the Jr Contract to register';
       action = 'contract'; canAct = true;
     }
-    const btnLabel = action==='roster' ? 'View Roster' : action==='contract' ? 'Sign Contract →' : action==='status' ? 'View Status →' : action==='old-draft' ? 'Go →' : 'Go →';
+    const btnLabel = action==='roster' ? 'View Roster' : action==='contract' ? 'Sign Contract →' : action==='status' ? 'View Status →' : action==='offers' ? 'See Offers →' : action==='old-draft' ? 'Go →' : 'Go →';
     return `
       <div class="fighter-row" style="--fr-color:${prov?prov.color:'#C9A23C'}">
         <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
@@ -3375,6 +3383,9 @@ function wireEvents(){
         state.screen = 'jr-contract';
       } else if(action === 'status'){
         state.screen = 'declared-list';
+      } else if(action === 'offers' || (f.pendingJuniorOffers && f.pendingJuniorOffers.length)){
+        state.pendingOffers = f.pendingJuniorOffers;
+        state.screen = 'offers';
       } else if(f.juniorTeamId){
         state.screen = 'season-hub';
       } else if(rightsStillActive(f)){
@@ -3436,6 +3447,7 @@ function wireEvents(){
         ff.juniorTeamId = offer.teamIndex;
         ff.juniorLeagueId = offer.leagueId;
         ff.juniorRightsHolders = [];
+        ff.pendingJuniorOffers = null;
         ff.juniorDraftHistory.push({ leagueId: offer.leagueId, teamIndex: offer.teamIndex, round: offer.round, date: new Date().toISOString() });
       });
       state.screen = 'season-hub';
@@ -3448,6 +3460,7 @@ function wireEvents(){
     updateFighter(state.fighterId, (f)=>{
       f.juniorRightsHolders = state.pendingOffers.map(o=> ({ leagueId:o.leagueId, teamIndex:o.teamIndex }));
       f.juniorRightsExpiresAfterSeasons = (f.amateurSeasonHistory || []).length + 1;
+      f.pendingJuniorOffers = null;
     });
     state.screen = 'select';
     render();
@@ -3843,7 +3856,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V36 · 2026-07-18</div>
+<div class="version-badge">JUNIOR LEAGUE · V37 · 2026-07-18</div>
 </body>
 </html>
 
