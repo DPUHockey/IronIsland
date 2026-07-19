@@ -4920,8 +4920,6 @@ function renderLocPit(){
     `;
   } else if(weekday === 'Monday'){
     const schedule = ensurePitSchedule(pit, day);
-    const rosterById = {};
-    pit.roster.forEach(r=> rosterById[r.id] = r);
     const canBook = isSignedHere && !locked;
     const alreadyBookedTonight = schedule.slots.some(s=> s.bookedByPlayer);
     const rows = schedule.slots.map((slot, i)=>{
@@ -4934,8 +4932,8 @@ function renderLocPit(){
           </div>`;
       }
       const isPlayerMatch = slot.matchup.aId === 'player';
-      const aName = isPlayerMatch ? f.name : (rosterById[slot.matchup.aId]?.name || '???');
-      const bName = rosterById[slot.matchup.bId] ? rosterById[slot.matchup.bId].name : '???';
+      const aName = isPlayerMatch ? f.name : (tournamentFighterById(pit, f, slot.matchup.aId)?.name || '???');
+      const bName = tournamentFighterById(pit, f, slot.matchup.bId)?.name || '???';
       const mainEventSlots = schedule.slots.length >= 6 ? 2 : 1;
       const headliner = i >= schedule.slots.length - mainEventSlots ? ' <span class="sched-headliner">★ Main Event</span>' : '';
       return `
@@ -5127,9 +5125,7 @@ function renderBookSlot(){
   const day = getCurrentDay();
   const schedule = ensurePitSchedule(pit, day);
   const slot = schedule.slots[state.pendingScheduleSlot];
-  const rosterById = {};
-  pit.roster.forEach(r=> rosterById[r.id] = r);
-  const freeAgents = schedule.freeAgents.map(id=> rosterById[id]).filter(Boolean);
+  const freeAgents = schedule.freeAgents.map(id=> tournamentFighterById(pit, f, id)).filter(Boolean);
 
   const cards = freeAgents.map(opp=>{
     const ovr = calcOVR(opp.stats);
@@ -5739,7 +5735,8 @@ function wireEvents(){
       const opponentId = card.dataset.bookOpponent;
       const pit = currentPits().find(p=>p.id===state.visitingLocation.pitId);
       const day = getCurrentDay();
-      const opp = pit.roster.find(r=>r.id===opponentId);
+      const fBook = getFighterById(state.fighterId);
+      const opp = tournamentFighterById(pit, fBook, opponentId);
       if(!opp) return;
       bookScheduleSlot(pit, day, state.pendingScheduleSlot, opponentId);
       const f = getFighterById(state.fighterId);
@@ -6005,6 +6002,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V66 · 2026-07-18</div>
+<div class="version-badge">FREE ROAM · V67 · 2026-07-18</div>
 </body>
 </html>
