@@ -1309,15 +1309,37 @@ function saveFieldPools(pools){
   try{ localStorage.setItem(sk(FIELD_KEY), JSON.stringify(pools)); return true; }
   catch(err){
     console.error('IIFL field pool save failed, attempting cleanup:', err);
-    // Storage is over quota — prune the standing pool and retry, progressively harder,
-    // rather than silently failing forever (which is what used to happen here).
+    // The quota is shared across every key this save writes, not just this one — if
+    // roam state (Monday schedules, tournament brackets, cached city grids) has grown
+    // large, no amount of shrinking the field pool alone can ever free enough room.
+    // Free space there FIRST, before touching the field pool at all. Monday schedules
+    // in particular were never pruned before (only tournaments/newspapers/grids were),
+    // so a save with a lot of pit visits over a lot of Mondays could accumulate one
+    // entry per pit per day forever.
+    try{
+      const s = loadRoamState();
+      s.pitSchedules = {};
+      s.pitTournaments = {};
+      s.grids = {};
+      s.newspapers = {};
+      localStorage.setItem(sk(ROAM_STATE_KEY), JSON.stringify(s));
+    }catch(roamErr){ console.error('IIFL roam state emergency cleanup failed:', roamErr); }
+
     if(typeof PROVINCES !== 'undefined' && typeof enforceProvincePoolCap === 'function'){
       PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 150));
       try{ localStorage.setItem(sk(FIELD_KEY), JSON.stringify(pools)); return true; }
       catch(err2){
         PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 40));
         try{ localStorage.setItem(sk(FIELD_KEY), JSON.stringify(pools)); return true; }
-        catch(err3){ console.error('IIFL field pool save still failing after aggressive cleanup:', err3); return false; }
+        catch(err3){
+          // Deeper floor than existed before — the old chain gave up here even though
+          // this is exactly the case (quota consumed by something other than this key)
+          // where a much smaller field pool still has a real chance of fitting once
+          // roam state cleanup above already freed room.
+          PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id, 10));
+          try{ localStorage.setItem(sk(FIELD_KEY), JSON.stringify(pools)); return true; }
+          catch(err4){ console.error('IIFL field pool save still failing after aggressive cleanup:', err4); return false; }
+        }
       }
     }
     return false;
@@ -1423,7 +1445,7 @@ function seedJuvenilePoolInPlace(pools, provinceId){
       const wc = pick(weightClasses);
       const hometown = pick(loc.hometownPool);
       const f = generateJuvenileFieldFighter(wc, province, hometown);
-      f.entryDay = JUVENILE_SEASON_START_DAY;
+      f.entryDay = getCurrentDay();
       pool.push(f);
       totalsByHometown[hometown] = (totalsByHometown[hometown]||0) + 1;
     }
@@ -1996,7 +2018,11 @@ function enforceProvincePoolCap(pools, provinceId, capOverride){
     if(!members.length) return;
     const shareCap = Math.max(1, Math.round((loc.perClass*3 / totalTarget) * cap));
     if(members.length <= shareCap){ keep.push(...members); return; }
-    const sorted = [...members].sort((a,b)=> (b.entryDay-a.entryDay) || (calcOVR(b.stats)-calcOVR(a.stats))); // newest/best kept first
+    const sorted = [...members].sort((a,b)=>{
+      const aActive = juvenileFightsRemaining(a) > 0, bActive = juvenileFightsRemaining(b) > 0;
+      if(aActive !== bActive) return aActive ? -1 : 1; // active (still fightable) fighters always survive over capped-out dead weight
+      return (b.entryDay-a.entryDay) || (calcOVR(b.stats)-calcOVR(a.stats)); // among equals, newest/best kept first
+    });
     keep.push(...sorted.slice(0, shareCap));
   });
   // Safety net: any fighter whose hometown wasn't covered by pitLocationsForProvince
@@ -2771,6 +2797,12 @@ function pruneRoamStateForSpace(s){
     Object.keys(s.pitTournaments).forEach(key=>{
       const day = parseInt(key.split('|').pop(), 10);
       if(!isNaN(day) && today - day > 7) delete s.pitTournaments[key];
+    });
+  }
+  if(s.pitSchedules){
+    Object.keys(s.pitSchedules).forEach(key=>{
+      const day = parseInt(key.split('|').pop(), 10);
+      if(!isNaN(day) && today - day > 7) delete s.pitSchedules[key];
     });
   }
   if(s.newspapers){
@@ -6043,6 +6075,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V69 · 2026-07-18</div>
+<div class="version-badge">FREE ROAM · V71 · 2026-07-18</div>
 </body>
 </html>
