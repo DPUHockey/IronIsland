@@ -458,6 +458,22 @@ function tierKeyDates(cycleYear){
     proPlayoffEnd: proRegEnd + 3*7,
   };
 }
+// Mirrors leagueSeasonOpenDay/jrSeasonFirstThursday/jrWeekGameDay in
+// iifl_junior_league.html — same math, kept in sync manually. Used here only for
+// calendar display.
+function leagueSeasonOpenDay(leagueId, cycleYear){
+  const dates = tierKeyDates(cycleYear);
+  return leagueId === 'kolsati_jr' ? dates.juniorOpen : dates.juniorOpen + 28;
+}
+function jrSeasonFirstThursday(leagueId, cycleYear){
+  const openDay = leagueSeasonOpenDay(leagueId, cycleYear);
+  const openWeekdayIdx = (openDay - 1) % 7; // WEEKDAY_NAMES[0] === 'Monday'
+  const toThursday = (3 - openWeekdayIdx + 7) % 7;
+  return openDay + toThursday;
+}
+function jrWeekGameDay(leagueId, weekIdx, cycleYear){
+  return jrSeasonFirstThursday(leagueId, cycleYear) + weekIdx*7;
+}
 
 // The cycle-year whose off-season should currently be considered "the most recent
 // one" — while still in dead-days that's the current cycleYear itself; once the clock
@@ -556,20 +572,34 @@ function getMajorEventsForYear(cycleYear){
     { day: d.juniorDraftDayTidewater, title: 'Tidewater Jr League Draft', tier: 'Junior', kind: 'draft', description: 'Tier 3 drafts last, same shared pool, same risk.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
     { day: d.juniorSignDeadline, title: 'Junior League Signing Deadline', tier: 'Junior', kind: 'deadline', description: 'Every fighter drafted by more than one league signs with the highest tier that took them — the rest lose that roster spot for the cycle.', watchUrl: 'iifl_junior_league.html?screen=draft-day' },
     { day: d.juniorOpen, title: 'Junior League Opens', tier: 'Junior', kind: 'open' },
-    // One entry per week of the 16-week regular season, every Thursday — this is what
-    // actually pushes all 3 leagues' weeks forward. Before this, only the player's own
-    // league ever advanced, and only by manually playing through Team Season.
+    // One entry per week of the 16-week regular season, every Thursday — informational
+    // only. Actual weekly progress happens through the real Jr Fight Night loop
+    // (Wednesday heads-up, walking to your stadium, Finish Thursday) in Free Roam and
+    // the Junior League screens — this calendar just displays it, it doesn't drive it.
     ...Array.from({length:16}, (_,i)=> ({
       day: d.juniorOpen + 3 + i*7,
       title: `Jr Fight Night — Week ${i+1}`,
       tier: 'Junior', kind: 'league-night',
-      description: 'All three Junior Leagues play their weekly slate tonight.',
-      watchUrl: 'iifl_junior_league.html?screen=league-night',
+      description: 'All three Junior Leagues play their weekly slate tonight — head to your team\'s home arena to check in.',
+      // No watchUrl on purpose: access is stadium-only now, via the Wednesday heads-up
+      // and physically walking there in Free Roam.
     })),
     { day: d.juniorTradeDeadline, title: 'Junior Trade Deadline', tier: 'Junior', kind: 'deadline' },
     { day: d.juniorRegEnd, title: 'Junior Regular Season Ends', tier: 'Junior', kind: 'end' },
-    { day: d.jrLeaguePlayoffStart, title: 'Junior League Playoffs Begin', tier: 'Junior', kind: 'playoffs' },
-    { day: d.jrLeaguePlayoffEnd, title: 'Junior League Playoffs End', tier: 'Junior', kind: 'playoffs' },
+    // Each league starts ITS OWN playoffs the Thursday right after ITS OWN regular
+    // season ends — Ironbound (16 teams, 15 weeks) naturally finishes later than
+    // Northgate/Tidewater (12 teams, 11 weeks each), so these land on different real
+    // dates rather than one shared assumed date.
+    ...JR_LEAGUES_DISPLAY.flatMap(league=>{
+      const shortName = league.name.replace('The ','').replace(' Junior League','');
+      const regWeeks = league.teams.length - 1;
+      const semiDay = jrWeekGameDay(league.id, regWeeks, cycleYear);
+      const finalDay = semiDay + 7;
+      return [
+        { day: semiDay, title: `${shortName} Semifinals`, tier: 'Junior', kind: 'playoffs' },
+        { day: finalDay, title: `${shortName} Final`, tier: 'Junior', kind: 'playoffs' },
+      ];
+    }),
     { day: d.jrIslandChampStart, title: 'Junior Island Championship Begins', tier: 'Junior', kind: 'championship' },
     { day: d.jrIslandChampEnd, title: 'Junior Island Championship Ends', tier: 'Junior', kind: 'championship' },
     { day: d.amateurOpen, title: 'Amateur Circuit Opens', tier: 'Amateur', kind: 'open' },
@@ -1769,7 +1799,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-reset-island">🔄 Reset Island (Test Mode) →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V22 · 2026-07-19</div>
+        <div class="version-badge">HOME · V24 · 2026-07-19</div>
       </footer>
     </div>
   `;
@@ -1848,7 +1878,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V22 · 2026-07-19</div>
+        <div class="version-badge">HOME · V24 · 2026-07-19</div>
       </footer>
     </div>
   `;
