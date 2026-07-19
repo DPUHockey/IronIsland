@@ -2675,6 +2675,7 @@ function renderOverview(){
   return `
     <div class="section-label">The Three Leagues</div>
     <div class="fighter-grid">${leagueCards}</div>
+    <div class="btn-row" style="margin-top:14px;"><span></span><button class="btn btn-primary" id="go-to-league-night">🏟 Jr Fight Night — This Week's Games →</button></div>
     <div class="section-label" style="margin-top:22px;">Your Draft Status</div>
     <div class="empty-note" style="padding:0 0 12px;">${draftLine}</div>
     <div class="btn-row">${actionBtnHtml}<button class="btn" id="go-to-draft-select">My Fighters &amp; Draft Status →</button></div>
@@ -3405,6 +3406,8 @@ function wireEvents(){
 
   const goToDeclaredList = document.getElementById('go-to-declared-list');
   if(goToDeclaredList) goToDeclaredList.onclick = ()=>{ state.screen = 'declared-list'; render(); };
+  const goToLeagueNight = document.getElementById('go-to-league-night');
+  if(goToLeagueNight) goToLeagueNight.onclick = ()=>{ state.screen = 'league-night'; render(); };
   const goToFAPool = document.getElementById('go-to-fa-pool');
   if(goToFAPool) goToFAPool.onclick = ()=>{ state.screen = 'fa-pool'; render(); };
   const backFromContract = document.getElementById('back-to-select-from-contract');
@@ -3860,7 +3863,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V38 · 2026-07-18</div>
+<div class="version-badge">JUNIOR LEAGUE · V39 · 2026-07-18</div>
 </body>
 </html>
 
