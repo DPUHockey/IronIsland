@@ -631,7 +631,7 @@ const SETTLEMENT_DATA = {
 // (flavor-only — no game system exists for this yet, shows an honest placeholder).
 const SETTLEMENT_MAPS = {
   'sherwood|Frontenac City': {
-    image: 'frontenac_city.png',
+    image: 'settlementmaps/frontenac_city.png',
     startNode: 'crossroads',
     nodes: {
       thunderdome:  { type:'building', label:'Frontenac Thunderdome',      x:15, y:13, hook:null, note:"Under construction — nothing to do here yet." },
@@ -666,6 +666,44 @@ const SETTLEMENT_MAPS = {
       ['bank','sheriff'], ['sheriff','depot'], ['sheriff','corner4'], ['bank','corner4'], ['corner4','boochiBar'], ['corner4','snakePit'],
       ['sheriff','firehouse'], ['firehouse','ballpark'], ['firehouse','roadOut'], ['snakePit','roadOut'],
       ['fightHouse','corner5'], ['corner5','marcosHut'], ['corner5','boochiBar'], ['corner5','rustedNug'], ['boochiBar','rustedNug'],
+    ],
+  },
+  'sherwood|Lawrenceville': {
+    image: 'settlementmaps/Lawrenceville.png',
+    startNode: 'crossroads',
+    nodes: {
+      church:          { type:'building', label:'Church of the Fallen Light', x:19, y:14, hook:null },
+      hospital:        { type:'building', label:'Northwood Hospital',         x:38, y:20, hook:null },
+      gym:             { type:'building', label:'The Ironhide Gym',           x:57, y:21, hook:null },
+      timberwolfDen:   { type:'building', label:'Timberwolf Den',             x:72, y:19, hook:'jrStadium', hookData:{ leagueId:'northern_jr', teamIndex:1 } },
+      roadOut:         { type:'exit',     label:'Road to the Wilds',          x:89, y:27, hook:'travel' },
+      foodStore:       { type:'building', label:'Food Store',                 x:26, y:34, hook:null },
+      potions:         { type:'building', label:'Madame Z Potions',           x:38, y:39, hook:null },
+      anvilRoom:       { type:'building', label:'The Anvil Room',             x:55, y:39, hook:'pit', hookData:{ pitIndex:0 } },
+      cemetery:        { type:'building', label:'Restless Hollow Cemetery',   x:79, y:38, hook:null, note:"Just a graveyard — nothing to do here." },
+      cutthroatCourt:  { type:'building', label:'The Cutthroat Court',        x:68, y:51, hook:'pit', hookData:{ pitIndex:1 } },
+      rustyMug:        { type:'building', label:'The Rusty Mug',              x:16, y:55, hook:null },
+      medicineHut:     { type:'building', label:'Medicine Hut',               x:60, y:61, hook:null },
+      brokenTankard:   { type:'building', label:'The Broken Tankard',         x:37, y:65, hook:null },
+      farmBarn:        { type:'building', label:'The Old Barn',               x:17, y:82, hook:null },
+      windmillFarm:    { type:'building', label:'Windmill Farm',              x:73, y:84, hook:null },
+      corner1:         { type:'node',     label:'Street Corner',              x:28, y:24 },
+      corner2:         { type:'node',     label:'Street Corner',              x:65, y:26 },
+      corner3:         { type:'node',     label:'Street Corner',              x:31, y:40 },
+      corner4:         { type:'node',     label:'Street Corner',              x:63, y:40 },
+      corner5:         { type:'node',     label:'Street Corner',              x:58, y:55 },
+      corner6:         { type:'node',     label:'Street Corner',              x:26, y:58 },
+      corner7:         { type:'node',     label:'Street Corner',              x:44, y:75 },
+      crossroads:      { type:'node',     label:'Crossroads',                 x:44, y:47 },
+    },
+    edges: [
+      ['church','corner1'], ['hospital','corner1'], ['corner1','gym'], ['gym','corner2'],
+      ['timberwolfDen','corner2'], ['corner2','roadOut'],
+      ['corner1','foodStore'], ['foodStore','corner3'], ['potions','corner3'], ['corner3','crossroads'],
+      ['corner2','corner4'], ['anvilRoom','corner4'], ['cemetery','corner4'], ['corner4','crossroads'],
+      ['crossroads','corner5'], ['cutthroatCourt','corner5'], ['medicineHut','corner5'],
+      ['crossroads','corner6'], ['rustyMug','corner6'], ['corner6','brokenTankard'],
+      ['corner6','corner7'], ['corner5','corner7'], ['corner7','farmBarn'], ['corner7','windmillFarm'],
     ],
   },
 };
@@ -4037,6 +4075,7 @@ function checkForMainEventInvite(){
   if(weekdayNameForDay(today) !== 'Monday') return;
   const f = getFighterById(state.fighterId);
   if(hasAgedOutOfJuvenile(f)) return; // graduated to Junior — no more Juvenile headline offers
+  if(resolveTierSeason('juvenile', today).phase === 'dead-days') return; // off-season — no League Night to headline
   if(!f.pitMemberships || !f.pitMemberships.length) return;
   const candidates = f.pitMemberships.filter(m=>
     hasProvinceAccess(f, m.provinceId) && hasCityTierAccess(f, m.provinceId, m.settlementName)
@@ -6544,7 +6583,8 @@ function wireEvents(){
         state.visitingLocation = { leagueId: node.hookData.leagueId, teamIndex: node.hookData.teamIndex, type:'stadium' };
         state.screen = 'loc-stadium';
       } else if(node.hook === 'pit'){
-        const pit = currentPits()[0];
+        const pitIdx = (node.hookData && typeof node.hookData.pitIndex === 'number') ? node.hookData.pitIndex : 0;
+        const pit = currentPits()[pitIdx];
         if(pit){ state.visitingLocation = { type:'pit', pitId: pit.id }; state.screen = 'loc-pit'; }
       } else if(node.hook === 'travel'){
         state.screen = 'loc-travel';
@@ -7178,6 +7218,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V85 · 2026-07-20</div>
+<div class="version-badge">FREE ROAM · V88 · 2026-07-20</div>
 </body>
 </html>
