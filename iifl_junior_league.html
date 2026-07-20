@@ -1517,6 +1517,7 @@ function draftFighterIntoRoster(leagueId, teamIndex, fighter, source){
   if(!slot) return; // roster is genuinely full of real bodies including the player — nowhere safe to put this pick
   slot.isPlayer = false;
   slot.isDraftedProspect = true;
+  slot.isFromDraft = source !== 'fa-wire'; // real draft picks are protected from casual FA replacement; FA signings remain fair game for a later upgrade
   slot.name = fighter.name;
   slot.fighterId = null;
   if(fighter.juniorSignedYear === undefined) fighter.juniorSignedYear = currentIslandYear();
@@ -1606,6 +1607,26 @@ function findFakeFillerSlot(leagueId, teamIndex){
   const slots = ensureTeamRoster(leagueId, teamIndex);
   return slots.find(sl=> !sl.isPlayer && !sl.isDraftedProspect) || null;
 }
+// A real draft pick is never touched. An FA-signed slot stays fair game for a later
+// upgrade — without this, the moment every roster slot had been filled ONCE (even with
+// a weak waiver claim), that team's roster froze forever, no matter how much better
+// talent later showed up on the wire. Only returns a slot if the best available FA
+// candidate is a meaningful upgrade (15+ OVR) over its current occupant, so this reads
+// as real scouting rather than constant churn.
+const FA_UPGRADE_OVR_MARGIN = 15;
+function findFaUpgradeSlot(leagueId, teamIndex, candidates){
+  const slots = ensureTeamRoster(leagueId, teamIndex);
+  const faSlots = slots.filter(sl=> !sl.isPlayer && sl.isDraftedProspect && !sl.isFromDraft && sl.fighter);
+  if(!faSlots.length || !candidates.length) return null;
+  const bestCandidateOvr = Math.max(...candidates.map(f=> calcOVR(f.stats)));
+  let worst = null, worstOvr = Infinity;
+  faSlots.forEach(sl=>{
+    const ovr = calcOVR(sl.fighter.stats);
+    if(ovr < worstOvr){ worstOvr = ovr; worst = sl; }
+  });
+  if(!worst || bestCandidateOvr < worstOvr + FA_UPGRADE_OVR_MARGIN) return null;
+  return worst;
+}
 
 // Draft first, free agency second — same order real leagues use, and not just a style
 // choice here: draftFighterIntoRoster falls back to overwriting slots[0] if it can't find
@@ -1627,14 +1648,25 @@ function processFAWaiverForLeague(league, pools){
   const s = loadJrState();
   const queue = ensureFAQueue(s, league.id);
   const teamIndex = queue[0];
-  const openSlot = findFakeFillerSlot(league.id, teamIndex);
-  if(!openSlot) return; // roster's already all real bodies (or the one open spot is the player's) — sits out, keeps its queue spot
   const candidates = (pools.juniorFA || []).filter(f=> !f.juniorTeamId);
   if(!candidates.length) return; // nobody on the wire to sign
   if(Math.random() < 0.25) return; // team passes this week, stays at the front
 
-  let best = candidates.filter(f=> weightClassOf(f.weightLb)===openSlot.weightClass).sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats))[0];
+  const openSlot = findFakeFillerSlot(league.id, teamIndex);
+  const upgradeSlot = openSlot ? null : findFaUpgradeSlot(league.id, teamIndex, candidates);
+  const targetSlot = openSlot || upgradeSlot;
+  if(!targetSlot) return; // roster's full of protected draft picks / real bodies, nothing worth upgrading right now — sits out, keeps its queue spot
+
+  let best = candidates.filter(f=> weightClassOf(f.weightLb)===targetSlot.weightClass).sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats))[0];
   if(!best) best = candidates.slice().sort((a,b)=> calcOVR(b.stats)-calcOVR(a.stats))[0];
+
+  // Upgrading (not filling an empty slot) — the outgoing fighter goes back on the wire
+  // instead of just vanishing, so a decent-but-outclassed fighter can still land
+  // somewhere else instead of being silently deleted.
+  if(upgradeSlot && upgradeSlot.fighter){
+    pools.juniorFA.push(upgradeSlot.fighter);
+    logTransaction(league.id, teamIndex, { type: 'Waived', fighterName: upgradeSlot.fighter.name, weightClass: upgradeSlot.weightClass });
+  }
 
   draftFighterIntoRoster(league.id, teamIndex, best, 'fa-wire');
   pools.juniorFA = (pools.juniorFA || []).filter(f=> f.id !== best.id);
@@ -2039,11 +2071,70 @@ function seedIslandChampionshipTeams(cycleYear){
 // other. If the host also won its own league (so it's already one of the 3 seeds), its
 // host slot passes to the next-best non-champion team island-wide — the host city
 // still gets hosting credit, it just doesn't occupy two bracket seats.
-function runIslandChampionship(cycleYear){
+// Cross-league team match — same per-weight-class aggregate the regular season and
+// league playoffs use, but since the two teams are in different leagues (different
+// roster pools), this resolves directly rather than routing through a shared helper.
+// If the player is directly involved (host or a league champion), their fighter is
+// guaranteed to compete in their own weight class for this one marquee event, and
+// their personal result gets recorded to their real fight log same as any other Junior
+// bout — this is a real fight, not a spectator-only simulation, when it's their team.
+function crossLeagueTeamGame(teamA, teamB, hostTeam, playerInfo){
+  const slotsA = ensureTeamRoster(teamA.leagueId, teamA.teamIndex);
+  const slotsB = ensureTeamRoster(teamB.leagueId, teamB.teamIndex);
+  const aIsHost = teamA.leagueId===hostTeam.leagueId && teamA.teamIndex===hostTeam.teamIndex;
+  const lineupB = aiPickLineup(slotsB, null);
+  const lineupA = aiPickLineup(slotsA, lineupB);
+  if(playerInfo){
+    const pf = getFighterById(playerInfo.fighterId);
+    if(pf){
+      if(playerInfo.teamIndex===teamA.teamIndex && playerInfo.leagueId===teamA.leagueId) lineupA[playerInfo.weightClass] = pf;
+      else if(playerInfo.teamIndex===teamB.teamIndex && playerInfo.leagueId===teamB.leagueId) lineupB[playerInfo.weightClass] = pf;
+    }
+  }
+  let scoreA=0, scoreB=0, playerResult=null;
+  const competedIds = new Set();
+  WEIGHT_CLASSES.forEach(wc=>{
+    const fA = lineupA[wc], fB = lineupB[wc];
+    if(!fA || !fB) return;
+    const bout = simulateBout(fA, fB, { arena:{floor:'championship court'}, hometownPit: aIsHost });
+    const aWon = bout.winner.id===fA.id;
+    if(aWon) scoreA++; else scoreB++;
+    if(playerInfo && (fA.id===playerInfo.fighterId || fB.id===playerInfo.fighterId)){
+      const playerIsA = fA.id===playerInfo.fighterId;
+      const playerWon = playerIsA === aWon;
+      const oppName = playerIsA ? fB.name : fA.name;
+      const oppId = playerIsA ? fB.id : fA.id;
+      updateFighter(playerInfo.fighterId, (ff)=>{
+        if(playerWon) ff.record.wins += 1; else ff.record.losses += 1;
+        ff.fightLog.push({ tier:'Junior', opponent:oppName, opponentId:oppId, result: playerWon?'W':'L', method:bout.method, location:'IronIsland Cup', date:new Date().toISOString() });
+        const wr = ensureJrSeasonRecord(ff);
+        if(playerWon){ wr.wins++; wr.methods[bout.method] = (wr.methods[bout.method]||0)+1; } else wr.losses++;
+      });
+      playerResult = { won: playerWon, method: bout.method, opponent: oppName };
+    } else {
+      recordJrBoutOutcome(bout.winner, bout.loser, bout.method);
+    }
+    applyPostBoutFatigueAndInjury(bout.winner, bout.loser, bout.method);
+    competedIds.add(fA.id); competedIds.add(fB.id);
+  });
+  applyWeeklyRosterMaintenance(slotsA, competedIds);
+  applyWeeklyRosterMaintenance(slotsB, competedIds);
+  persistRosterSlots(teamA.leagueId, teamA.teamIndex, slotsA);
+  persistRosterSlots(teamB.leagueId, teamB.teamIndex, slotsB);
+  return { winner: scoreA>=scoreB ? teamA : teamB, scoreA, scoreB, playerResult };
+}
+
+// Seeds the bracket (host + 3 champions) the moment it's due, but does NOT play any
+// games — that only happens when a real Sim/Watch action resolves a specific game,
+// same "real calendar, real action" spirit as the league weekly loop.
+function ensureIslandChampBracketForYear(cycleYear){
+  const s = loadJrState();
+  if(s.islandChampBracket && s.islandChampBracket.cycleYear === cycleYear) return s.islandChampBracket;
+  const dates = tierKeyDates(cycleYear);
+  if(getCurrentDay() < dates.jrIslandChampStart) return null;
   const host = ensureIslandChampHostForYear(cycleYear);
   const seeds = seedIslandChampionshipTeams(cycleYear);
   if(!host || seeds.length < 3) return null;
-
   const hostIsAlsoChamp = seeds.some(c=> c.leagueId===host.leagueId && c.teamIndex===host.teamIndex);
   let hostSlot = host;
   if(hostIsAlsoChamp){
@@ -2058,59 +2149,89 @@ function runIslandChampionship(cycleYear){
     });
     hostSlot = best || host;
   }
-
-  // Cross-league team match — same per-weight-class aggregate the regular season and
-  // league playoffs use, but since the two teams are in different leagues (different
-  // roster pools), we resolve it directly here instead of routing through a shared helper.
-  function crossLeagueGame(teamA, teamB, hostTeam){
-    const slotsA = ensureTeamRoster(teamA.leagueId, teamA.teamIndex);
-    const slotsB = ensureTeamRoster(teamB.leagueId, teamB.teamIndex);
-    const aIsHost = teamA.leagueId===hostTeam.leagueId && teamA.teamIndex===hostTeam.teamIndex;
-    const lineupB = aiPickLineup(slotsB, null);
-    const lineupA = aiPickLineup(slotsA, lineupB);
-    let scoreA=0, scoreB=0;
-    const competedIds = new Set();
-    WEIGHT_CLASSES.forEach(wc=>{
-      const fA = lineupA[wc], fB = lineupB[wc];
-      if(!fA || !fB) return;
-      const bout = simulateBout(fA, fB, { arena:{floor:'championship court'}, hometownPit: aIsHost });
-      if(bout.winner.id===fA.id) scoreA++; else scoreB++;
-      recordJrBoutOutcome(bout.winner, bout.loser, bout.method);
-      applyPostBoutFatigueAndInjury(bout.winner, bout.loser, bout.method);
-      competedIds.add(fA.id); competedIds.add(fB.id);
-    });
-    applyWeeklyRosterMaintenance(slotsA, competedIds);
-    applyWeeklyRosterMaintenance(slotsB, competedIds);
-    persistRosterSlots(teamA.leagueId, teamA.teamIndex, slotsA);
-    persistRosterSlots(teamB.leagueId, teamB.teamIndex, slotsB);
-    return { winner: scoreA>=scoreB ? teamA : teamB, scoreA, scoreB };
-  }
-
-  const semiA = crossLeagueGame(hostSlot, seeds[0], hostSlot); // Host vs #1
-  const semiB = crossLeagueGame(seeds[1], seeds[2], hostSlot); // #2 vs #3
-  const final = crossLeagueGame(semiA.winner, semiB.winner, hostSlot);
-
-  const result = {
-    cycleYear, host, hostSlot, hostIsAlsoChamp, seeds,
+  const bracket = {
+    cycleYear, host, hostSlot, hostIsAlsoChamp, seeds, stage:'semis',
     semis: [
-      { a: hostSlot, b: seeds[0], winner: semiA.winner, scoreA: semiA.scoreA, scoreB: semiA.scoreB },
-      { a: seeds[1], b: seeds[2], winner: semiB.winner, scoreA: semiB.scoreA, scoreB: semiB.scoreB },
+      { a: hostSlot, b: seeds[0], played:false, scoreA:null, scoreB:null, winner:null, playerResult:null },
+      { a: seeds[1], b: seeds[2], played:false, scoreA:null, scoreB:null, winner:null, playerResult:null },
     ],
-    final: { a: semiA.winner, b: semiB.winner, winner: final.winner, scoreA: final.scoreA, scoreB: final.scoreB },
-    champion: final.winner,
+    final: null, championTeamIdx: null,
   };
-  const s = loadJrState();
-  s.islandChampionship = result;
+  s.islandChampBracket = bracket;
   saveJrState(s);
-  return result;
+  return bracket;
+}
+function islandChampFinalUnlockDay(cycleYear){ return tierKeyDates(cycleYear).jrIslandChampStart + 7; }
+
+// Resolves ONE game (a semi, or the final) — real action, real date-gating. Opens the
+// final the moment both semis are in, exactly like the league playoff injection does.
+function resolveIslandChampGame(cycleYear, gameKey, playerInfo){
+  const s = loadJrState();
+  const bracket = s.islandChampBracket;
+  if(!bracket || bracket.cycleYear !== cycleYear) return null;
+  let game = gameKey==='semi0' ? bracket.semis[0] : gameKey==='semi1' ? bracket.semis[1] : bracket.final;
+  if(!game || game.played) return null;
+  if(gameKey==='final' && getCurrentDay() < islandChampFinalUnlockDay(cycleYear)) return null;
+  const involvesMe = playerInfo && ((playerInfo.leagueId===game.a.leagueId && playerInfo.teamIndex===game.a.teamIndex) || (playerInfo.leagueId===game.b.leagueId && playerInfo.teamIndex===game.b.teamIndex));
+  const result = crossLeagueTeamGame(game.a, game.b, bracket.hostSlot, involvesMe ? playerInfo : null);
+  game.played = true; game.scoreA = result.scoreA; game.scoreB = result.scoreB; game.winner = result.winner; game.playerResult = result.playerResult;
+  if(gameKey !== 'final' && bracket.semis[0].played && bracket.semis[1].played && !bracket.final){
+    bracket.final = { a: bracket.semis[0].winner, b: bracket.semis[1].winner, played:false, scoreA:null, scoreB:null, winner:null, playerResult:null };
+    bracket.stage = 'final';
+  }
+  if(gameKey === 'final'){
+    bracket.championTeamIdx = game.winner;
+    bracket.stage = 'complete';
+    // Mirror into the legacy s.islandChampionship shape so the results popup keeps working.
+    s.islandChampionship = {
+      cycleYear, host: bracket.host, hostSlot: bracket.hostSlot, hostIsAlsoChamp: bracket.hostIsAlsoChamp, seeds: bracket.seeds,
+      semis: [
+        { a: bracket.semis[0].a, b: bracket.semis[0].b, winner: bracket.semis[0].winner, scoreA: bracket.semis[0].scoreA, scoreB: bracket.semis[0].scoreB },
+        { a: bracket.semis[1].a, b: bracket.semis[1].b, winner: bracket.semis[1].winner, scoreA: bracket.semis[1].scoreA, scoreB: bracket.semis[1].scoreB },
+      ],
+      final: { a: bracket.final.a, b: bracket.final.b, winner: bracket.final.winner, scoreA: bracket.final.scoreA, scoreB: bracket.final.scoreB },
+      champion: bracket.championTeamIdx,
+    };
+  }
+  saveJrState(s);
+  return game;
 }
 
-// Idempotent per-cycle trigger for the Island Championship stage.
-function ensureIslandChampionshipRunForYear(cycleYear){
-  const s = loadJrState();
-  if(s.islandChampionship && s.islandChampionship.cycleYear === cycleYear) return;
-  if(getCurrentDay() < tierKeyDates(cycleYear).jrIslandChampStart) return;
-  runIslandChampionship(cycleYear);
+function renderIslandChampionship(){
+  const cycleYear = currentIslandYear();
+  const bracket = ensureIslandChampBracketForYear(cycleYear);
+  if(!bracket){
+    return `<div class="empty-note">The IronIsland Cup hasn't been seeded yet — check back once the league finals wrap up.</div><div class="btn-row"><span></span><button class="btn" id="back-from-cup">← Back</button></div>`;
+  }
+  const roster = getRoster();
+  const mineF = roster.find(r=>r.isPlayable);
+  const myTeam = mineF && mineF.juniorLeagueId ? { leagueId: mineF.juniorLeagueId, teamIndex: mineF.juniorTeamId } : null;
+  const nm = (t)=> t ? `${getJrLeague(t.leagueId).teams[t.teamIndex].city} ${getJrLeague(t.leagueId).teams[t.teamIndex].nickname}` : 'TBD';
+  const gameBlock = (game, key, label)=>{
+    if(!game) return `<div class="fighter-row"><div class="fr-name">${label}</div><div class="fr-meta">Not yet set — waits on the other two games</div></div>`;
+    const isMyGame = myTeam && ((myTeam.leagueId===game.a.leagueId && myTeam.teamIndex===game.a.teamIndex) || (myTeam.leagueId===game.b.leagueId && myTeam.teamIndex===game.b.teamIndex));
+    const unlockDay = key==='final' ? islandChampFinalUnlockDay(cycleYear) : tierKeyDates(cycleYear).jrIslandChampStart;
+    const unlocked = getCurrentDay() >= unlockDay;
+    return `
+      <div class="fighter-row" style="align-items:flex-start; flex-direction:column; gap:6px;">
+        <div class="fr-name">${label}: ${nm(game.a)} vs ${nm(game.b)}${isMyGame?' ⭐':''}</div>
+        <div class="fr-meta">${game.played
+          ? `Final ${game.scoreA}-${game.scoreB} — ${nm(game.winner)} wins${game.playerResult ? (game.playerResult.won ? ' · YOU WON your bout' : ' · you lost your bout') : ''}`
+          : unlocked ? 'Ready to resolve' : `🔒 Unlocks ${formatCalendarDateShort(unlockDay)}`}</div>
+        ${!game.played && unlocked ? `<button class="btn btn-small btn-primary" data-resolve-cup="${key}">${isMyGame ? 'Fight This →' : 'Sim This →'}</button>` : ''}
+      </div>
+    `;
+  };
+  return `
+    <div class="section-label">IronIsland Cup ${cycleYear}</div>
+    <p style="font-family:var(--body); font-size:12.5px; color:var(--bone-dim); margin-bottom:14px;">Host: ${nm(bracket.hostSlot)}${bracket.hostIsAlsoChamp ? ' (hosting credit: '+nm(bracket.host)+')' : ''}</p>
+    <div class="fighter-grid">
+      ${gameBlock(bracket.semis[0], 'semi0', 'Semifinal — Host vs #1')}
+      ${gameBlock(bracket.semis[1], 'semi1', 'Semifinal — #2 vs #3')}
+      ${gameBlock(bracket.final, 'final', 'Final')}
+    </div>
+    <div class="btn-row" style="margin-top:14px;"><span></span><button class="btn" id="back-from-cup">← Back</button></div>
+  `;
 }
 
 function pickStarter(slots, weightClass){
@@ -2899,6 +3020,7 @@ function render(){
   else if(state.screen==='select'){ body = renderSelect(); }
   else if(state.screen==='league-night'){ body = renderLeagueNight(); title='JR FIGHT NIGHT'; sub='THURSDAY'; }
   else if(state.screen==='league-night-games'){ body = renderLeagueNightGames(); title='THIS WEEK\'S SLATE'; }
+  else if(state.screen==='island-championship'){ body = renderIslandChampionship(); title='IRONISLAND CUP'; sub='4-TEAM CHAMPIONSHIP'; }
   else if(state.screen==='jr-contract'){ body = renderJrContract(); title='JR CONTRACT'; sub='SIGN TO REGISTER'; }
   else if(state.screen==='declared-list'){ body = renderDeclaredList(); title='DECLARED POOL'; sub='THIS YEAR\'S DRAFT CLASS'; }
   else if(state.screen==='fa-pool'){ body = renderFAPool(); title='FREE AGENTS'; sub='JUNIOR ELIGIBLE'; }
@@ -3012,7 +3134,7 @@ function renderSelect(){
   const cycleYearNow = currentIslandYear();
   ensureLeaguePlayoffHostsForYear(cycleYearNow);
   ensurePlayoffWeeksInjected(cycleYearNow);
-  ensureIslandChampionshipRunForYear(cycleYearNow);
+  ensureIslandChampBracketForYear(cycleYearNow);
   const roster = getRoster();
   if(!roster.length){
     return `<div class="empty-note">No fighters saved yet. Build one in the Character Creator and develop them through Amateur in the Fight Pit first — Junior League scouts only watch active Amateur fighters aged 14-17.</div>`;
@@ -3923,6 +4045,21 @@ function wireEvents(){
     }
   }
 
+  document.querySelectorAll('[data-resolve-cup]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const cycleYear = currentIslandYear();
+      const roster = getRoster();
+      const mineF = roster.find(r=>r.isPlayable);
+      const playerInfo = (mineF && mineF.juniorLeagueId)
+        ? { fighterId: mineF.id, leagueId: mineF.juniorLeagueId, teamIndex: mineF.juniorTeamId, weightClass: weightClassOf(mineF.weightLb) }
+        : null;
+      resolveIslandChampGame(cycleYear, btn.dataset.resolveCup, playerInfo);
+      render();
+    };
+  });
+  const backFromCup = document.getElementById('back-from-cup');
+  if(backFromCup) backFromCup.onclick = ()=>{ state.screen='select'; render(); };
+
   const finishThursday = document.getElementById('finish-thursday');
   if(finishThursday && !finishThursday.disabled) finishThursday.onclick = ()=>{
     const roster = getRoster();
@@ -4337,10 +4474,31 @@ try{
       alert("Jr Fight Night is only open once you've actually made it to the arena — walk there in Free Roam first.");
     }
     render();
+  } else if(urlScreen === 'island-championship'){
+    state.screen = 'island-championship';
+    render();
+    if(new URLSearchParams(window.location.search).get('autosim') === '1'){
+      const cycleYear = currentIslandYear();
+      const bracket = ensureIslandChampBracketForYear(cycleYear);
+      if(bracket){
+        const roster = getRoster();
+        const mineF = roster.find(r=>r.isPlayable);
+        const playerInfo = (mineF && mineF.juniorLeagueId)
+          ? { fighterId: mineF.id, leagueId: mineF.juniorLeagueId, teamIndex: mineF.juniorTeamId, weightClass: weightClassOf(mineF.weightLb) }
+          : null;
+        if(!bracket.semis[0].played) resolveIslandChampGame(cycleYear, 'semi0', playerInfo);
+        if(!bracket.semis[1].played) resolveIslandChampGame(cycleYear, 'semi1', playerInfo);
+        const freshBracket = loadJrState().islandChampBracket;
+        if(freshBracket && freshBracket.final && !freshBracket.final.played && getCurrentDay() >= islandChampFinalUnlockDay(cycleYear)){
+          resolveIslandChampGame(cycleYear, 'final', playerInfo);
+        }
+        render();
+      }
+    }
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V47 · 2026-07-19</div>
+<div class="version-badge">JUNIOR LEAGUE · V49 · 2026-07-19</div>
 </body>
 </html>
 
