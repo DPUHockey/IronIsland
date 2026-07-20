@@ -1691,6 +1691,10 @@ function readGameScore(leagueId, weekIdx, home, away){
   const s = loadJrStateReadOnly();
   return (s.gameScores || {})[pairingKeyReadOnly(leagueId,weekIdx,home,away)] || null;
 }
+function readGameCardResults(leagueId, weekIdx, home, away){
+  const s = loadJrStateReadOnly();
+  return (s.gameCardResults || {})[pairingKeyReadOnly(leagueId,weekIdx,home,away)] || null;
+}
 // The one deliberate write path from this file into the Junior League's state — everything
 // else here is strictly read-only. Drives the Wednesday-announce/stadium-arrival/missed
 // checkpoint that replaces "Jr Fight Night reachable anytime" with a real weekly ritual.
@@ -4411,6 +4415,7 @@ function render(){
   else if(state.screen==='league-standings'){ body = renderLeagueStandings(); title='STANDINGS'; }
   else if(state.screen==='loc-pit'){ body = renderLocPit(); title='FIGHT PIT'; }
   else if(state.screen==='loc-stadium'){ body = renderLocStadium(); title='STADIUM'; }
+  else if(state.screen==='loc-stadium-game'){ body = renderLocStadiumGame(); title='MATCHUP'; }
   else if(state.screen==='choose-agent'){ body = renderChooseAgent(); title='YOUR CORNER'; }
   else if(state.screen==='choose-pit-to-fight'){ body = renderChoosePitToFight(); title='FIND A FIGHT'; }
   else if(state.screen==='choose-opponent'){ body = renderChooseOpponent(); title='PICK YOUR FIGHT'; }
@@ -4782,7 +4787,7 @@ function renderLocStadium(){
   } else {
     const ranked = league.teams.map((t,i)=>({t,i,rec:standings[i]})).sort((a,b)=> winPct(b.i)-winPct(a.i));
     standingsInner = ranked.map((r,rank)=> row(
-      `${rank+1}. ${r.t.city} ${r.t.nickname}`,
+      `${rank+1}. <span class="clickable-name" data-view-jr-team="${league.id}|${r.i}">${r.t.city} ${r.t.nickname}</span>`,
       `${r.rec.wins}-${r.rec.losses}`,
       { border: rank<ranked.length-1, highlight: r.i===loc.teamIndex }
     )).join('');
@@ -4821,7 +4826,7 @@ function renderLocStadium(){
       }
       const left = `Wk${wIdx+1} · ${dateStr} — ${isHome?'vs':'@'} ${opp.city} ${opp.nickname} <span style="color:var(--muted);">(${oppRec.wins}-${oppRec.losses})</span>`;
       const right = played ? resultStr : (isHome?'HOME':'AWAY');
-      return row(left, right, { border:true, highlight:isNow, dim:played });
+      return `<div class="clickable-name" data-view-jr-game="${league.id}|${wIdx}|${loc.teamIndex}" style="cursor:pointer;">${row(left, right, { border:true, highlight:isNow, dim:played })}</div>`;
     }).join('');
 
     // Playoff format preview — real bracket once resolved, projected top-4 seeds before that.
@@ -4872,7 +4877,7 @@ function renderLocStadium(){
       return `
         <div style="padding:3px 0; ${i<roster.length-1?'border-bottom:1px solid var(--line);':''}">
           <div style="display:flex; justify-content:space-between; font-family:var(--body); font-size:10.5px; ${sl.isPlayer?'color:var(--brass);':''}">
-            <span>${star}${sl.weightClass} — ${sl.name}${status}</span>
+            <span>${star}${sl.weightClass} — ${f?`<span class="clickable-name" data-open-fighter="${f.id}">${sl.name}</span>`:sl.name}${status}</span>
             <span style="font-family:var(--mono); color:var(--muted);">OVR ${ovr}</span>
           </div>
           <div style="font-family:var(--mono); font-size:9px; color:var(--muted); margin-top:1px;">${line2}</div>
@@ -4921,6 +4926,68 @@ function renderLocStadium(){
     </div>
     <div class="btn-row" style="margin-top:12px;"><button class="btn" id="back-to-walk">← Back to the Street</button><span></span></div>
   `;
+}
+
+// Reached by clicking a game on the stadium's schedule — shows a roster-vs-roster
+// preview for a game that hasn't happened yet (no lineups are locked until game day, so
+// this can't show a confirmed 5-man card), or the real weight-class-by-weight-class
+// breakdown once it has, using the per-bout results captured at simulation time.
+function renderLocStadiumGame(){
+  const g = state.viewingJrGame;
+  const league = getJrLeague(g.leagueId);
+  const weeks = readLeagueSchedule(g.leagueId);
+  const week = weeks && weeks[g.weekIdx];
+  const pairing = week && week.find(p=> p.home===g.teamIndex || p.away===g.teamIndex);
+  if(!pairing){
+    return `<div class="empty-note">That game isn't on the schedule.</div><div class="btn-row"><span></span><button class="btn" id="back-from-jr-game">← Back</button></div>`;
+  }
+  const homeTeam = league.teams[pairing.home], awayTeam = league.teams[pairing.away];
+  const played = readIsPairingPlayed(g.leagueId, g.weekIdx, pairing.home, pairing.away);
+  const dateStr = formatCalendarDateShort(jrWeekGameDay(g.leagueId, g.weekIdx));
+  const wcRowStyle = 'display:grid; grid-template-columns:1fr 46px 1fr; align-items:center; padding:5px 0; border-bottom:1px solid var(--line); font-family:var(--body); font-size:10.5px;';
+  const wcLabelStyle = 'text-align:center; font-family:var(--label); font-size:8.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;';
+
+  let body;
+  if(played){
+    const score = readGameScore(g.leagueId, g.weekIdx, pairing.home, pairing.away);
+    const card = readGameCardResults(g.leagueId, g.weekIdx, pairing.home, pairing.away);
+    const rows = (card||[]).map(r=> `
+      <div style="${wcRowStyle}">
+        <span style="text-align:right; ${r.homeWon?'color:var(--brass);':'opacity:0.55;'}">${r.homeName}${r.homeWon?' ✓':''}</span>
+        <span style="${wcLabelStyle}">${r.weightClass}</span>
+        <span style="${!r.homeWon?'color:var(--brass);':'opacity:0.55;'}">${!r.homeWon?'✓ ':''}${r.awayName}</span>
+      </div>
+    `).join('');
+    body = `
+      <div style="text-align:center; margin-bottom:14px;">
+        <div style="font-family:var(--display); font-size:17px; color:var(--bone);">${homeTeam.city} ${homeTeam.nickname} ${score?score.homeScore:'—'} – ${score?score.awayScore:'—'} ${awayTeam.city} ${awayTeam.nickname}</div>
+        <div style="font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:2px;">${dateStr} · Week ${g.weekIdx+1}</div>
+      </div>
+      ${card ? rows : '<div class="empty-note">No bout-by-bout detail was recorded for this one.</div>'}
+    `;
+  } else {
+    const homeRoster = readTeamRoster(g.leagueId, pairing.home);
+    const awayRoster = readTeamRoster(g.leagueId, pairing.away);
+    const wcRow = (wc)=>{
+      const h = homeRoster ? homeRoster.filter(sl=>sl.weightClass===wc).map(sl=>sl.name) : [];
+      const a = awayRoster ? awayRoster.filter(sl=>sl.weightClass===wc).map(sl=>sl.name) : [];
+      return `
+        <div style="${wcRowStyle}">
+          <span style="text-align:right;">${h.join(', ')||'—'}</span>
+          <span style="${wcLabelStyle}">${wc}</span>
+          <span>${a.join(', ')||'—'}</span>
+        </div>
+      `;
+    };
+    body = `
+      <div style="text-align:center; margin-bottom:14px;">
+        <div style="font-family:var(--display); font-size:17px; color:var(--bone);">${homeTeam.city} ${homeTeam.nickname} vs ${awayTeam.city} ${awayTeam.nickname}</div>
+        <div style="font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:2px;">${dateStr} · Week ${g.weekIdx+1} · Preview — full rosters, lineups aren't locked until game day</div>
+      </div>
+      ${WEIGHT_CLASSES_5.map(wcRow).join('')}
+    `;
+  }
+  return `${body}<div class="btn-row" style="margin-top:14px;"><span></span><button class="btn" id="back-from-jr-game">← Back</button></div>`;
 }
 
 function renderLocNpc(){
@@ -6383,6 +6450,25 @@ function wireEvents(){
   const backToWalk = document.getElementById('back-to-walk');
   if(backToWalk) backToWalk.onclick = ()=>{ state.encounterResult = null; state.screen='city-walk'; render(); };
 
+  document.querySelectorAll('[data-view-jr-team]').forEach(el=>{
+    el.onclick = ()=>{
+      const [leagueId, teamIndexStr] = el.dataset.viewJrTeam.split('|');
+      state.visitingLocation = { leagueId, teamIndex: parseInt(teamIndexStr,10), type:'stadium' };
+      state.screen = 'loc-stadium';
+      render();
+    };
+  });
+  document.querySelectorAll('[data-view-jr-game]').forEach(el=>{
+    el.onclick = ()=>{
+      const [leagueId, weekIdxStr, teamIndexStr] = el.dataset.viewJrGame.split('|');
+      state.viewingJrGame = { leagueId, weekIdx: parseInt(weekIdxStr,10), teamIndex: parseInt(teamIndexStr,10) };
+      state.screen = 'loc-stadium-game';
+      render();
+    };
+  });
+  const backFromJrGame = document.getElementById('back-from-jr-game');
+  if(backFromJrGame) backFromJrGame.onclick = ()=>{ state.screen = 'loc-stadium'; render(); };
+
   const openCalendar = document.querySelector('[data-open-calendar]');
   if(openCalendar) openCalendar.onclick = ()=>{ state.calendarMonthOffset = 0; state.calendarTab = 'tracker'; state.screen='calendar'; render(); };
   const calTabTracker = document.getElementById('cal-tab-tracker');
@@ -6959,6 +7045,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V82 · 2026-07-19</div>
+<div class="version-badge">FREE ROAM · V83 · 2026-07-19</div>
 </body>
 </html>
