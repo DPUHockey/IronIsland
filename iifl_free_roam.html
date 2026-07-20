@@ -617,6 +617,62 @@ const SETTLEMENT_DATA = {
   ],
 };
 
+// Hand-illustrated, clickable walkable maps — a pilot, starting with just Frontenac
+// City. Any settlement NOT listed here keeps using the abstract grid exactly as before;
+// this is additive, not a replacement, so nothing else is at risk. Coordinates are
+// percentages of the source image (so they stay correct at any render size) and were
+// estimated by eye from the artwork — first-pass, likely needs real-world nudging once
+// actually clicked in a browser.
+//
+// hook types: 'jrStadium' (real Junior League stadium screen), 'pit' (the settlement's
+// one real Juvenile pit — only ONE building can hold this, since the game currently
+// only supports one pit per settlement; a second "fight venue" on a map is flavor-only
+// until that changes), 'travel' (the existing province/city travel screen), or null
+// (flavor-only — no game system exists for this yet, shows an honest placeholder).
+const SETTLEMENT_MAPS = {
+  'sherwood|Frontenac City': {
+    image: 'Settlement Maps/frontenac_city.png',
+    startNode: 'crossroads',
+    nodes: {
+      thunderdome:  { type:'building', label:'Frontenac Thunderdome',      x:15, y:13, hook:null, note:"Under construction — nothing to do here yet." },
+      hospital:     { type:'building', label:'Hospital',                  x:41, y:9,  hook:null },
+      gym:          { type:'building', label:'Gym',                       x:60, y:11, hook:null },
+      splinterRoom: { type:'building', label:"The Splinter Room",         x:73, y:19, hook:null },
+      arena:        { type:'building', label:'Anchor Point Arena',        x:85, y:11, hook:'jrStadium', hookData:{ leagueId:'northern_jr', teamIndex:0 } },
+      foodStore:    { type:'building', label:'Food Store',                x:26, y:31, hook:null },
+      ejoesPotions: { type:'building', label:"Ejoe's Potions",            x:39, y:38, hook:null },
+      depot:        { type:'building', label:'The Depot',                 x:63, y:34, hook:null },
+      ballpark:     { type:'building', label:'The Ballpark',              x:87, y:38, hook:null },
+      fightHouse:   { type:'building', label:'The Frontenac Fight House', x:22, y:49, hook:'pit' },
+      bank:         { type:'building', label:'Bank',                      x:53, y:46, hook:null },
+      sheriff:      { type:'building', label:'Sheriff Office',            x:64, y:51, hook:null },
+      firehouse:    { type:'building', label:'Firehouse',                 x:77, y:51, hook:null },
+      marcosHut:    { type:'building', label:"Madame Wan Marco's Hut",    x:16, y:66, hook:null },
+      boochiBar:    { type:'building', label:'The Boochi Arcade',         x:39, y:64, hook:null },
+      snakePit:     { type:'building', label:'The Snake Pit',             x:63, y:66, hook:null, note:"Just a bar with a mean name — the real fights happen at the Fight House." },
+      roadOut:      { type:'exit',     label:'Road to the Uplands',       x:92, y:63, hook:'travel' },
+      rustedNug:    { type:'building', label:'The Rusted Nug',            x:45, y:81, hook:null },
+      corner1:      { type:'node',     label:'Street Corner',             x:24, y:22 },
+      corner2:      { type:'node',     label:'Street Corner',             x:66, y:23 },
+      crossroads:   { type:'node',     label:'Crossroads',                x:40, y:50 },
+      corner4:      { type:'node',     label:'Street Corner',             x:52, y:60 },
+      corner5:      { type:'node',     label:'Street Corner',             x:30, y:75 },
+    },
+    edges: [
+      ['thunderdome','corner1'], ['hospital','corner1'], ['corner1','foodStore'],
+      ['hospital','gym'], ['gym','corner2'], ['splinterRoom','corner2'], ['corner2','depot'], ['corner2','arena'],
+      ['foodStore','ejoesPotions'], ['ejoesPotions','depot'], ['depot','ballpark'], ['splinterRoom','ballpark'],
+      ['foodStore','crossroads'], ['ejoesPotions','crossroads'], ['crossroads','fightHouse'], ['crossroads','bank'],
+      ['bank','sheriff'], ['sheriff','depot'], ['sheriff','corner4'], ['bank','corner4'], ['corner4','boochiBar'], ['corner4','snakePit'],
+      ['sheriff','firehouse'], ['firehouse','ballpark'], ['firehouse','roadOut'], ['snakePit','roadOut'],
+      ['fightHouse','corner5'], ['corner5','marcosHut'], ['corner5','boochiBar'], ['corner5','rustedNug'], ['boochiBar','rustedNug'],
+    ],
+  },
+};
+function settlementMapFor(provinceId, settlementName){
+  return SETTLEMENT_MAPS[provinceId+'|'+settlementName] || null;
+}
+
 const SKIN_TONES = ['#3E2A1E','#5C3A24','#8C5A35','#C68642','#E0AC69','#F1C27D'];
 const HAIR_COLORS = ['#0E0C0A','#3B2417','#6B4226','#A85C2A','#C9A23C','#D9D2C5','none'];
 
@@ -4401,7 +4457,11 @@ function render(){
   catchUpJuvenileSimulation();
   let title='ENTER THE WORLD', sub='FREE ROAM', body='';
   if(state.screen==='select'){ body = renderSelect(); }
-  else if(state.screen==='city-walk'){ body = renderCityWalk(); title='WALKING'; sub=state.settlementName; }
+  else if(state.screen==='city-walk'){
+    const illustratedMap = settlementMapFor(state.provinceId, state.settlementName);
+    body = illustratedMap ? renderCityWalkIllustrated(illustratedMap) : renderCityWalk();
+    title='WALKING'; sub=state.settlementName;
+  }
   else if(state.screen==='loc-npc'){ body = renderLocNpc(); title='STREET TALK'; }
   else if(state.screen==='loc-minigames'){ body = renderLocMinigames(); title='???'; }
   else if(state.screen==='loc-travel'){ body = renderLocTravel(); title='THE ROAD OUT'; sub=state.settlementName; }
@@ -4503,6 +4563,55 @@ function renderSelect(){
 
 function currentPits(){ return ensureCityPits(state.provinceId, state.settlementName); }
 function currentGrid(){ return ensureCityGrid(state.provinceId, state.settlementName); }
+
+// Hand-illustrated version of city-walk, used only for settlements listed in
+// SETTLEMENT_MAPS (currently just Frontenac City) — every other settlement keeps using
+// renderCityWalk (the grid) below, completely unaffected. Movement works the same way
+// conceptually as the grid: click an adjacent node to walk there (costs a move, same as
+// always), arriving at a building with a real hook enters it immediately, arriving
+// anywhere else has a chance of a street encounter — same spirit as the grid's roaming
+// events, just laid out on real streets instead of an abstract grid.
+const ILLUSTRATED_ENCOUNTER_CHANCE = 0.18;
+function renderCityWalkIllustrated(map){
+  const posKey = state.provinceId+'|'+state.settlementName;
+  if(state.illustratedPosKey !== posKey){
+    state.illustratedPosition = map.startNode;
+    state.illustratedPosKey = posKey;
+  }
+  const curId = state.illustratedPosition;
+  const adjacentIds = new Set();
+  map.edges.forEach(([a,b])=>{ if(a===curId) adjacentIds.add(b); if(b===curId) adjacentIds.add(a); });
+
+  const nodeMarkers = Object.entries(map.nodes).map(([id,n])=>{
+    const isHere = id===curId;
+    const isAdjacent = adjacentIds.has(id);
+    const clickable = isAdjacent;
+    const dotColor = isHere ? 'var(--brass)' : isAdjacent ? '#ffffff' : 'rgba(255,255,255,0.35)';
+    const dotSize = isHere ? 16 : 10;
+    return `
+      <div ${clickable?`class="clickable-name" data-walk-node="${id}"`:''}
+           style="position:absolute; left:${n.x}%; top:${n.y}%; transform:translate(-50%,-50%); cursor:${clickable?'pointer':'default'}; text-align:center;">
+        <div style="width:${dotSize}px; height:${dotSize}px; border-radius:50%; background:${dotColor}; border:2px solid rgba(0,0,0,0.55); box-shadow:0 0 6px rgba(0,0,0,0.6); margin:0 auto;"></div>
+        ${(isHere||isAdjacent) && n.label ? `<div style="margin-top:2px; white-space:nowrap; font-family:var(--label); font-size:9px; color:#fff; text-shadow:0 1px 3px #000; background:rgba(20,17,13,0.7); padding:1px 5px; border-radius:3px; display:inline-block;">${n.label}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  const hereNode = map.nodes[curId];
+
+  return `
+    <div class="time-bar">
+      <div><span class="time-day">${formatCalendarDate(getCurrentDay())}</span><span class="time-period">${state.period}</span></div>
+      <div class="time-moves">${'●'.repeat(state.movesRemaining)}${'○'.repeat(MOVES_PER_PERIOD-state.movesRemaining)} moves left</div>
+    </div>
+    <div style="position:relative; width:100%; border:1px solid var(--line); overflow:hidden;">
+      <img src="${map.image}" style="width:100%; display:block;" alt="${state.settlementName}" />
+      ${nodeMarkers}
+    </div>
+    <div style="text-align:center; font-family:var(--label); font-size:11px; color:var(--brass); margin-top:8px;">📍 ${hereNode.label || 'On the street'}${hereNode.note ? ` — ${hereNode.note}` : ''}</div>
+    <div class="btn-row" style="margin-top:10px;"><button class="btn" id="back-to-select-from-walk">← Leave Town</button><span></span></div>
+  `;
+}
 
 function renderCityWalk(){
   const f = getFighterById(state.fighterId);
@@ -6422,6 +6531,30 @@ function wireEvents(){
     render();
   };
 
+  document.querySelectorAll('[data-walk-node]').forEach(el=>{
+    el.onclick = ()=>{
+      const targetId = el.dataset.walkNode;
+      const map = settlementMapFor(state.provinceId, state.settlementName);
+      if(!map || !map.nodes[targetId]) return;
+      state.illustratedPosition = targetId;
+      state.illustratedPosKey = state.provinceId+'|'+state.settlementName;
+      spendMove();
+      const node = map.nodes[targetId];
+      if(node.hook === 'jrStadium'){
+        state.visitingLocation = { leagueId: node.hookData.leagueId, teamIndex: node.hookData.teamIndex, type:'stadium' };
+        state.screen = 'loc-stadium';
+      } else if(node.hook === 'pit'){
+        const pit = currentPits()[0];
+        if(pit){ state.visitingLocation = { type:'pit', pitId: pit.id }; state.screen = 'loc-pit'; }
+      } else if(node.hook === 'travel'){
+        state.screen = 'loc-travel';
+      } else if(Math.random() < ILLUSTRATED_ENCOUNTER_CHANCE){
+        triggerRandomEvent();
+      }
+      render();
+    };
+  });
+
   document.querySelectorAll('[data-walk-cell]').forEach(cell=>{
     cell.onclick = ()=>{
       const [r,c] = cell.dataset.walkCell.split('|').map(Number);
@@ -7045,6 +7178,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V83 · 2026-07-19</div>
+<div class="version-badge">FREE ROAM · V84 · 2026-07-19</div>
 </body>
 </html>
