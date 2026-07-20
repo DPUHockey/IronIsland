@@ -600,8 +600,8 @@ function getMajorEventsForYear(cycleYear){
         { day: finalDay, title: `${shortName} Final`, tier: 'Junior', kind: 'playoffs' },
       ];
     }),
-    { day: d.jrIslandChampStart, title: 'Junior Island Championship Begins', tier: 'Junior', kind: 'championship' },
-    { day: d.jrIslandChampEnd, title: 'Junior Island Championship Ends', tier: 'Junior', kind: 'championship' },
+    { day: d.jrIslandChampStart, title: 'IronIsland Cup — Semifinals', tier: 'Junior', kind: 'championship', watchUrl: 'iifl_junior_league.html?screen=island-championship' },
+    { day: d.jrIslandChampStart + 7, title: 'IronIsland Cup — Final', tier: 'Junior', kind: 'championship', watchUrl: 'iifl_junior_league.html?screen=island-championship' },
     { day: d.amateurOpen, title: 'Amateur Circuit Opens', tier: 'Amateur', kind: 'open' },
     { day: d.amateurTradeDeadline, title: 'Amateur Trade Deadline', tier: 'Amateur', kind: 'deadline' },
     { day: d.amateurRegEnd, title: 'Amateur Regular Season Ends', tier: 'Amateur', kind: 'end' },
@@ -1799,7 +1799,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-reset-island">🔄 Reset Island (Test Mode) →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V24 · 2026-07-19</div>
+        <div class="version-badge">HOME · V25 · 2026-07-19</div>
       </footer>
     </div>
   `;
@@ -1878,7 +1878,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V24 · 2026-07-19</div>
+        <div class="version-badge">HOME · V25 · 2026-07-19</div>
       </footer>
     </div>
   `;
