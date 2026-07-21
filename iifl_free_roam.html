@@ -302,6 +302,27 @@
     position:fixed; bottom:14px; right:16px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8B8070;
     background:#241D17; border:1px solid #43392D; padding:5px 9px; letter-spacing:.5px; z-index:999;
   }
+
+  /* City/Province info modal — ported from iifl_character_creator.html */
+  .settlement-info-btn{
+    flex-shrink:0; width:22px; height:22px; border:1px solid var(--line); background:var(--bg-raised-2);
+    color:var(--brass); font-size:12px; cursor:pointer; line-height:1; padding:0;
+  }
+  .city-modal-overlay{
+    position:fixed; inset:0; background:rgba(10,8,6,0.78); display:flex; align-items:center; justify-content:center;
+    padding:20px; z-index:1000;
+  }
+  .city-modal-card{ background:var(--bg-panel); border:1px solid var(--brass-dim); max-width:420px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.55); }
+  .city-modal-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .city-modal-title{ font-family:var(--display); font-size:22px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .city-modal-close{ background:transparent; border:1px solid var(--line); color:var(--muted); width:28px; height:28px; cursor:pointer; font-family:var(--mono); font-size:13px; }
+  .city-modal-close:hover{ border-color:var(--ink-red); color:var(--ink-red); }
+  .city-modal-body{ padding:18px 20px; max-height:70vh; overflow-y:auto; }
+  .city-stat-row{ display:flex; justify-content:space-between; align-items:baseline; padding:9px 0; border-bottom:1px solid var(--line); }
+  .city-stat-row:last-of-type{ border-bottom:none; }
+  .city-stat-label{ font-family:var(--label); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); }
+  .city-stat-val{ font-family:var(--mono); font-size:13px; color:var(--bone); text-align:right; }
+  .city-fighters-text{ font-family:var(--body); font-size:13px; color:var(--bone-dim); line-height:1.6; margin-top:12px; }
 </style>
 </head>
 <body>
@@ -4700,7 +4721,7 @@ function renderSelect(){
       <div class="fighter-row">
         <div style="flex:1;">
           <div class="fr-name">${f.name}</div>
-          <div class="fr-meta">Age ${f.age||'?'} · ${f.settlement||''}</div>
+          <div class="fr-meta">Age ${f.age||'?'} · ${f.settlement ? `<span class="clickable-name" data-city-info="${f.provinceId}|${f.settlement}">${f.settlement}</span>` : ''}</div>
         </div>
         <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
           <input type="checkbox" data-npc-add-check="${f.id}" ${pendingNpcAdds.has(f.id)?'checked':''}/> Add as NPC
@@ -4950,7 +4971,7 @@ function renderLocTravel(){
   const others = all.filter(e=> e.name !== state.settlementName);
   const cards = others.map(e=>`
     <div class="pit-card" data-travel-to="${e.name}">
-      <div class="pit-name">${e.name}</div>
+      <div class="pit-name">${e.name} <button class="settlement-info-btn" data-city-info="${state.provinceId}|${e.name}" title="City details" onclick="event.stopPropagation()">ⓘ</button></div>
       <div class="pit-meta">${e.tier} · Pop. ${e.population.toLocaleString()}</div>
     </div>
   `).join('');
@@ -4961,7 +4982,7 @@ function renderLocTravel(){
     if(!unlocked){
       return `
         <div class="pit-card" style="opacity:0.4; cursor:default;">
-          <div class="pit-name">🔒 ${p.name}</div>
+          <div class="pit-name">🔒 <span class="clickable-name" data-province-info="${p.id}" style="opacity:1;">${p.name}</span></div>
           <div class="pit-meta">Nobody there knows your name. Get an invite, a connection, or ${PROVINCE_FAME_UNLOCK[p.id] !== undefined ? PROVINCE_FAME_UNLOCK[p.id] : 30} Fame to travel here.</div>
         </div>
       `;
@@ -4972,34 +4993,34 @@ function renderLocTravel(){
       if(!cityOpen){
         return `
           <div class="pit-card" style="opacity:0.4; cursor:default;">
-            <div class="pit-name">🔒 ${s.name}</div>
+            <div class="pit-name">🔒 <span class="clickable-name" data-city-info="${p.id}|${s.name}" style="opacity:1;">${s.name}</span></div>
             <div class="pit-meta">${s.tier} · needs ${FAME_CITY_TIER_UNLOCK} Fame or a local connection</div>
           </div>
         `;
       }
       return `
         <div class="pit-card" data-travel-to-province="${p.id}" data-travel-to-city="${encodeURIComponent(s.name)}">
-          <div class="pit-name">${s.name}</div>
+          <div class="pit-name">${s.name} <button class="settlement-info-btn" data-city-info="${p.id}|${s.name}" title="City details" onclick="event.stopPropagation()">ⓘ</button></div>
           <div class="pit-meta">${s.tier} · Pop. ${s.population.toLocaleString()}</div>
         </div>
       `;
     }).join('');
     return `
       <div class="weight-class-block">
-        <div class="wc-label" style="color:${p.color};">${p.name}</div>
+        <div class="wc-label" style="color:${p.color}; cursor:pointer;" data-province-info="${p.id}">${p.name}</div>
         <div class="pit-grid">${cityCards}</div>
       </div>
     `;
   }).join('');
 
   return `
-    <div class="section-label">Roads Out of ${state.settlementName}</div>
+    <div class="section-label">Roads Out of <span class="clickable-name" data-city-info="${state.provinceId}|${state.settlementName}">${state.settlementName}</span></div>
     <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:16px;">
       This is the only way to reach the rest of the province — every other city, every other pit, all
       down these roads. Takes the rest of the day to get there; you'll arrive fresh the next morning.
     </p>
     <div class="pit-grid">${cards || '<div class="empty-note">Nowhere else in this province to go.</div>'}</div>
-    <div class="section-label" style="margin-top:22px;">Beyond ${PROVINCES.find(p=>p.id===state.provinceId)?.name || 'the Province'}</div>
+    <div class="section-label" style="margin-top:22px;">Beyond <span class="clickable-name" data-province-info="${state.provinceId}">${PROVINCES.find(p=>p.id===state.provinceId)?.name || 'the Province'}</span></div>
     <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:16px;">
       Every other province on the island — grey ones aren't open to you yet.
     </p>
@@ -5181,8 +5202,8 @@ function renderLocStadium(){
       ${teamCrestSvg(team, prov, league.tier, 48)}
       <div>
         <div style="font-family:var(--display); font-size:17px; color:var(--bone); letter-spacing:0.5px; line-height:1.1;">${team.stadium}</div>
-        <div style="font-family:var(--label); font-size:11.5px; color:var(--brass); margin-top:1px;">${team.city} ${team.nickname} · ${league.name} · Tier ${league.tier}</div>
-        <div style="font-family:var(--mono); font-size:9.5px; color:var(--muted); margin-top:1px;">Cap. ${(team.capacity||0).toLocaleString()} · ${team.surface||'—'} · ${team.fanTemperament||'—'} crowd${prov?' · '+prov.name:''}</div>
+        <div style="font-family:var(--label); font-size:11.5px; color:var(--brass); margin-top:1px;"><span class="clickable-name" data-city-info="${team.provinceId}|${team.city}" style="color:var(--brass);">${team.city}</span> ${team.nickname} · ${league.name} · Tier ${league.tier}</div>
+        <div style="font-family:var(--mono); font-size:9.5px; color:var(--muted); margin-top:1px;">Cap. ${(team.capacity||0).toLocaleString()} · ${team.surface||'—'} · ${team.fanTemperament||'—'} crowd${prov?` · <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span>`:''}</div>
       </div>
     </div>
     <div style="font-family:var(--mono); font-size:9.5px; color:var(--muted); margin-bottom:8px;">Owner: ${team.owner||'—'} · GM: ${team.gm||'—'} · Coach: ${team.coach||'—'}</div>
@@ -5440,8 +5461,119 @@ function realJuvenileStandings(n){
 */
 const TIERS = ['All','Juvenile','Junior','Amateur','Pro','Exhibition']; // order matches career ladder; Junior drafts out of Juvenile, sits below Amateur
 let modalFighterId = null;
+let modalCityKey = null; // { provinceId, settlementName } — settlementName null means province-level view
+function openCityModal(provinceId, settlementName){ modalFighterId = null; modalCityKey = { provinceId, settlementName }; renderModal(); }
+function openProvinceModal(provinceId){ openCityModal(provinceId, null); }
+function closeCityModal(){ modalCityKey = null; renderModal(); }
+const ECONOMY_BY_TIER = {
+  Capital: ['Thriving commercial hub — money moves fast here', 'Booming trade center, wealth on display', 'The provincial seat — banks, guilds, old money'],
+  City: ['Prosperous and steady — solid trade economy', 'Comfortable, well-established commerce', 'Growing fast, new money everywhere'],
+  Town: ['Modest, working-class — everyone knows everyone', 'Getting by on trade and local industry', 'Steady but unremarkable — a working town'],
+  Village: ['Poor, mostly subsistence living', 'Small and struggling, but proud', 'Quiet, isolated, scraping by'],
+};
+function economicStatusFor(settlementName, tier){
+  let hash = 0;
+  for(let i=0;i<settlementName.length;i++) hash = (hash*31 + settlementName.charCodeAt(i)) & 0xffffffff;
+  const options = ECONOMY_BY_TIER[tier] || ECONOMY_BY_TIER.Town;
+  return options[Math.abs(hash) % options.length];
+}
+function commonFightersTextFor(province){
+  const primary = (province.primary||[]).map(d=>DISCIPLINE_NAMES[d]).filter(Boolean);
+  const secondary = (province.secondary||[]).map(d=>DISCIPLINE_NAMES[d]).filter(Boolean);
+  let text = '';
+  if(primary.length) text += `${primary.join(' and ')} ${primary.length>1?'are':'is'} the local style — most fighters here come up through it.`;
+  if(secondary.length) text += ` ${secondary.join(' and ')} ${secondary.length>1?'show':'shows'} up too, just less often.`;
+  return text || 'No dominant style here — a real mixed bag.';
+}
+// Access status line — reuses the same fame-gating logic that actually governs travel,
+// so this modal never tells a fighter they can/can't go somewhere the game disagrees with.
+function accessStatusFor(f, provinceId, settlementName){
+  if(!f) return '';
+  if(provinceId === f.juvenileHomeProvinceId) return 'Home turf — always open.';
+  if(!hasProvinceAccess(f, provinceId)){
+    const need = PROVINCE_FAME_UNLOCK[provinceId] !== undefined ? PROVINCE_FAME_UNLOCK[provinceId] : 30;
+    return `Locked — needs Fame ${need} (currently ${f.fame||0}), or an earned connection.`;
+  }
+  if(settlementName){
+    if(!hasCityTierAccess(f, provinceId, settlementName)){
+      return `Province open, but this ${settlementTier(provinceId,settlementName)} needs Fame ${FAME_CITY_TIER_UNLOCK} (currently ${f.fame||0}), or an earned connection.`;
+    }
+  }
+  return 'Open to you right now.';
+}
+// Jr League team stationed here, if any — settlement-level only.
+function jrTeamAt(provinceId, settlementName){
+  for(const league of JR_LEAGUES){
+    const idx = league.teams.findIndex(t=> t.provinceId===provinceId && t.city===settlementName);
+    if(idx !== -1) return { league, team: league.teams[idx], teamIndex: idx };
+  }
+  return null;
+}
+function renderCityModal(root){
+  const { provinceId, settlementName } = modalCityKey;
+  const province = PROVINCES.find(p=>p.id===provinceId);
+  if(!province){ root.innerHTML = ''; return; }
+  const f = state.fighterId ? getFighterById(state.fighterId) : null;
+  if(!settlementName){
+    const settlements = (SETTLEMENT_DATA[provinceId]||[]).slice().sort((a,b)=> b.population-a.population);
+    const fightersText = commonFightersTextFor(province);
+    const accessLine = f ? accessStatusFor(f, provinceId, null) : '';
+    const settlementListHtml = settlements.map(s=> `
+      <div class="city-stat-row" style="cursor:pointer;" data-city-info="${provinceId}|${s.name}">
+        <span class="city-stat-label" style="text-transform:none; letter-spacing:0; font-family:var(--body); color:var(--bone-dim);">${s.name} <span style="color:var(--muted);">(${s.tier})</span></span>
+        <span class="city-stat-val">${s.population.toLocaleString()}</span>
+      </div>
+    `).join('');
+    root.innerHTML = `
+      <div class="city-modal-overlay" data-city-overlay>
+        <div class="city-modal-card">
+          <div class="city-modal-head">
+            <div class="city-modal-title">${province.name}</div>
+            <button class="city-modal-close" data-city-close>✕</button>
+          </div>
+          <div class="city-modal-body">
+            ${accessLine ? `<div class="city-stat-row"><span class="city-stat-label">Access</span><span class="city-stat-val" style="text-align:right; max-width:220px;">${accessLine}</span></div>` : ''}
+            <div class="city-stat-row"><span class="city-stat-label">Home Juvenile Pit</span><span class="city-stat-val">${province.pit||'—'}</span></div>
+            <div class="city-stat-row"><span class="city-stat-label">Settlements</span><span class="city-stat-val">${settlements.length}</span></div>
+            <div class="city-fighters-text">${fightersText}</div>
+            <div class="city-stat-label" style="margin-top:14px; margin-bottom:6px;">Settlements — tap to view</div>
+            ${settlementListHtml}
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+  const entry = (SETTLEMENT_DATA[provinceId]||[]).find(s=>s.name===settlementName);
+  if(!entry){ root.innerHTML = ''; return; }
+  const econ = economicStatusFor(entry.name, entry.tier);
+  const fightersText = commonFightersTextFor(province);
+  const accessLine = f ? accessStatusFor(f, provinceId, settlementName) : '';
+  const jr = jrTeamAt(provinceId, settlementName);
+  const jrLine = jr ? `<div class="city-stat-row" style="cursor:pointer;" data-modal-view-jr-team="${jr.league.id}|${jr.teamIndex}"><span class="city-stat-label">Junior League</span><span class="city-stat-val">${jr.team.city} ${jr.team.nickname} ›</span></div>` : '';
+
+  root.innerHTML = `
+    <div class="city-modal-overlay" data-city-overlay>
+      <div class="city-modal-card">
+        <div class="city-modal-head">
+          <div class="city-modal-title">${entry.name}</div>
+          <button class="city-modal-close" data-city-close>✕</button>
+        </div>
+        <div class="city-modal-body">
+          <div class="city-stat-row" style="cursor:pointer;" data-province-info="${provinceId}"><span class="city-stat-label">Province</span><span class="city-stat-val">${province.name} ›</span></div>
+          ${accessLine ? `<div class="city-stat-row"><span class="city-stat-label">Access</span><span class="city-stat-val" style="text-align:right; max-width:220px;">${accessLine}</span></div>` : ''}
+          <div class="city-stat-row"><span class="city-stat-label">Population</span><span class="city-stat-val">${entry.population.toLocaleString()}</span></div>
+          <div class="city-stat-row"><span class="city-stat-label">Settlement Tier</span><span class="city-stat-val">${entry.tier}</span></div>
+          <div class="city-stat-row"><span class="city-stat-label">Economic Status</span><span class="city-stat-val" style="text-align:right; max-width:220px;">${econ}</span></div>
+          ${jrLine}
+          <div class="city-fighters-text">${fightersText}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
 let modalActiveTier = 'All';
-function openFighterCard(id){ modalFighterId = id; modalActiveTier = 'All'; renderModal(); }
+function openFighterCard(id){ modalCityKey = null; modalFighterId = id; modalActiveTier = 'All'; renderModal(); }
 function closeFighterCard(){ modalFighterId = null; renderModal(); }
 
 const COMMENTATOR_NAMES = ['Duke Callahan', 'Jamie Voss', 'Lena Marsh'];
@@ -5599,6 +5731,7 @@ function getPitFighterById(id){
 
 function renderModal(){
   const root = document.getElementById('modal-root');
+  if(modalCityKey){ renderCityModal(root); return; }
   if(!modalFighterId){ root.innerHTML = ''; return; }
 
   const roster = getRoster();
@@ -5684,8 +5817,9 @@ function renderModal(){
             <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
             <div>
               <div class="mf-name">${f.name}</div>
-              <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${f.heightIn?heightLabel(f.heightIn):''}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement || f.hometown || ''}${prov?', '+prov.name:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
+              <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${f.heightIn?heightLabel(f.heightIn):''}${f.weightLb?' · '+f.weightLb+' lb':''} · ${(f.settlement||f.hometown)?`<span class="clickable-name" data-city-info="${f.provinceId}|${f.settlement||f.hometown}">${f.settlement||f.hometown}</span>`:''}${prov?`, <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span>`:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
               <div class="mf-meta">${f.birthDay !== undefined && f.birthDay !== null ? 'Born '+formatCalendarDate(f.birthDay) : ''}${f.fame !== undefined ? ' · Fame '+f.fame : ''}</div>
+              ${f.fatigue !== undefined ? `<div class="mf-meta">Fatigue ${f.fatigue}/100${f.injuryWeeksRemaining>0 ? ` · <span style="color:var(--ink-red);">🤕 Out ${f.injuryWeeksRemaining}wk</span>` : (f.fatigue>=75 ? ` · <span style="color:var(--muted);">😮‍💨 Needs rest</span>` : '')}</div>` : ''}
               <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · ${(f.record||f.allTimeRecord) ? 'Career' : (hasJrRec ? 'Junior Season' : 'Career')} ${rec.wins}-${rec.losses}</div>
             </div>
           </div>
@@ -5728,6 +5862,35 @@ document.addEventListener('click', (e)=>{
   if(overlayEl && e.target === overlayEl){ closeFighterCard(); return; }
   const tabEl = e.target.closest('[data-mf-tab]');
   if(tabEl){ modalActiveTier = tabEl.dataset.mfTab; renderModal(); return; }
+
+  const cityInfoEl = e.target.closest('[data-city-info]');
+  if(cityInfoEl){
+    e.stopPropagation();
+    const [pid, name] = cityInfoEl.dataset.cityInfo.split('|');
+    openCityModal(pid, name);
+    return;
+  }
+  const provInfoEl = e.target.closest('[data-province-info]');
+  if(provInfoEl){
+    e.stopPropagation();
+    openProvinceModal(provInfoEl.dataset.provinceInfo);
+    return;
+  }
+  const cityCloseEl = e.target.closest('[data-city-close]');
+  if(cityCloseEl){ closeCityModal(); return; }
+  const cityOverlayEl = e.target.closest('[data-city-overlay]');
+  if(cityOverlayEl && e.target === cityOverlayEl){ closeCityModal(); return; }
+  const modalJrTeamEl = e.target.closest('[data-modal-view-jr-team]');
+  if(modalJrTeamEl){
+    e.stopPropagation();
+    const [leagueId, teamIndexStr] = modalJrTeamEl.dataset.modalViewJrTeam.split('|');
+    modalCityKey = null;
+    state.visitingLocation = { leagueId, teamIndex: parseInt(teamIndexStr,10), type:'stadium' };
+    state.screen = 'loc-stadium';
+    render();
+    renderModal();
+    return;
+  }
 });
 
 /* ============================ NEWSPAPER ============================ */
@@ -5953,7 +6116,7 @@ function renderNewspaper(){
 
   const newFaces = newJuvenileFacesFor(provinceId, day, 3);
   const newFacesHtml = newFaces.length ? newFaces.map(f=>
-    `<p style="margin-bottom:8px;">Just registered: <span class="clickable-name" data-open-fighter="${f.id}">${f.name}</span>, age ${f.age}${f.hometown?', out of '+f.hometown:''}. Time will tell.</p>`
+    `<p style="margin-bottom:8px;">Just registered: <span class="clickable-name" data-open-fighter="${f.id}">${f.name}</span>, age ${f.age}${f.hometown?`, out of <span class="clickable-name" data-city-info="${provinceId}|${f.hometown}">${f.hometown}</span>`:''}. Time will tell.</p>`
   ).join('') : `<p>No new faces on file this fortnight.</p>`;
 
   return `
@@ -6053,7 +6216,7 @@ function renderLeagueStandings(){
       return `
         <div class="team-standings-row" style="grid-template-columns:28px 1fr auto;">
           <span class="tsr-rank">${i+1}</span>
-          <span><span class="clickable-name" data-open-fighter="${f.id}">${f.name}</span><br><span style="color:var(--muted); font-family:var(--mono); font-size:10px;">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Age ${f.age} · ${f.hometown||''}${prov?', '+prov.name:''}</span></span>
+          <span><span class="clickable-name" data-open-fighter="${f.id}">${f.name}</span><br><span style="color:var(--muted); font-family:var(--mono); font-size:10px;">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Age ${f.age} · ${f.hometown?`<span class="clickable-name" data-city-info="${f.provinceId}|${f.hometown}">${f.hometown}</span>`:''}${prov?`, <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span>`:''}</span></span>
           <span class="tsr-record">${f.record.wins}-${f.record.losses}</span>
         </div>
       `;
@@ -6553,7 +6716,7 @@ function renderPreview(){
         <div class="tape-record">${recF.wins}-${recF.losses}${f.age?' · Age '+f.age:''}</div>
         <div class="tape-facts">
           <div>${f.heightIn?'<b>HT:</b> '+heightLabel(f.heightIn)+' &nbsp; ':''}${f.weightLb?'<b>WT:</b> '+f.weightLb+' lb':''}</div>
-          ${f.settlement?`<div><b>From:</b> ${f.settlement}</div>`:''}
+          ${f.settlement?`<div><b>From:</b> <span class="clickable-name" data-city-info="${f.provinceId}|${f.settlement}">${f.settlement}</span></div>`:''}
         </div>
       </div>
       <div class="tape-side">
@@ -6564,7 +6727,7 @@ function renderPreview(){
         <div class="tape-record">${recOpp.wins}-${recOpp.losses}${opp.age?' · Age '+opp.age:''}</div>
         <div class="tape-facts">
           <div>${opp.heightIn?'<b>HT:</b> '+heightLabel(opp.heightIn)+' &nbsp; ':''}${opp.weightLb?'<b>WT:</b> '+opp.weightLb+' lb':''}</div>
-          ${opp.hometown||opp.settlement?`<div><b>From:</b> ${opp.hometown||opp.settlement}</div>`:''}
+          ${(opp.hometown||opp.settlement)?`<div><b>From:</b> ${opp.provinceId?`<span class="clickable-name" data-city-info="${opp.provinceId}|${opp.hometown||opp.settlement}">${opp.hometown||opp.settlement}</span>`:(opp.hometown||opp.settlement)}</div>`:''}
         </div>
       </div>
     </div>
@@ -7347,6 +7510,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V91 · 2026-07-21</div>
+<div class="version-badge">FREE ROAM · V93 · 2026-07-21</div>
 </body>
 </html>
