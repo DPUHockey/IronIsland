@@ -1544,6 +1544,7 @@ let modalCityKey = null; // { provinceId, settlementName }
 function openFighterCard(id){ modalCityKey = null; modalFighterId = id; modalActiveTier = 'All'; renderModal(); }
 function closeFighterCard(){ modalFighterId = null; renderModal(); }
 function openCityModal(provinceId, settlementName){ modalFighterId = null; modalCityKey = { provinceId, settlementName }; renderModal(); }
+function openProvinceModal(provinceId){ openCityModal(provinceId, null); }
 function closeCityModal(){ modalCityKey = null; renderModal(); }
 
 const ECONOMY_BY_TIER = {
@@ -1816,6 +1817,7 @@ function renderModal(){
               <div class="mf-name">${f.name}</div>
               <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${f.heightIn?heightLabel(f.heightIn):''}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement||''}${prov?', '+prov.name:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
               <div class="mf-meta">${f.birthDay !== undefined && f.birthDay !== null ? 'Born '+dateForDay(f.birthDay).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : ''}${f.fame !== undefined ? ' · Fame '+f.fame : ''}</div>
+              ${f.fatigue !== undefined ? `<div class="mf-meta">Fatigue ${f.fatigue}/100${f.injuryWeeksRemaining>0 ? ` · <span style="color:var(--ink-red);">🤕 Out ${f.injuryWeeksRemaining}wk</span>` : (f.fatigue>=75 ? ` · <span style="color:var(--muted);">😮‍💨 Needs rest</span>` : '')}</div>` : ''}
               <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Career ${rec.wins}-${rec.losses}</div>
             </div>
           </div>
@@ -1839,8 +1841,39 @@ function renderModal(){
 function renderCityModal(root){
   const { provinceId, settlementName } = modalCityKey;
   const province = PROVINCES.find(p=>p.id===provinceId);
+  if(!province){ root.innerHTML = ''; return; }
+  if(!settlementName){
+    // Province-level view — summary plus every settlement, sorted biggest-first, each
+    // clickable through to its own settlement view.
+    const settlements = (SETTLEMENT_DATA[provinceId]||[]).slice().sort((a,b)=> b.population-a.population);
+    const fightersText = commonFightersTextFor(province);
+    const settlementListHtml = settlements.map(s=> `
+      <div class="city-stat-row" style="cursor:pointer;" data-city-info="${provinceId}|${s.name}">
+        <span class="city-stat-label" style="text-transform:none; letter-spacing:0; font-family:var(--body); color:var(--bone-dim);">${s.name} <span style="color:var(--muted);">(${s.tier})</span></span>
+        <span class="city-stat-val">${s.population.toLocaleString()}</span>
+      </div>
+    `).join('');
+    root.innerHTML = `
+      <div class="city-modal-overlay" data-city-overlay>
+        <div class="city-modal-card">
+          <div class="city-modal-head">
+            <div class="city-modal-title">${province.name}</div>
+            <button class="city-modal-close" data-city-close>✕</button>
+          </div>
+          <div class="city-modal-body">
+            <div class="city-stat-row"><span class="city-stat-label">Home Juvenile Pit</span><span class="city-stat-val">${province.pit||'—'}</span></div>
+            <div class="city-stat-row"><span class="city-stat-label">Settlements</span><span class="city-stat-val">${settlements.length}</span></div>
+            <div class="city-fighters-text">${fightersText}</div>
+            <div class="city-stat-label" style="margin-top:14px; margin-bottom:6px;">Settlements — tap to view</div>
+            ${settlementListHtml}
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
   const entry = (SETTLEMENT_DATA[provinceId]||[]).find(s=>s.name===settlementName);
-  if(!province || !entry){ root.innerHTML = ''; return; }
+  if(!entry){ root.innerHTML = ''; return; }
   const econ = economicStatusFor(entry.name, entry.tier);
   const fightersText = commonFightersTextFor(province);
 
@@ -1852,7 +1885,7 @@ function renderCityModal(root){
           <button class="city-modal-close" data-city-close>✕</button>
         </div>
         <div class="city-modal-body">
-          <div class="city-stat-row"><span class="city-stat-label">Province</span><span class="city-stat-val">${province.name}</span></div>
+          <div class="city-stat-row" style="cursor:pointer;" data-province-info="${provinceId}"><span class="city-stat-label">Province</span><span class="city-stat-val">${province.name} ›</span></div>
           <div class="city-stat-row"><span class="city-stat-label">Population</span><span class="city-stat-val">${entry.population.toLocaleString()}</span></div>
           <div class="city-stat-row"><span class="city-stat-label">Settlement Tier</span><span class="city-stat-val">${entry.tier}</span></div>
           <div class="city-stat-row"><span class="city-stat-label">Economic Status</span><span class="city-stat-val" style="text-align:right; max-width:220px;">${econ}</span></div>
@@ -1878,6 +1911,12 @@ document.addEventListener('click', (e)=>{
     e.stopPropagation();
     const [pid, name] = cityInfoEl.dataset.cityInfo.split('|');
     openCityModal(pid, name);
+    return;
+  }
+  const provInfoEl = e.target.closest('[data-province-info]');
+  if(provInfoEl){
+    e.stopPropagation();
+    openProvinceModal(provInfoEl.dataset.provinceInfo);
     return;
   }
   const cityCloseEl = e.target.closest('[data-city-close]');
@@ -1935,7 +1974,7 @@ function renderRosterScreen(){
           <div class="rc-avatar">${buildSilhouetteSM(f.appearance)}</div>
           <div>
             <div class="rc-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
-            <div class="rc-meta">${DISCIPLINE_NAMES[f.primaryDisc]} · ${f.settlement}, ${prov ? prov.name : 'Unknown'} · POT ${f.potential} · ${f.trait}</div>
+            <div class="rc-meta">${DISCIPLINE_NAMES[f.primaryDisc]} · ${prov ? `<span class="clickable-name" data-city-info="${prov.id}|${f.settlement}">${f.settlement}</span>, <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span>` : (f.settlement||'Unknown')} · POT ${f.potential} · ${f.trait}</div>
             ${legacyLine}${familyLine}
           </div>
         </div>
@@ -2678,6 +2717,6 @@ function updateNextBasicsDisabled(){
 
 render();
 </script>
-<div class="version-badge">CHARACTER CREATOR · V22 · 2026-07-17</div>
+<div class="version-badge">CHARACTER CREATOR · V24 · 2026-07-21</div>
 </body>
 </html>
