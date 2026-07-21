@@ -4792,6 +4792,12 @@ function renderCityWalkIllustrated(map){
       <div><span class="time-day">${formatCalendarDate(getCurrentDay())}</span><span class="time-period">${state.period}</span></div>
       <div class="time-moves">${'●'.repeat(state.movesRemaining)}${'○'.repeat(MOVES_PER_PERIOD-state.movesRemaining)} moves left</div>
     </div>
+    <div class="btn-row" style="margin-bottom:10px; flex-wrap:wrap; gap:6px;">
+      <button class="btn btn-small" id="sim-time-day">Sim a Day</button>
+      <button class="btn btn-small" id="sim-time-week">Sim to Next Week</button>
+      ${resolveTierSeason('juvenile', getCurrentDay()).phase === 'dead-days' ? `<button class="btn btn-small btn-primary" id="sim-time-season">Sim to Next Season →</button>` : ''}
+      <span></span>
+    </div>
     <div style="position:relative; width:100%; border:1px solid var(--line); overflow:hidden;">
       <img src="${map.image}" style="width:100%; display:block;" alt="${state.settlementName}" />
       ${nodeMarkers}
@@ -7510,6 +7516,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V93 · 2026-07-21</div>
+<div class="version-badge">FREE ROAM · V94 · 2026-07-21</div>
 </body>
 </html>
