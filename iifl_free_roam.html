@@ -631,7 +631,7 @@ const SETTLEMENT_DATA = {
 // (flavor-only — no game system exists for this yet, shows an honest placeholder).
 const SETTLEMENT_MAPS = {
   'sherwood|Frontenac City': {
-    image: 'settlementmaps/frontenac_city.png',
+    image: 'settlementmaps/Frontenac_City.png',
     startNode: 'crossroads',
     nodes: {
       thunderdome:  { type:'building', label:'Frontenac Thunderdome',      x:15, y:13, hook:null, note:"Under construction — nothing to do here yet." },
@@ -704,6 +704,43 @@ const SETTLEMENT_MAPS = {
       ['crossroads','corner5'], ['cutthroatCourt','corner5'], ['medicineHut','corner5'],
       ['crossroads','corner6'], ['rustyMug','corner6'], ['corner6','brokenTankard'],
       ['corner6','corner7'], ['corner5','corner7'], ['corner7','farmBarn'], ['corner7','windmillFarm'],
+    ],
+  },
+  'alexandretta|Williamsburg': {
+    image: 'settlementmaps/Williamsburg.png',
+    startNode: 'crossroads',
+    nodes: {
+      oldCemetery:      { type:'building', label:'The Old Cemetery',        x:14, y:11, hook:null, note:"Just a graveyard — nothing to do here." },
+      church:           { type:'building', label:"Saint Aldwyn's Church",   x:47, y:10, hook:null },
+      ironbackArena:    { type:'building', label:'Ironback Arena',          x:12, y:24, hook:'pit', hookData:{ pitIndex:4 } },
+      redLionInn:       { type:'building', label:'The Red Lion Inn',        x:30, y:27, hook:null },
+      kingsHeadInn:     { type:'building', label:"The King's Head Inn",     x:67, y:27, hook:null },
+      drydockPit:       { type:'building', label:'Drydock Pit',             x:10, y:37, hook:'pit', hookData:{ pitIndex:3 } },
+      saintMarysChurch: { type:'building', label:"Saint Mary's Church",     x:76, y:44, hook:null },
+      forgePit:         { type:'building', label:'The Forge Pit',           x:8,  y:49, hook:'pit', hookData:{ pitIndex:2 } },
+      graveyardShift:   { type:'building', label:'The Graveyard Shift',     x:9,  y:60, hook:'pit', hookData:{ pitIndex:1 } },
+      ridgelineColiseum:{ type:'building', label:'Ridgeline Coliseum',      x:32, y:69, hook:'jrStadium', hookData:{ leagueId:'northern_jr', teamIndex:3 } },
+      blackBoarTavern:  { type:'building', label:'The Black Boar Tavern',   x:58, y:65, hook:null },
+      crookedTankardTavern:{ type:'building', label:'The Crooked Tankard Tavern', x:58, y:75, hook:null },
+      grandArena:       { type:'building', label:'The Grand Arena',         x:80, y:70, hook:null, note:'Still under construction — nothing to do here yet.' },
+      theGutter:        { type:'building', label:'The Gutter',              x:7,  y:72, hook:'pit', hookData:{ pitIndex:0 } },
+      roadSouth:        { type:'exit',     label:'Road South',              x:47, y:93, hook:'travel' },
+      northCorner:      { type:'node',     label:'Street Corner',           x:35, y:20 },
+      leftCorner:       { type:'node',     label:'Street Corner',           x:20, y:38 },
+      rightCorner:      { type:'node',     label:'Street Corner',           x:65, y:38 },
+      southCorner:      { type:'node',     label:'Street Corner',           x:47, y:65 },
+      crossroads:       { type:'node',     label:'Crossroads',              x:47, y:38 },
+    },
+    edges: [
+      ['oldCemetery','ironbackArena'],
+      ['church','northCorner'], ['northCorner','redLionInn'], ['redLionInn','crossroads'],
+      ['crossroads','kingsHeadInn'], ['kingsHeadInn','rightCorner'], ['rightCorner','saintMarysChurch'],
+      ['crossroads','leftCorner'], ['leftCorner','forgePit'],
+      ['ironbackArena','drydockPit'], ['drydockPit','forgePit'], ['forgePit','graveyardShift'], ['graveyardShift','theGutter'],
+      ['crossroads','southCorner'], ['southCorner','ridgelineColiseum'],
+      ['southCorner','blackBoarTavern'], ['blackBoarTavern','crookedTankardTavern'],
+      ['rightCorner','grandArena'],
+      ['southCorner','roadSouth'],
     ],
   },
 };
@@ -7218,6 +7255,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V88 · 2026-07-20</div>
+<div class="version-badge">FREE ROAM · V90 · 2026-07-20</div>
 </body>
 </html>
