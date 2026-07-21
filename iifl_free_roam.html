@@ -114,11 +114,19 @@
   .walk-hint{ font-family:var(--mono); font-size:10.5px; color:var(--muted); text-align:center; margin-bottom:18px; }
   .time-bar{
     display:flex; justify-content:space-between; align-items:center; padding:8px 14px; margin-bottom:10px;
-    background:var(--bg-raised-2); border:1px solid var(--brass-dim);
+    background:var(--bg-raised-2); border:1px solid var(--brass-dim); flex-wrap:wrap; row-gap:8px; column-gap:10px;
   }
   .time-day{ font-family:var(--label); font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--bone); margin-right:10px; }
   .time-period{ font-family:var(--mono); font-size:11px; color:var(--brass); }
   .time-moves{ font-family:var(--mono); font-size:13px; color:var(--brass); letter-spacing:2px; }
+  .time-bar-sim{ display:flex; gap:6px; flex-wrap:wrap; order:3; width:100%; }
+  .btn-tiny{
+    font-family:var(--label); letter-spacing:1px; text-transform:uppercase; font-size:10.5px; font-weight:500;
+    padding:5px 10px; border:1px solid var(--brass); background:transparent; color:var(--brass); cursor:pointer; transition:all .15s ease;
+  }
+  .btn-tiny:hover{ background:var(--brass); color:var(--bg-base); }
+  .btn-tiny.btn-primary{ background:var(--ink-red); border-color:var(--ink-red); color:var(--bone); }
+  .btn-tiny.btn-primary:hover{ background:#C03F32; border-color:#C03F32; color:var(--bone); }
 
   /* ---- fighter card modal ---- */
   .clickable-name{ cursor:pointer; text-decoration:underline; text-decoration-color:transparent; transition:text-decoration-color .12s ease; }
@@ -4791,12 +4799,11 @@ function renderCityWalkIllustrated(map){
     <div class="time-bar">
       <div><span class="time-day">${formatCalendarDate(getCurrentDay())}</span><span class="time-period">${state.period}</span></div>
       <div class="time-moves">${'●'.repeat(state.movesRemaining)}${'○'.repeat(MOVES_PER_PERIOD-state.movesRemaining)} moves left</div>
-    </div>
-    <div class="btn-row" style="margin-bottom:10px; flex-wrap:wrap; gap:6px;">
-      <button class="btn btn-small" id="sim-time-day">Sim a Day</button>
-      <button class="btn btn-small" id="sim-time-week">Sim to Next Week</button>
-      ${resolveTierSeason('juvenile', getCurrentDay()).phase === 'dead-days' ? `<button class="btn btn-small btn-primary" id="sim-time-season">Sim to Next Season →</button>` : ''}
-      <span></span>
+      <div class="time-bar-sim">
+        <button class="btn-tiny" id="sim-time-day">Sim Day</button>
+        <button class="btn-tiny" id="sim-time-week">Sim Week</button>
+        ${resolveTierSeason('juvenile', getCurrentDay()).phase === 'dead-days' ? `<button class="btn-tiny btn-primary" id="sim-time-season">Sim to Next Season →</button>` : ''}
+      </div>
     </div>
     <div style="position:relative; width:100%; border:1px solid var(--line); overflow:hidden;">
       <img src="${map.image}" style="width:100%; display:block;" alt="${state.settlementName}" />
@@ -4847,12 +4854,11 @@ function renderCityWalk(){
     <div class="time-bar">
       <div><span class="time-day">${formatCalendarDate(getCurrentDay())}</span><span class="time-period">${state.period}</span></div>
       <div class="time-moves">${'●'.repeat(state.movesRemaining)}${'○'.repeat(MOVES_PER_PERIOD-state.movesRemaining)} moves left</div>
-    </div>
-    <div class="btn-row" style="margin-bottom:14px; flex-wrap:wrap; gap:6px;">
-      <button class="btn btn-small" id="sim-time-day">Sim a Day</button>
-      <button class="btn btn-small" id="sim-time-week">Sim to Next Week</button>
-      ${resolveTierSeason('juvenile', getCurrentDay()).phase === 'dead-days' ? `<button class="btn btn-small btn-primary" id="sim-time-season">Sim to Next Season →</button>` : ''}
-      <span></span>
+      <div class="time-bar-sim">
+        <button class="btn-tiny" id="sim-time-day">Sim Day</button>
+        <button class="btn-tiny" id="sim-time-week">Sim Week</button>
+        ${resolveTierSeason('juvenile', getCurrentDay()).phase === 'dead-days' ? `<button class="btn-tiny btn-primary" id="sim-time-season">Sim to Next Season →</button>` : ''}
+      </div>
     </div>
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
       <span class="wallet-badge">$${f.wallet}</span>
@@ -7516,6 +7522,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V94 · 2026-07-21</div>
+<div class="version-badge">FREE ROAM · V95 · 2026-07-21</div>
 </body>
 </html>
