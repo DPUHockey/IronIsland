@@ -3144,6 +3144,7 @@ function renderModal(){
               <div class="mf-name">${f.name}</div>
               <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement || f.hometown || ''}${prov?` · <img src="${prov.flag}" alt="" style="width:14px; height:14px; object-fit:cover; vertical-align:-2px; border-radius:2px; margin-right:2px;" onerror="this.style.display='none'">${prov.name}`:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
               <div class="mf-meta">${f.birthDay !== undefined && f.birthDay !== null ? 'Born '+formatCalendarDate(f.birthDay) : ''}${f.fame !== undefined ? ' · Fame '+f.fame : ''}</div>
+              ${f.fatigue !== undefined ? `<div class="mf-meta">Fatigue ${f.fatigue}/100${f.injuryWeeksRemaining>0 ? ` · <span style="color:var(--ink-red);">🤕 Out ${f.injuryWeeksRemaining}wk</span>` : (f.fatigue>=75 ? ` · <span style="color:var(--muted);">😮‍💨 Needs rest</span>` : '')}</div>` : ''}
               <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''} · Career ${rec.wins}-${rec.losses}</div>
               ${f.juvenileHomeProvinceId ? `<div class="mf-disc" style="color:${juvenileFightsRemaining(f)<=15?'var(--ink-red)':'var(--bone-dim)'};">${juvenileFightsRemaining(f)} career Juvenile fights left</div>` : ''}
             </div>
@@ -4323,6 +4324,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V51 · 2026-07-17</div>
+<div class="version-badge">FIGHT PIT · V52 · 2026-07-21</div>
 </body>
 </html>
