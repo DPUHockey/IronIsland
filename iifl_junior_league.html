@@ -198,6 +198,27 @@
     position:fixed; bottom:14px; right:16px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8B8070;
     background:#241D17; border:1px solid #43392D; padding:5px 9px; letter-spacing:.5px; z-index:999;
   }
+
+  /* City/Province info modal — ported from iifl_character_creator.html / iifl_free_roam.html */
+  .settlement-info-btn{
+    flex-shrink:0; width:22px; height:22px; border:1px solid var(--line); background:var(--bg-raised-2);
+    color:var(--brass); font-size:12px; cursor:pointer; line-height:1; padding:0;
+  }
+  .city-modal-overlay{
+    position:fixed; inset:0; background:rgba(10,8,6,0.78); display:flex; align-items:center; justify-content:center;
+    padding:20px; z-index:1000;
+  }
+  .city-modal-card{ background:var(--bg-panel); border:1px solid var(--brass-dim); max-width:420px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.55); }
+  .city-modal-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--line); }
+  .city-modal-title{ font-family:var(--display); font-size:22px; letter-spacing:.5px; text-transform:uppercase; color:var(--bone); }
+  .city-modal-close{ background:transparent; border:1px solid var(--line); color:var(--muted); width:28px; height:28px; cursor:pointer; font-family:var(--mono); font-size:13px; }
+  .city-modal-close:hover{ border-color:var(--ink-red); color:var(--ink-red); }
+  .city-modal-body{ padding:18px 20px; max-height:70vh; overflow-y:auto; }
+  .city-stat-row{ display:flex; justify-content:space-between; align-items:baseline; padding:9px 0; border-bottom:1px solid var(--line); }
+  .city-stat-row:last-of-type{ border-bottom:none; }
+  .city-stat-label{ font-family:var(--label); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); }
+  .city-stat-val{ font-family:var(--mono); font-size:13px; color:var(--bone); text-align:right; }
+  .city-fighters-text{ font-family:var(--body); font-size:13px; color:var(--bone-dim); line-height:1.6; margin-top:12px; }
 </style>
 </head>
 <body>
@@ -2885,14 +2906,102 @@ const state = {
 /* ============================ FIGHTER CARD & TEAM CARD MODALS ============================ */
 
 const TIERS = ['All','Juvenile','Junior','Amateur','Pro','Exhibition']; // order matches career ladder; Junior drafts out of Juvenile, sits below Amateur
-let modalType = null; // 'fighter' | 'team'
+let modalType = null; // 'fighter' | 'team' | 'city'
 let modalFighterId = null;
 let modalActiveTier = 'All';
 let modalTeamKey = null; // { leagueId, teamIndex }
+let modalCityKey = null; // { provinceId, settlementName } — settlementName null means province-level view
 
 function openFighterCard(id){ modalType='fighter'; modalFighterId = id; modalActiveTier = 'All'; renderModal(); }
 function openTeamCard(leagueId, teamIndex){ modalType='team'; modalTeamKey = { leagueId, teamIndex:parseInt(teamIndex,10) }; renderModal(); }
+function openCityModal(provinceId, settlementName){ modalType='city'; modalCityKey = { provinceId, settlementName }; renderModal(); }
+function openProvinceModal(provinceId){ openCityModal(provinceId, null); }
 function closeModal(){ modalType = null; renderModal(); }
+const ECONOMY_BY_TIER = {
+  Capital: ['Thriving commercial hub — money moves fast here', 'Booming trade center, wealth on display', 'The provincial seat — banks, guilds, old money'],
+  City: ['Prosperous and steady — solid trade economy', 'Comfortable, well-established commerce', 'Growing fast, new money everywhere'],
+  Town: ['Modest, working-class — everyone knows everyone', 'Getting by on trade and local industry', 'Steady but unremarkable — a working town'],
+  Village: ['Poor, mostly subsistence living', 'Small and struggling, but proud', 'Quiet, isolated, scraping by'],
+};
+function economicStatusFor(settlementName, tier){
+  let hash = 0;
+  for(let i=0;i<settlementName.length;i++) hash = (hash*31 + settlementName.charCodeAt(i)) & 0xffffffff;
+  const options = ECONOMY_BY_TIER[tier] || ECONOMY_BY_TIER.Town;
+  return options[Math.abs(hash) % options.length];
+}
+function commonFightersTextFor(province){
+  const primary = (province.primary||[]).map(d=>DISCIPLINE_NAMES[d]).filter(Boolean);
+  const secondary = (province.secondary||[]).map(d=>DISCIPLINE_NAMES[d]).filter(Boolean);
+  let text = '';
+  if(primary.length) text += `${primary.join(' and ')} ${primary.length>1?'are':'is'} the local style — most fighters here come up through it.`;
+  if(secondary.length) text += ` ${secondary.join(' and ')} ${secondary.length>1?'show':'shows'} up too, just less often.`;
+  return text || 'No dominant style here — a real mixed bag.';
+}
+function jrTeamAt(provinceId, settlementName){
+  for(const league of JR_LEAGUES){
+    const idx = league.teams.findIndex(t=> t.provinceId===provinceId && t.city===settlementName);
+    if(idx !== -1) return { league, team: league.teams[idx], teamIndex: idx };
+  }
+  return null;
+}
+function renderCityModal(root){
+  const { provinceId, settlementName } = modalCityKey;
+  const province = PROVINCES.find(p=>p.id===provinceId);
+  if(!province){ root.innerHTML = ''; return; }
+  if(!settlementName){
+    const settlements = (SETTLEMENT_DATA[provinceId]||[]).slice().sort((a,b)=> b.population-a.population);
+    const fightersText = commonFightersTextFor(province);
+    const settlementListHtml = settlements.map(s=> `
+      <div class="city-stat-row" style="cursor:pointer;" data-city-info="${provinceId}|${s.name}">
+        <span class="city-stat-label" style="text-transform:none; letter-spacing:0; font-family:var(--body); color:var(--bone-dim);">${s.name} <span style="color:var(--muted);">(${s.tier})</span></span>
+        <span class="city-stat-val">${s.population.toLocaleString()}</span>
+      </div>
+    `).join('');
+    root.innerHTML = `
+      <div class="city-modal-overlay" data-city-overlay>
+        <div class="city-modal-card">
+          <div class="city-modal-head">
+            <div class="city-modal-title">${province.name}</div>
+            <button class="city-modal-close" data-city-close>✕</button>
+          </div>
+          <div class="city-modal-body">
+            <div class="city-stat-row"><span class="city-stat-label">Home Juvenile Pit</span><span class="city-stat-val">${province.pit||'—'}</span></div>
+            <div class="city-stat-row"><span class="city-stat-label">Settlements</span><span class="city-stat-val">${settlements.length}</span></div>
+            <div class="city-fighters-text">${fightersText}</div>
+            <div class="city-stat-label" style="margin-top:14px; margin-bottom:6px;">Settlements — tap to view</div>
+            ${settlementListHtml}
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+  const entry = (SETTLEMENT_DATA[provinceId]||[]).find(s=>s.name===settlementName);
+  if(!entry){ root.innerHTML = ''; return; }
+  const econ = economicStatusFor(entry.name, entry.tier);
+  const fightersText = commonFightersTextFor(province);
+  const jr = jrTeamAt(provinceId, settlementName);
+  const jrLine = jr ? `<div class="city-stat-row" style="cursor:pointer;" data-open-team="${jr.league.id}|${jr.teamIndex}"><span class="city-stat-label">Junior League</span><span class="city-stat-val">${jr.team.city} ${jr.team.nickname} ›</span></div>` : '';
+
+  root.innerHTML = `
+    <div class="city-modal-overlay" data-city-overlay>
+      <div class="city-modal-card">
+        <div class="city-modal-head">
+          <div class="city-modal-title">${entry.name}</div>
+          <button class="city-modal-close" data-city-close>✕</button>
+        </div>
+        <div class="city-modal-body">
+          <div class="city-stat-row" style="cursor:pointer;" data-province-info="${provinceId}"><span class="city-stat-label">Province</span><span class="city-stat-val">${province.name} ›</span></div>
+          <div class="city-stat-row"><span class="city-stat-label">Population</span><span class="city-stat-val">${entry.population.toLocaleString()}</span></div>
+          <div class="city-stat-row"><span class="city-stat-label">Settlement Tier</span><span class="city-stat-val">${entry.tier}</span></div>
+          <div class="city-stat-row"><span class="city-stat-label">Economic Status</span><span class="city-stat-val" style="text-align:right; max-width:220px;">${econ}</span></div>
+          ${jrLine}
+          <div class="city-fighters-text">${fightersText}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
 
 function findFighterAnywhere(id){
   const roster = getRoster();
@@ -2920,6 +3029,7 @@ function renderModal(){
   const root = document.getElementById('modal-root');
   if(!modalType){ root.innerHTML=''; return; }
   if(modalType === 'fighter') renderFighterModal(root);
+  else if(modalType === 'city') renderCityModal(root);
   else renderTeamModal(root);
 }
 
@@ -3082,8 +3192,9 @@ function renderFighterModal(root){
             <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
             <div>
               <div class="mf-name">${f.name}</div>
-              <div class="mf-meta">${f.age?'Age '+f.age+' · ':''}${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement || f.hometown || ''}${prov?', '+prov.name:''}</div>
+              <div class="mf-meta">${f.age?'Age '+f.age+' · ':''}${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${(f.settlement||f.hometown)?`<span class="clickable-name" data-city-info="${f.provinceId}|${f.settlement||f.hometown}">${f.settlement||f.hometown}</span>`:''}${prov?`, <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span>`:''}</div>
               <div class="mf-meta">${f.birthDay !== undefined && f.birthDay !== null ? 'Born '+formatCalendarDate(f.birthDay) : ''}${f.fame !== undefined ? ' · Fame '+f.fame : ''}</div>
+              ${f.fatigue !== undefined ? `<div class="mf-meta">Fatigue ${f.fatigue}/100${f.injuryWeeksRemaining>0 ? ` · <span style="color:var(--ink-red);">🤕 Out ${f.injuryWeeksRemaining}wk</span>` : (f.fatigue>=FATIGUE_REST_THRESHOLD ? ` · <span style="color:var(--muted);">😮‍💨 Needs rest</span>` : '')}</div>` : ''}
               <div class="mf-disc">${DISCIPLINE_NAMES[f.primaryDisc]||''}${!isField ? ' · Career '+rec.wins+'-'+rec.losses : (hasJrRec ? ' · Junior '+jrRec.wins+'-'+jrRec.losses : '')}</div>
             </div>
           </div>
@@ -3141,8 +3252,8 @@ function renderTeamModal(root){
           <div class="mt-head">
             <div class="mt-logo" style="border:none; background:none; padding:0;">${teamCrestSvg(team, prov, league.tier, 56)}</div>
             <div>
-              <div class="mt-name">${team.city} ${team.nickname}</div>
-              <div class="mt-meta">${league.name} · Tier ${league.tier}${prov?' · '+prov.name+' region':''}</div>
+              <div class="mt-name"><span class="clickable-name" data-city-info="${team.provinceId}|${team.city}">${team.city}</span> ${team.nickname}</div>
+              <div class="mt-meta">${league.name} · Tier ${league.tier}${prov?` · <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span> region`:''}</div>
               <div class="mt-meta">${team.stadium || 'Home venue TBD'}</div>
             </div>
           </div>
@@ -3169,10 +3280,16 @@ document.addEventListener('click', (e)=>{
   if(openFighterEl && openFighterEl.dataset.openFighter){ openFighterCard(openFighterEl.dataset.openFighter); return; }
   const openTeamEl = e.target.closest('[data-open-team]');
   if(openTeamEl){ const [lid, ti] = openTeamEl.dataset.openTeam.split('|'); openTeamCard(lid, ti); return; }
+  const cityInfoEl = e.target.closest('[data-city-info]');
+  if(cityInfoEl){ e.stopPropagation(); const [pid, name] = cityInfoEl.dataset.cityInfo.split('|'); openCityModal(pid, name); return; }
+  const provInfoEl = e.target.closest('[data-province-info]');
+  if(provInfoEl){ e.stopPropagation(); openProvinceModal(provInfoEl.dataset.provinceInfo); return; }
   const closeEl = e.target.closest('[data-modal-close]');
   if(closeEl){ closeModal(); return; }
-  const overlayEl = e.target.closest('.modal-overlay');
+  const overlayEl = e.target.closest('.modal-overlay, [data-city-overlay]');
   if(overlayEl && e.target === overlayEl){ closeModal(); return; }
+  const cityCloseEl = e.target.closest('[data-city-close]');
+  if(cityCloseEl){ closeModal(); return; }
   const tabEl = e.target.closest('[data-mf-tab]');
   if(tabEl){ modalActiveTier = tabEl.dataset.mfTab; renderModal(); return; }
 });
@@ -3281,7 +3398,7 @@ function renderLeagueDetail(){
     return `
       <div class="pick-row">
         <span class="pick-team clickable-name" data-open-team="${league.id}|${i}">${t.city} ${t.nickname}</span>
-        <span class="fr-meta">${prov ? prov.name : ''}</span>
+        <span class="fr-meta${prov?' clickable-name':''}" ${prov?`data-province-info="${prov.id}"`:''}>${prov ? prov.name : ''}</span>
         <span class="pick-fighter">${rec.wins}-${rec.losses}</span>
       </div>
     `;
@@ -3335,7 +3452,7 @@ function renderSelect(){
         <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
         <div style="flex:1;">
           <div class="fr-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
-          <div class="fr-meta">Age ${f.age} · ${DISCIPLINE_NAMES[f.primaryDisc]} · OVR ${calcOVR(f.stats)} · ${f.settlement}</div>
+          <div class="fr-meta">Age ${f.age} · ${DISCIPLINE_NAMES[f.primaryDisc]} · OVR ${calcOVR(f.stats)} · ${f.settlement?`<span class="clickable-name" data-city-info="${f.provinceId}|${f.settlement}">${f.settlement}</span>`:''}</div>
         </div>
         <div class="fr-status">${status}</div>
         <button class="fr-btn" data-fighter-action="${action||''}" data-select-fighter="${f.id}" ${canAct?'':'disabled'}>${btnLabel}</button>
@@ -3395,7 +3512,7 @@ function recruitRowHtml(f, recruitNumber){
       <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
       <div style="flex:1;">
         <div class="fr-name clickable-name" data-open-fighter="${f.id}">${f.isPlayable ? '⭐ ' : ''}${f.name}</div>
-        <div class="fr-meta">Age ${f.age} · ${f.settlement||f.hometown||'Unknown'}${prov ? ', '+prov.name : ''} · ${DISCIPLINE_NAMES[f.primaryDisc]} · ${heightLabel(f.heightIn)} · Projects ${weightClassOf(doc.adultWeightLb)}weight</div>
+        <div class="fr-meta">Age ${f.age} · ${(f.settlement||f.hometown)?`<span class="clickable-name" data-city-info="${f.provinceId}|${f.settlement||f.hometown}">${f.settlement||f.hometown}</span>`:'Unknown'}${prov ? `, <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span>` : ''} · ${DISCIPLINE_NAMES[f.primaryDisc]} · ${heightLabel(f.heightIn)} · Projects ${weightClassOf(doc.adultWeightLb)}weight</div>
       </div>
       <div class="fr-status">OVR ${calcOVR(f.stats)}<br>${f.record.wins}-${f.record.losses}</div>
     </div>
@@ -3504,10 +3621,12 @@ function renderLeagueDraftDay(){
     const picksHtml = b.picks.map(p=>{
       overall++;
       const ord = overall===1?'1st':overall===2?'2nd':overall===3?'3rd':overall+'th';
+      const pickF = p.fighterId ? findFighterAnywhere(p.fighterId).f : null;
+      const hometownHtml = p.hometown ? (pickF && pickF.provinceId ? `<span class="clickable-name" data-city-info="${pickF.provinceId}|${p.hometown}">${p.hometown}</span>` : p.hometown) : 'Unknown';
       return `
         <div class="pick-row">
           <span class="pick-team">${ord} pick, Rd ${p.round}</span>
-          <span class="pick-fighter">${jrTeamName(league.id, p.teamIndex)} select <b>${p.name}</b> from ${p.hometown||'Unknown'}, with a Juvenile record of ${p.record.wins}-${p.record.losses}</span>
+          <span class="pick-fighter">${jrTeamName(league.id, p.teamIndex)} select <b>${p.name}</b> from ${hometownHtml}, with a Juvenile record of ${p.record.wins}-${p.record.losses}</span>
         </div>
       `;
     }).join('');
@@ -3582,7 +3701,8 @@ function renderRoster(){
   const league = getJrLeague(f.juniorLeagueId);
   const teamName = jrTeamName(f.juniorLeagueId, f.juniorTeamId);
   const slots = ensureTeamRoster(f.juniorLeagueId, f.juniorTeamId);
-  const prov = PROVINCES.find(p=> league.provinces.includes(p.id));
+  const team = jrTeam(f.juniorLeagueId, f.juniorTeamId);
+  const prov = team ? PROVINCES.find(p=> p.id === team.provinceId) : PROVINCES.find(p=> league.provinces.includes(p.id));
 
   const slotsHtml = slots.map(sl=>{
     const fighter = resolveSlotFighter(sl);
@@ -3599,7 +3719,7 @@ function renderRoster(){
   return `
     <div class="roster-team-head">
       <div class="roster-team-name clickable-name" data-open-team="${f.juniorLeagueId}|${f.juniorTeamId}">${teamName}</div>
-      <div class="roster-team-meta">${league.name} · Tier ${league.tier}${prov?' · '+prov.name+' region':''}</div>
+      <div class="roster-team-meta">${league.name} · Tier ${league.tier}${team?` · <span class="clickable-name" data-city-info="${team.provinceId}|${team.city}">${team.city}</span>`:''}${prov?`, <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span>`:''}</div>
     </div>
     <div class="section-label">Roster (${ROSTER_SPOTS} spots, 2 per weight class)</div>
     <div class="roster-slot-grid">${slotsHtml}</div>
@@ -4696,7 +4816,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V52 · 2026-07-21</div>
+<div class="version-badge">JUNIOR LEAGUE · V54 · 2026-07-21</div>
 </body>
 </html>
 
