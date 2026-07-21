@@ -1218,7 +1218,8 @@ function persistRosterSlots(leagueId, teamIndex, slots){
 // probability — a fighter caught in a bad stylistic matchup (the opponent's discipline
 // beats theirs) takes more real punishment and is genuinely more likely to get hurt,
 // on top of a baseline rate that climbs with how fatigued they already were going in.
-const FATIGUE_DECAY_PER_WEEK = 35;
+const FATIGUE_DECAY_PER_WEEK = 35;   // full rest — a bye week
+const FATIGUE_DECAY_ACTIVE_WEEK = 15; // natural recovery even in a week they played
 const FATIGUE_REST_THRESHOLD = 75;
 const INJURY_BASE_RATE = 0.03;
 const INJURY_FATIGUE_FACTOR = 0.002; // extra risk per fatigue point above 50
@@ -1228,25 +1229,41 @@ function ensureFatigueFields(f){
   if(f.injuryWeeksRemaining === undefined) f.injuryWeeksRemaining = 0;
   return f;
 }
-// Weekly maintenance for a whole roster — decays fatigue for anyone who DIDN'T compete
-// this week and counts down anyone already injured. Call once per team per week,
-// alongside whatever bout(s) that team actually played.
+// Weekly maintenance for a whole roster — decays fatigue for EVERYONE (a smaller
+// natural-recovery amount if they competed this week, the full rest amount on a bye)
+// and counts down anyone already injured. Call once per team per week, alongside
+// whatever bout(s) that team actually played.
+//
+// TUNING (2026-07-21, per Jeric): a starter fighting once a week shouldn't need a
+// week off every ~3 games just for showing up on schedule — that was the old math
+// (25-45 gain per bout, decay ONLY on a bye) stacking fatigue with nothing pulling it
+// back down between games. Now a normal week (win, reasonably clean) trends fatigue
+// DOWN over time; it's a sustained rough stretch — getting finished or grinding
+// decisions week after week — that actually climbs toward the 75 threshold. Street
+// fights (Free Roam) and overtraining (not yet built) are meant to be the other real
+// fatigue drivers, stacking on top of this baseline rather than this baseline alone
+// doing the work.
 function applyWeeklyRosterMaintenance(slots, competedIds){
   slots.forEach(sl=>{
     const f = resolveSlotFighter(sl);
     if(!f) return;
     ensureFatigueFields(f);
     if(f.injuryWeeksRemaining > 0) f.injuryWeeksRemaining = Math.max(0, f.injuryWeeksRemaining - 1);
-    if(!competedIds.has(f.id)) f.fatigue = Math.max(0, f.fatigue - FATIGUE_DECAY_PER_WEEK);
+    const decay = competedIds.has(f.id) ? FATIGUE_DECAY_ACTIVE_WEEK : FATIGUE_DECAY_PER_WEEK;
+    f.fatigue = Math.max(0, f.fatigue - decay);
   });
 }
 // Call right after a bout resolves — updates both competitors' fatigue and rolls injury
 // for each of them independently (either or both can come out of the same fight hurt).
 function applyPostBoutFatigueAndInjury(winner, loser, method){
   [winner, loser].forEach(f=> ensureFatigueFields(f));
-  const gainFor = (won)=> 25 + (method==='Decision'?15:0) + (won?0:5); // decisions grind harder; losing takes more of a beating
-  winner.fatigue = Math.min(100, winner.fatigue + gainFor(true));
-  loser.fatigue = Math.min(100, loser.fatigue + gainFor(false));
+  // Roughly half the old base, decisions still cost more (full rounds grind harder),
+  // and getting finished (KO/TKO loss specifically) now costs extra on top of the
+  // plain loss penalty — a clean quick win costs the least of any outcome.
+  const gainFor = (won, finished)=> 12 + (method==='Decision'?8:0) + (won?0:3) + (!won && finished ? 10 : 0);
+  const wasFinish = method==='KO' || method==='TKO';
+  winner.fatigue = Math.min(100, winner.fatigue + gainFor(true, wasFinish));
+  loser.fatigue = Math.min(100, loser.fatigue + gainFor(false, wasFinish));
   [ {f:winner, opp:loser}, {f:loser, opp:winner} ].forEach(({f,opp})=>{
     const row = MATCHUP[opp.primaryDisc];
     const rawEdge = Math.max(0, (row && row[f.primaryDisc]) || 0); // opponent's raw stylistic edge over me, 0..2
@@ -2223,6 +2240,36 @@ function crossLeagueTeamGame(teamA, teamB, hostTeam, playerInfo){
   applyWeeklyRosterMaintenance(slotsB, competedIds);
   persistRosterSlots(teamA.leagueId, teamA.teamIndex, slotsA);
   persistRosterSlots(teamB.leagueId, teamB.teamIndex, slotsB);
+  // BUG FIX (2026-07-21): same root cause as the regular-season Game Day path — a player
+  // roster slot always has fighter:null, so both the post-bout applyPostBoutFatigueAndInjury
+  // call above (via `pf`) and applyWeeklyRosterMaintenance just above only ever mutated a
+  // throwaway getFighterById() copy for the player, never persisted. Recompute and save
+  // explicitly for the player if they were involved in this Cup game.
+  if(playerInfo){
+    const pf2 = getFighterById(playerInfo.fighterId);
+    if(pf2){
+      const competed = competedIds.has(playerInfo.fighterId);
+      updateFighter(playerInfo.fighterId, (ff)=>{
+        ensureFatigueFields(ff);
+        if(competed){
+          const wasFinish = playerResult && (playerResult.method==='KO' || playerResult.method==='TKO');
+          const gainFor = (won, finished)=> 12 + (playerResult && playerResult.method==='Decision'?8:0) + (won?0:3) + (!won && finished ? 10 : 0);
+          ff.fatigue = Math.min(100, ff.fatigue + gainFor(!!(playerResult && playerResult.won), wasFinish));
+          // Injury odds already resolved once inside applyPostBoutFatigueAndInjury above on the
+          // throwaway copy — reroll here so the real fighter gets a real chance, not a guaranteed
+          // miss just because the first roll landed on a discarded object. Simplified to base+fatigue
+          // only (no opponent matchup-edge term) since the opponent fighter isn't in scope at this
+          // point in the function — a minor approximation, fine for the Cup's one game a year.
+          const chance = INJURY_BASE_RATE + Math.max(0, ff.fatigue-50)*INJURY_FATIGUE_FACTOR;
+          if(Math.random() < chance) ff.injuryWeeksRemaining = rand(1,3);
+          ff.fatigue = Math.max(0, ff.fatigue - FATIGUE_DECAY_ACTIVE_WEEK); // natural recovery, same as a normal competed week
+        } else {
+          if(ff.injuryWeeksRemaining > 0) ff.injuryWeeksRemaining = Math.max(0, ff.injuryWeeksRemaining - 1);
+          ff.fatigue = Math.max(0, ff.fatigue - FATIGUE_DECAY_PER_WEEK);
+        }
+      });
+    }
+  }
   return { winner: scoreA>=scoreB ? teamA : teamB, scoreA, scoreB, playerResult };
 }
 
@@ -4533,6 +4580,27 @@ function wireEvents(){
     applyWeeklyRosterMaintenance(awaySlotsForMaint, competedIds);
     persistRosterSlots(gd.leagueId, gd.homeIdx, homeSlotsForMaint);
     persistRosterSlots(gd.leagueId, gd.awayIdx, awaySlotsForMaint);
+    // BUG FIX (2026-07-21): a player roster slot always has fighter:null (the player's
+    // live stats are fetched fresh via fighterId — see resolveSlotFighter), so the
+    // fatigue decay / injury countdown applyWeeklyRosterMaintenance just applied above
+    // only ever mutated a throwaway getFighterById() copy for the player's own slot —
+    // never actually saved, since persistRosterSlots only writes the Jr League's own
+    // roster storage, not the player's fighter registry (that requires updateFighter).
+    // This is why an injury badge could get stuck at the same week count indefinitely —
+    // the INITIAL roll (inside the updateFighter block above, when the player's own
+    // bout resolves) persisted fine, but every week's countdown after that silently
+    // didn't. Recompute and persist it explicitly here for whichever side the player is on.
+    [...homeSlotsForMaint, ...awaySlotsForMaint].forEach(sl=>{
+      if(sl.isPlayer && sl.fighterId){
+        const competed = competedIds.has(sl.fighterId);
+        updateFighter(sl.fighterId, (ff)=>{
+          ensureFatigueFields(ff);
+          if(ff.injuryWeeksRemaining > 0) ff.injuryWeeksRemaining = Math.max(0, ff.injuryWeeksRemaining - 1);
+          const decay = competed ? FATIGUE_DECAY_ACTIVE_WEEK : FATIGUE_DECAY_PER_WEEK;
+          ff.fatigue = Math.max(0, ff.fatigue - decay);
+        });
+      }
+    });
 
     if(!isPlayoffWeek(gd.leagueId, gd.week)) recordStandingsResult(gd.leagueId, gd.homeIdx, gd.awayIdx, homeWon); // playoff results tracked separately, not folded into regular-season W-L
     recordGameScore(gd.leagueId, gd.week, gd.homeIdx, gd.awayIdx, homeScore, awayScore);
@@ -4628,7 +4696,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V50 · 2026-07-19</div>
+<div class="version-badge">JUNIOR LEAGUE · V52 · 2026-07-21</div>
 </body>
 </html>
 
