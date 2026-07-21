@@ -1772,15 +1772,105 @@ function generateRoundRobinScheduleRW(teamCount){
   }
   return weeks;
 }
+// Small seeded PRNG (mulberry32) — mirrors iifl_junior_league.html's copy exactly, so
+// both files independently derive the identical year-seeded fixture list for the same
+// league+year (needed now that Free Roam can bootstrap/reset a schedule on its own).
+function seededRandomFnRW(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function seedFromStringRW(str){
+  let h = 0;
+  for(let i=0;i<str.length;i++){ h = (h*31 + str.charCodeAt(i)) | 0; }
+  return Math.abs(h);
+}
+function generateRoundRobinScheduleForYearRW(teamCount, cycleYear, leagueId){
+  const rng = seededRandomFnRW(seedFromStringRW(leagueId+'|'+cycleYear));
+  const order = Array.from({length:teamCount}, (_,i)=>i);
+  for(let i=order.length-1;i>0;i--){
+    const j = Math.floor(rng()*(i+1));
+    const tmp = order[i]; order[i]=order[j]; order[j]=tmp;
+  }
+  const baseWeeks = generateRoundRobinScheduleRW(teamCount);
+  return baseWeeks.map(week=> week.map(p=> ({ home: order[p.home], away: order[p.away] })));
+}
 function ensureLeagueScheduleRW(leagueId){
   const s = loadJrStateReadOnly();
   if(!s.leagueSchedules) s.leagueSchedules = {};
   if(s.leagueSchedules[leagueId]) return s.leagueSchedules[leagueId];
   const league = getJrLeague(leagueId);
-  const weeks = generateRoundRobinScheduleRW(league.teams.length);
+  const cycleYear = currentIslandYear();
+  const weeks = generateRoundRobinScheduleForYearRW(league.teams.length, cycleYear, leagueId);
   s.leagueSchedules[leagueId] = weeks;
+  if(!s.leagueScheduleYear) s.leagueScheduleYear = {};
+  if(s.leagueScheduleYear[leagueId] === undefined) s.leagueScheduleYear[leagueId] = cycleYear;
   try{ localStorage.setItem(sk(JR_STATE_KEY), JSON.stringify(s)); }catch(err){}
   return weeks;
+}
+// Mirrors ensureJrSeasonResetForYear in iifl_junior_league.html EXACTLY (same guard
+// logic, same fields touched) — ported here because Free Roam's stadium screen and the
+// Wednesday game-night check are, in practice, the FIRST place a player sees Junior
+// League data each session. The reset previously only lived in iifl_junior_league.html,
+// wired into that file's own 4 render entry points — a player who reaches their stadium
+// through Free Roam (the normal flow: walked in automatically on game day) could go an
+// entire real season without ever triggering it, leaving stale standings/schedule/season
+// records on screen indefinitely. Same safety rule applies: a league's first time being
+// seen by this code just gets tagged with the current year, never wiped; only a schedule
+// tagged to a genuinely OLDER year actually resets.
+function ensureJrSeasonResetForYearRW(cycleYear){
+  const s = loadJrStateReadOnly();
+  if(!s.leagueScheduleYear) s.leagueScheduleYear = {};
+  let changed = false;
+  const actuallyReset = new Set();
+  JR_LEAGUES.forEach(league=>{
+    const taggedYear = s.leagueScheduleYear[league.id];
+    if(taggedYear === undefined){
+      s.leagueScheduleYear[league.id] = cycleYear;
+      changed = true;
+      return;
+    }
+    if(taggedYear >= cycleYear) return; // already this cycle (or somehow later) — nothing to do
+    if(getCurrentDay() < tierKeyDates(cycleYear).juniorSignDeadline) return; // this year's draft class isn't signed yet
+    if(!s.leagueSchedules) s.leagueSchedules = {};
+    s.leagueSchedules[league.id] = generateRoundRobinScheduleForYearRW(league.teams.length, cycleYear, league.id);
+    if(!s.leagueWeek) s.leagueWeek = {};
+    s.leagueWeek[league.id] = 0;
+    if(!s.standings) s.standings = {};
+    s.standings[league.id] = league.teams.map(()=> ({ wins:0, losses:0 }));
+    if(s.leaguePlayoffs) delete s.leaguePlayoffs[league.id];
+    if(s.playedPairings){
+      Object.keys(s.playedPairings).forEach(k=>{ if(k.indexOf(league.id+'|')===0) delete s.playedPairings[k]; });
+    }
+    if(s.gameScores){
+      Object.keys(s.gameScores).forEach(k=>{ if(k.indexOf(league.id+'|')===0) delete s.gameScores[k]; });
+    }
+    if(s.gameCardResults){
+      Object.keys(s.gameCardResults).forEach(k=>{ if(k.indexOf(league.id+'|')===0) delete s.gameCardResults[k]; });
+    }
+    Object.keys(s.rosters||{}).filter(k=> k.indexOf(league.id+'_')===0).forEach(key=>{
+      (s.rosters[key]||[]).forEach(sl=>{
+        if(sl.fighter) sl.fighter.jrSeasonRecord = { wins:0, losses:0, methods:{KO:0,TKO:0,Decision:0} };
+      });
+    });
+    s.leagueScheduleYear[league.id] = cycleYear;
+    changed = true;
+    actuallyReset.add(league.id);
+  });
+  if(changed){ try{ localStorage.setItem(sk(JR_STATE_KEY), JSON.stringify(s)); }catch(err){} }
+  if(actuallyReset.size){
+    const roster = getRoster();
+    const mine = roster.find(r=>r.isPlayable);
+    if(mine && mine.juniorLeagueId && actuallyReset.has(mine.juniorLeagueId)){
+      updateFighter(mine.id, (ff)=>{
+        ff.jrSeasonRecord = { wins:0, losses:0, methods:{KO:0,TKO:0,Decision:0} };
+      });
+    }
+  }
 }
 function readLeagueWeek(leagueId){
   const s = loadJrStateReadOnly();
@@ -4130,6 +4220,7 @@ function checkForJrGameNight(){
   if(state.pendingJrGameNight) return; // already queued
   const f = getFighterById(state.fighterId);
   if(!f || !f.juniorLeagueId) return;
+  ensureJrSeasonResetForYearRW(currentIslandYear()); // catch a stale prior-cycle season before bootstrapping/reading the schedule
   const leagueId = f.juniorLeagueId;
   const weekIdx = readLeagueWeek(leagueId);
   const weeks = ensureLeagueScheduleRW(leagueId); // bootstraps the schedule if it doesn't exist yet — otherwise the popup could never fire at all
@@ -4918,6 +5009,7 @@ function renderLocTravel(){
 }
 
 function renderLocStadium(){
+  ensureJrSeasonResetForYearRW(currentIslandYear()); // catch a stale prior-cycle season before displaying anything below
   const loc = state.visitingLocation;
   const league = getJrLeague(loc.leagueId);
   const team = league.teams[loc.teamIndex];
@@ -7255,6 +7347,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V90 · 2026-07-20</div>
+<div class="version-badge">FREE ROAM · V91 · 2026-07-21</div>
 </body>
 </html>
