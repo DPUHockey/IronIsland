@@ -1973,7 +1973,7 @@ function renderRosterScreen(){
         <div style="display:flex; gap:12px; align-items:flex-start;">
           <div class="rc-avatar">${buildSilhouetteSM(f.appearance)}</div>
           <div>
-            <div class="rc-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
+            <div class="rc-name clickable-name" data-open-fighter="${f.id}">${f.name}${f.age?` (${f.age})`:''}</div>
             <div class="rc-meta">${DISCIPLINE_NAMES[f.primaryDisc]} · ${prov ? `<span class="clickable-name" data-city-info="${prov.id}|${f.settlement}">${f.settlement}</span>, <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span>` : (f.settlement||'Unknown')} · POT ${f.potential} · ${f.trait}</div>
             ${legacyLine}${familyLine}
           </div>
@@ -2717,6 +2717,6 @@ function updateNextBasicsDisabled(){
 
 render();
 </script>
-<div class="version-badge">CHARACTER CREATOR · V24 · 2026-07-21</div>
+<div class="version-badge">CHARACTER CREATOR · V25 · 2026-07-23</div>
 </body>
 </html>

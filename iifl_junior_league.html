@@ -1385,7 +1385,7 @@ function setPlayerIntoRoster(leagueId, teamIndex, fighter){
   const check = loadJrState();
   const stillThere = (check.rosters[key]||[]).some(sl=> sl.isPlayer && sl.fighterId===fighter.id);
   if(!stillThere) console.error('IIFL setPlayerIntoRoster: write did not persist for', fighter.name, key);
-  logTransaction(leagueId, teamIndex, { type:'Player Signing', fighterName: fighter.name, weightClass: wClass });
+  logTransaction(leagueId, teamIndex, { type:'Player Signing', fighterName: fighter.name, age: fighter.age, weightClass: wClass });
 }
 // Resolves a roster slot to a live fighter object — player slots pull fresh from the
 // shared roster (so growth/aging always reflects current state), NPC slots use their
@@ -1664,7 +1664,7 @@ function draftFighterIntoRoster(leagueId, teamIndex, fighter, source){
   slot.fighter = fighter;
   s.rosters[key] = slots;
   saveJrState(s);
-  logTransaction(leagueId, teamIndex, { type: source==='fa-wire' ? 'FA Signing' : 'Draft Pick', fighterName: fighter.name, weightClass: wClass });
+  logTransaction(leagueId, teamIndex, { type: source==='fa-wire' ? 'FA Signing' : 'Draft Pick', fighterName: fighter.name, age: fighter.age, weightClass: wClass });
 }
 
 // ============ THREE-NIGHT DRAFT CYCLE ============
@@ -1805,7 +1805,7 @@ function processFAWaiverForLeague(league, pools){
   // somewhere else instead of being silently deleted.
   if(upgradeSlot && upgradeSlot.fighter){
     pools.juniorFA.push(upgradeSlot.fighter);
-    logTransaction(league.id, teamIndex, { type: 'Waived', fighterName: upgradeSlot.fighter.name, weightClass: upgradeSlot.weightClass });
+    logTransaction(league.id, teamIndex, { type: 'Waived', fighterName: upgradeSlot.fighter.name, age: upgradeSlot.fighter.age, weightClass: upgradeSlot.weightClass });
   }
 
   draftFighterIntoRoster(league.id, teamIndex, best, 'fa-wire');
@@ -3235,7 +3235,7 @@ function renderTeamModal(root){
     return `
       <div class="roster-slot ${sl.isPlayer?'you':''}">
         <div class="roster-slot-wc">${sl.weightClass}</div>
-        <div class="roster-slot-name ${sl.isPlayer?'you':''} clickable-name" data-open-fighter="${fighter?fighter.id:''}">${sl.isPlayer?'YOU — ':''}${sl.name}${fatigueInjuryBadge(fighter)}</div>
+        <div class="roster-slot-name ${sl.isPlayer?'you':''} clickable-name" data-open-fighter="${fighter?fighter.id:''}">${sl.isPlayer?'YOU — ':''}${sl.name}${fighter&&fighter.age?` (${fighter.age})`:''}${fatigueInjuryBadge(fighter)}</div>
         <div style="font-family:var(--mono); font-size:10px; color:var(--muted); min-width:16px; text-align:center;" title="Junior experience">${experienceLabel(fighter)}</div>
         <div style="font-family:var(--mono); font-size:11px; color:var(--brass);">OVR ${ovr}</div>
       </div>`;
@@ -3710,7 +3710,7 @@ function renderRoster(){
     return `
     <div class="roster-slot ${sl.isPlayer?'you':''}">
       <div class="roster-slot-wc">${sl.weightClass}</div>
-      <div class="roster-slot-name ${sl.isPlayer?'you':''} clickable-name" data-open-fighter="${fighter?fighter.id:''}">${sl.isPlayer?'YOU — ':''}${sl.name}${fatigueInjuryBadge(fighter)}</div>
+      <div class="roster-slot-name ${sl.isPlayer?'you':''} clickable-name" data-open-fighter="${fighter?fighter.id:''}">${sl.isPlayer?'YOU — ':''}${sl.name}${fighter&&fighter.age?` (${fighter.age})`:''}${fatigueInjuryBadge(fighter)}</div>
       <div style="font-family:var(--mono); font-size:10px; color:var(--muted); min-width:16px; text-align:center;" title="Junior experience">${experienceLabel(fighter)}</div>
       <div style="font-family:var(--mono); font-size:11px; color:var(--brass);">OVR ${ovr}</div>
     </div>
@@ -4816,7 +4816,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V54 · 2026-07-21</div>
+<div class="version-badge">JUNIOR LEAGUE · V55 · 2026-07-23</div>
 </body>
 </html>
 

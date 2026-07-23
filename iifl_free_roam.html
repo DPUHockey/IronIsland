@@ -5193,7 +5193,7 @@ function renderLocStadium(){
       return `
         <div style="padding:3px 0; ${i<roster.length-1?'border-bottom:1px solid var(--line);':''}">
           <div style="display:flex; justify-content:space-between; font-family:var(--body); font-size:10.5px; ${sl.isPlayer?'color:var(--brass);':''}">
-            <span>${star}${sl.weightClass} — ${f?`<span class="clickable-name" data-open-fighter="${f.id}">${sl.name}</span>`:sl.name}${status}</span>
+            <span>${star}${sl.weightClass} — ${f?`<span class="clickable-name" data-open-fighter="${f.id}">${sl.name}</span>`:sl.name}${f&&f.age?` (${f.age})`:''}${status}</span>
             <span style="font-family:var(--mono); color:var(--muted);">OVR ${ovr}</span>
           </div>
           <div style="font-family:var(--mono); font-size:9px; color:var(--muted); margin-top:1px;">${line2}</div>
@@ -5209,7 +5209,7 @@ function renderLocStadium(){
     movesInner = `<div style="font-size:10.5px; color:var(--muted);">No roster moves recorded yet this season.</div>`;
   } else {
     movesInner = moves.slice(0,10).map((m,i)=> row(
-      `${m.type} — ${m.fighterName}${m.weightClass?' ('+m.weightClass+')':''}`,
+      `${m.type} — ${m.fighterName}${m.age?' ('+m.age+')':''}${m.weightClass?' ('+m.weightClass+')':''}`,
       formatCalendarDateShort(m.day),
       { border: i<Math.min(moves.length,10)-1 }
     )).join('');
@@ -7611,6 +7611,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V97 · 2026-07-22</div>
+<div class="version-badge">FREE ROAM · V98 · 2026-07-23</div>
 </body>
 </html>
