@@ -913,6 +913,66 @@ const JR_LEAGUES_DISPLAY = [
   ]},
 ];
 
+// Real, read-only Junior League news for the home dashboard — same JR_STATE_KEY the
+// Junior League screens and Free Roam's stadium/newspaper pages read/write. Never
+// writes; if a league's season/roster hasn't been generated yet over there, these fall
+// back to an honest "hasn't kicked off" line rather than fabricating standings.
+const JR_STATE_KEY = 'iifl_junior_league_v1';
+function loadJrStateReadOnly(){
+  try{ const raw = localStorage.getItem(sk(JR_STATE_KEY)); return raw ? JSON.parse(raw) : { rosters:{} }; }
+  catch(err){ return { rosters:{} }; }
+}
+function readJrStandings(leagueId){
+  const s = loadJrStateReadOnly();
+  if(s.standings && s.standings[leagueId]) return s.standings[leagueId];
+  const league = JR_LEAGUES_DISPLAY.find(l=>l.id===leagueId);
+  return league.teams.map(()=> ({ wins:0, losses:0 }));
+}
+function jrWinPct(standings, i){
+  const r = standings[i] || {wins:0,losses:0};
+  return (r.wins+r.losses) ? r.wins/(r.wins+r.losses) : 0;
+}
+function readJrTeamRoster(leagueId, teamIndex){
+  const s = loadJrStateReadOnly();
+  const key = leagueId+'_'+teamIndex;
+  return (s.rosters && s.rosters[key]) ? s.rosters[key] : null;
+}
+function resolveJrSlotFighterReadOnly(slot){
+  if(slot.isPlayer && slot.fighterId){
+    const f = loadRoster().find(r=> r.id === slot.fighterId);
+    if(f) return f;
+  }
+  return slot.fighter;
+}
+// Best in-season fighter across every roster in a league, ranked by jrSeasonRecord —
+// mirrors the same stat Free Roam's newspaper/stadium pages already track per-fighter.
+function jrLeagueTopFighter(leagueId){
+  const league = JR_LEAGUES_DISPLAY.find(l=>l.id===leagueId);
+  let best = null;
+  league.teams.forEach((t,i)=>{
+    const roster = readJrTeamRoster(leagueId, i);
+    if(!roster) return;
+    roster.forEach(sl=>{
+      const f = resolveJrSlotFighterReadOnly(sl);
+      if(!f || !f.jrSeasonRecord || (f.jrSeasonRecord.wins + f.jrSeasonRecord.losses) === 0) return;
+      const diff = f.jrSeasonRecord.wins - f.jrSeasonRecord.losses;
+      if(!best || diff > (best.f.jrSeasonRecord.wins - best.f.jrSeasonRecord.losses)) best = { f, team: t };
+    });
+  });
+  return best;
+}
+function jrLeagueHeadline(leagueId){
+  const league = JR_LEAGUES_DISPLAY.find(l=>l.id===leagueId);
+  const standings = readJrStandings(leagueId);
+  if(!standings.some(s=> (s.wins+s.losses) > 0)) return `${league.name} hasn't kicked off yet this season.`;
+  const leader = league.teams.map((t,i)=>({t,i,rec:standings[i]}))
+    .sort((a,b)=> jrWinPct(standings,b.i)-jrWinPct(standings,a.i))[0];
+  let line = `${league.name}: <b>${leader.t.city} ${leader.t.nickname}</b> lead at ${leader.rec.wins}-${leader.rec.losses}.`;
+  const topFighter = jrLeagueTopFighter(leagueId);
+  if(topFighter) line += ` <b>${topFighter.f.name}</b> paces the circuit at ${topFighter.f.jrSeasonRecord.wins}-${topFighter.f.jrSeasonRecord.losses}.`;
+  return line;
+}
+
 // Amateur circuits, branded under the Iron Island Federal League umbrella.
 const IIFL_AMATEUR_DISPLAY = [
   { id:'kolsati_circuit', name:'Kolsati Amateur Circuit', provinceId:'kolsati' },
@@ -1788,8 +1848,18 @@ function renderApp(){
 
       <section>
         <div class="section-label">Junior League</div>
-        <div class="empty-note">Browse the three leagues, franchises, and standings.</div>
-        <div class="btn-row"><span></span><a class="btn btn-small" href="iifl_junior_league.html">View Junior League →</a></div>
+        ${JR_LEAGUES_DISPLAY.map(l=> `<div class="headline-item">${jrLeagueHeadline(l.id)}</div>`).join('')}
+        <div class="btn-row" style="margin-top:8px;"><span></span><a class="btn btn-small" href="iifl_junior_league.html">View Junior League →</a></div>
+      </section>
+
+      <section>
+        <div class="section-label">Amateur Circuit</div>
+        <div class="empty-note">Amateur circuits aren't tracked with real standings yet — check back once that tier has real season data.</div>
+      </section>
+
+      <section>
+        <div class="section-label">Pro League</div>
+        <div class="empty-note">No Pro League yet — this space is reserved for when the Iron Island Professional Fight League is real.</div>
       </section>
 
       <section>
@@ -1799,7 +1869,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-reset-island">🔄 Reset Island (Test Mode) →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V25 · 2026-07-19</div>
+        <div class="version-badge">HOME · V26 · 2026-07-22</div>
       </footer>
     </div>
   `;
@@ -1878,7 +1948,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V25 · 2026-07-19</div>
+        <div class="version-badge">HOME · V26 · 2026-07-22</div>
       </footer>
     </div>
   `;

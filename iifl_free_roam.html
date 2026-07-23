@@ -6064,13 +6064,63 @@ function newJuvenileFacesFor(provinceId, day, n){
   return recent.slice(0, n);
 }
 
-// Still-random flavor lists for Amateur/Junior/Pro — those tiers aren't wired to a real,
+// Still-random flavor lists for Amateur/Pro — those tiers aren't wired to a real,
 // persistent registry yet the way Juvenile now is (banked for a future session).
 function generateFlavorFighterList(provinceId, settlementName, n){
   const list = [];
   for(let i=0;i<n;i++){ list.push({ name: pickName(provinceId, settlementName), wins: rand(5,20), losses: rand(0,6) }); }
   list.sort((a,b)=> (b.wins-b.losses)-(a.wins-a.losses));
   return list;
+}
+
+// Junior League IS wired to a real, persistent registry (the same JR_STATE_KEY the
+// Junior League screens and the stadium page read/write) — these are read-only display
+// helpers for the newspaper, mirroring readStandings()/readTeamRoster() above.
+function jrLeaguesForProvince(provinceId){
+  return JR_LEAGUES.filter(l=> l.provinces.includes(provinceId));
+}
+function jrTeamWinPct(standings, i){
+  const r = standings[i] || {wins:0,losses:0};
+  return (r.wins+r.losses) ? r.wins/(r.wins+r.losses) : 0;
+}
+function jrTopTeamsHtml(leagueId, n){
+  const league = getJrLeague(leagueId);
+  const standings = readStandings(leagueId);
+  if(!standings.some(s=> (s.wins+s.losses) > 0)){
+    return `<p style="margin-bottom:6px;">${league.name} hasn't kicked off yet this season.</p>`;
+  }
+  const ranked = league.teams.map((t,i)=>({t,i,rec:standings[i]}))
+    .sort((a,b)=> jrTeamWinPct(standings,b.i) - jrTeamWinPct(standings,a.i));
+  return `<div class="np-list-fighters">${ranked.slice(0,n).map((r,i)=>
+    `<div>${i+1}. <span class="clickable-name" data-view-jr-team="${leagueId}|${r.i}">${r.t.city} ${r.t.nickname}</span> (${r.rec.wins}-${r.rec.losses})</div>`
+  ).join('')}</div>`;
+}
+// Pools every roster spot across every team in a league (player slot resolved live via
+// resolveSlotFighterReadOnly, same as the stadium roster panel) and ranks anyone who has
+// actually fought this season by their jrSeasonRecord.
+function jrLeagueTopFighters(leagueId, n){
+  const league = getJrLeague(leagueId);
+  const entries = [];
+  league.teams.forEach((t,i)=>{
+    const roster = readTeamRoster(leagueId, i);
+    if(!roster) return;
+    roster.forEach(sl=>{
+      const f = resolveSlotFighterReadOnly(sl);
+      if(f && f.jrSeasonRecord && (f.jrSeasonRecord.wins + f.jrSeasonRecord.losses) > 0){
+        entries.push({ f, team: t });
+      }
+    });
+  });
+  entries.sort((a,b)=> (b.f.jrSeasonRecord.wins - b.f.jrSeasonRecord.losses) - (a.f.jrSeasonRecord.wins - a.f.jrSeasonRecord.losses));
+  return entries.slice(0, n);
+}
+function jrTopFightersHtml(leagueId, n){
+  const league = getJrLeague(leagueId);
+  const top = jrLeagueTopFighters(leagueId, n);
+  if(!top.length) return `<p style="margin-bottom:6px;">No Junior bouts on record yet for ${league.name}.</p>`;
+  return `<div class="np-list-fighters">${top.map((x,i)=>
+    `<div>${i+1}. <span class="clickable-name" data-open-fighter="${x.f.id}">${x.f.name}</span> (${x.f.jrSeasonRecord.wins}-${x.f.jrSeasonRecord.losses}) — ${x.team.city} ${x.team.nickname}</div>`
+  ).join('')}</div>`;
 }
 
 function ensureNewspaper(provinceId, day){
@@ -6125,12 +6175,23 @@ function renderNewspaper(){
     ).join('')}</div>
   ` : `<p>No Juvenile fighters registered here yet.</p>`;
 
-  // Amateur/Junior leader lists used to be procedurally-generated flavor names with
-  // fake records, completely disconnected from the real Amateur circuits and the real
-  // Ironbound/Northgate/Tidewater Junior League teams — cleared out rather than left
-  // showing fake stats next to the real Juvenile ones above. Empty for now; wire this
-  // to real Amateur/Junior standings once those have actual season data to report.
-  const otherTopHtml = `<p style="opacity:0.6;">Amateur and Junior League standings aren't being tracked in print yet — check back once those seasons are underway.</p>`;
+  // Junior League IS wired to real, live standings/rosters (see jrTopTeamsHtml/
+  // jrTopFightersHtml above) — an island paper covers all three leagues, a provincial
+  // paper only covers whichever league(s) actually draft out of that province. Amateur
+  // leaders remain procedurally-generated flavor — there's no real Amateur schedule/
+  // standings state yet, so it stays clearly marked as such rather than faking one.
+  const jrLeaguesHere = isIsland ? JR_LEAGUES : jrLeaguesForProvince(provinceId);
+  const jrHtml = jrLeaguesHere.length ? jrLeaguesHere.map(l=> `
+    <div style="margin-bottom:10px;">
+      <div style="font-weight:bold; margin-bottom:2px;">${l.name}</div>
+      ${jrTopTeamsHtml(l.id, 3)}
+      ${jrTopFightersHtml(l.id, 3)}
+    </div>
+  `).join('') : '';
+  const otherTopHtml = `
+    ${jrHtml}
+    <p style="opacity:0.6;">Amateur standings aren't being tracked in print yet — check back once that circuit has real season data.</p>
+  `;
 
   const newFaces = newJuvenileFacesFor(provinceId, day, 3);
   const newFacesHtml = newFaces.length ? newFaces.map(f=>
@@ -6171,7 +6232,7 @@ function renderNewspaper(){
 
       <div class="np-section">
         <div class="np-headline">Other Divisions</div>
-        <div class="np-byline">Amateur &amp; Junior — not yet tied to a live registry</div>
+        <div class="np-byline">Junior League — real records; Amateur still developing</div>
         <div class="np-body">${otherTopHtml}</div>
       </div>
       <hr class="np-divider">
@@ -6220,13 +6281,35 @@ function renderLeagueStandings(){
   const tabsHtml = tabs.map(t=>`<button class="standings-tab ${state.standingsTier===t.id?'active':''}" data-standings-tab="${t.id}">${t.label}</button>`).join('');
 
   let body;
-  // Pro/Junior/Amateur standings used to be entirely made-up team names and records,
-  // disconnected from the real Ironbound/Northgate/Tidewater Junior teams and the real
-  // 8-team Amateur league — cleared out rather than shown as fake stats. Wire these up
-  // once each tier has real season data (Junior standings already exist in
-  // iifl_junior_league.html's own state; Amateur's schedule/standings don't exist yet).
-  if(state.standingsTier === 'pro' || state.standingsTier === 'junior' || state.standingsTier === 'amateur'){
+  // Pro/Amateur standings are still entirely made-up team names and records, disconnected
+  // from anything real — left blank rather than shown as fake stats. Junior IS real now:
+  // same JR_STATE_KEY the Junior League screens and the stadium page read/write.
+  if(state.standingsTier === 'pro' || state.standingsTier === 'amateur'){
     body = `<p style="opacity:0.6; padding:20px 0;">${tabs.find(t=>t.id===state.standingsTier).label} League standings aren't tracked here yet — check back once that tier has real season data.</p>`;
+  } else if(state.standingsTier === 'junior'){
+    body = JR_LEAGUES.map(l=>{
+      const standings = readStandings(l.id);
+      const anyPlayed = standings.some(s=> (s.wins+s.losses) > 0);
+      const ranked = l.teams.map((t,i)=>({t,i,rec:standings[i]}))
+        .sort((a,b)=> jrTeamWinPct(standings,b.i) - jrTeamWinPct(standings,a.i));
+      const rows = ranked.map((r,i)=> `
+        <div class="team-standings-row" style="grid-template-columns:28px 1fr auto;">
+          <span class="tsr-rank">${i+1}</span>
+          <span class="clickable-name" data-view-jr-team="${l.id}|${r.i}">${r.t.city} ${r.t.nickname}</span>
+          <span class="tsr-record">${r.rec.wins}-${r.rec.losses}</span>
+        </div>
+      `).join('');
+      const topFighters = jrLeagueTopFighters(l.id, 5);
+      const topFightersHtml = topFighters.length ? `
+        <div style="margin:8px 0 4px; font-family:var(--mono); font-size:10.5px; color:var(--muted);">Top Fighters</div>
+        ${topFighters.map((x,i)=> `<div style="font-family:var(--body); font-size:12px; padding:2px 0;">${i+1}. <span class="clickable-name" data-open-fighter="${x.f.id}">${x.f.name}</span> (${x.f.jrSeasonRecord.wins}-${x.f.jrSeasonRecord.losses}) — ${x.team.city} ${x.team.nickname}</div>`).join('')}
+      ` : '';
+      return `
+        <div class="section-label">${l.name}</div>
+        ${anyPlayed ? rows : `<div class="empty-note">Season hasn't kicked off yet.</div>`}
+        ${topFightersHtml}
+      `;
+    }).join('<div style="height:14px;"></div>');
   } else {
     const tierData = realJuvenileStandings(10);
     const rows = tierData.map((f,i)=>{
@@ -6246,7 +6329,7 @@ function renderLeagueStandings(){
   }
 
   return `
-    <p style="font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-bottom:14px;">${formatCalendarDate(getCurrentDay())} · ${state.standingsTier==='juvenile' ? 'Real standings — updates live as the season plays out.' : 'Not tracked yet.'}</p>
+    <p style="font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-bottom:14px;">${formatCalendarDate(getCurrentDay())} · ${(state.standingsTier==='juvenile' || state.standingsTier==='junior') ? 'Real standings — updates live as the season plays out.' : 'Not tracked yet.'}</p>
     <div class="standings-tabs">${tabsHtml}</div>
     ${body}
     <div class="btn-row" style="margin-top:16px;"><button class="btn" id="back-to-newspaper">← Back to Paper</button><span></span></div>
@@ -7528,6 +7611,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V96 · 2026-07-21</div>
+<div class="version-badge">FREE ROAM · V97 · 2026-07-22</div>
 </body>
 </html>
