@@ -119,6 +119,7 @@
   .time-day{ font-family:var(--label); font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--bone); margin-right:10px; }
   .time-period{ font-family:var(--mono); font-size:11px; color:var(--brass); }
   .time-moves{ font-family:var(--mono); font-size:13px; color:var(--brass); letter-spacing:2px; }
+  .time-bar-nav{ display:flex; gap:6px; flex-wrap:wrap; order:2; width:100%; border-top:1px solid var(--line); padding-top:8px; }
   .time-bar-sim{ display:flex; gap:6px; flex-wrap:wrap; order:3; width:100%; }
   .btn-tiny{
     font-family:var(--label); letter-spacing:1px; text-transform:uppercase; font-size:10.5px; font-weight:500;
@@ -4794,11 +4795,17 @@ function renderCityWalkIllustrated(map){
   }).join('');
 
   const hereNode = map.nodes[curId];
+  const fIllustrated = getFighterById(state.fighterId);
 
   return `
     <div class="time-bar">
       <div><span class="time-day">${formatCalendarDate(getCurrentDay())}</span><span class="time-period">${state.period}</span></div>
       <div class="time-moves">${'●'.repeat(state.movesRemaining)}${'○'.repeat(MOVES_PER_PERIOD-state.movesRemaining)} moves left</div>
+      <div class="time-bar-nav">
+        <button class="btn-tiny" id="back-to-select-from-walk">← Leave Town</button>
+        <button class="btn-tiny" id="read-newspaper">📰 Newspaper</button>
+        <button class="btn-tiny" id="view-black-market">🕶️ Black Market (${(fIllustrated.blackMarketLog||[]).length})</button>
+      </div>
       <div class="time-bar-sim">
         <button class="btn-tiny" id="sim-time-day">Sim Day</button>
         <button class="btn-tiny" id="sim-time-week">Sim Week</button>
@@ -4810,7 +4817,6 @@ function renderCityWalkIllustrated(map){
       ${nodeMarkers}
     </div>
     <div style="text-align:center; font-family:var(--label); font-size:11px; color:var(--brass); margin-top:8px;">📍 ${hereNode.label || 'On the street'}${hereNode.note ? ` — ${hereNode.note}` : ''}</div>
-    <div class="btn-row" style="margin-top:10px;"><button class="btn" id="back-to-select-from-walk">← Leave Town</button><span></span></div>
   `;
 }
 
@@ -4854,6 +4860,11 @@ function renderCityWalk(){
     <div class="time-bar">
       <div><span class="time-day">${formatCalendarDate(getCurrentDay())}</span><span class="time-period">${state.period}</span></div>
       <div class="time-moves">${'●'.repeat(state.movesRemaining)}${'○'.repeat(MOVES_PER_PERIOD-state.movesRemaining)} moves left</div>
+      <div class="time-bar-nav">
+        <button class="btn-tiny" id="back-to-select-from-walk">← Leave Town</button>
+        <button class="btn-tiny" id="read-newspaper">📰 Newspaper</button>
+        <button class="btn-tiny" id="view-black-market">🕶️ Black Market (${(f.blackMarketLog||[]).length})</button>
+      </div>
       <div class="time-bar-sim">
         <button class="btn-tiny" id="sim-time-day">Sim Day</button>
         <button class="btn-tiny" id="sim-time-week">Sim Week</button>
@@ -4867,12 +4878,7 @@ function renderCityWalk(){
     </div>
     <div class="block-grid" style="--gcols:${grid.size};">${cellsHtml.join('')}</div>
     <div class="walk-hint">Click an adjacent block to walk there. Each step costs a move.</div>
-    <div class="btn-row">
-      <button class="btn" id="back-to-select-from-walk">← Fighter Select</button>
-      <button class="btn" id="read-newspaper">📰 Newspaper</button>
-      <button class="btn" id="view-black-market">🕶️ Black Market (${(f.blackMarketLog||[]).length})</button>
-      ${pits.some(p=> isSignedAtPit(f, state.provinceId+'|'+state.settlementName+'|'+p.id)) && eligiblePits.length ? `<button class="btn btn-primary" id="find-a-fight">Find a Fight →</button>` : ''}
-    </div>
+    ${pits.some(p=> isSignedAtPit(f, state.provinceId+'|'+state.settlementName+'|'+p.id)) && eligiblePits.length ? `<div style="text-align:center; margin-top:24px;"><button class="btn btn-primary" id="find-a-fight">Find a Fight →</button></div>` : ''}
     </div>
   `;
 }
@@ -7522,6 +7528,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V95 · 2026-07-21</div>
+<div class="version-badge">FREE ROAM · V96 · 2026-07-21</div>
 </body>
 </html>
