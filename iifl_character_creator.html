@@ -2022,6 +2022,11 @@ function renderRosterScreen(){
 
   document.querySelectorAll('[data-delete]').forEach(btn=>{
     btn.onclick = ()=>{
+      const f = loadRoster().find(r=> r.id === btn.dataset.delete);
+      const warning = f && f.isPlayable
+        ? `${f.name} is your active player fighter in this save. Deleting them will empty this save's roster and lock you out of the normal Home hub until you add a new fighter. Really delete them?`
+        : `Permanently remove ${f?f.name:'this fighter'} from this save? This can't be undone here (they may still exist in the Character Creator catalog if created there, but any progress made on this save's copy — stats growth, Junior League team, record — is gone for good).`;
+      if(!window.confirm(warning)) return;
       deleteFighterFromRoster(btn.dataset.delete);
       renderRosterScreen();
     };
@@ -2740,6 +2745,6 @@ function updateNextBasicsDisabled(){
 
 render();
 </script>
-<div class="version-badge">CHARACTER CREATOR · V26 · 2026-07-23</div>
+<div class="version-badge">CHARACTER CREATOR · V27 · 2026-07-23</div>
 </body>
 </html>

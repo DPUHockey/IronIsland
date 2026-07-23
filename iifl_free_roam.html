@@ -2807,31 +2807,42 @@ function catchUpJuvenileSimulation(){
   if(getActiveSaveId()) cleanupLegacyFlatKeys();
   const pools = loadFieldPools();
   if(!pools.juvenile) pools.juvenile = {};
-  PROVINCES.forEach(p=> seedJuvenilePoolInPlace(pools, p.id));
-  // Self-heal an already-bloated save from before the population cap existed — this is
-  // what fixes an existing QuotaExceededError-stuck save without the player having to
-  // clear site data by hand.
-  PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id));
   pruneRoamStateProactively();
   repairOrphanedHometowns(pools);
   const today = getCurrentDay();
   syncJuvenilePoolAges(pools, today);
   healLegacyJuvenileBloat(pools, today);
-  // A fighter locked out after a failed early-draft petition still ages toward natural
-  // eligibility over real time, even though they can't fight to trigger normal age-up.
+  // This file never re-derives f.age from f.birthDay on its own (unlike iifl_home.html's
+  // renderApp, which does this every load) — every screen here just trusted whatever
+  // .age happened to already be sitting in the saved roster, stale or not. Syncing it
+  // here, on every render, is what keeps Free Roam's displayed age (Fighter Card, pit
+  // rosters, etc.) actually matching the birthDay the rest of the game derives from.
   try{
     const roster = loadRoster();
     let changed = false;
     roster.forEach(f=>{
-      if(!f.juvenilePetitionStatus) return;
       const before = f.age;
-      ageLockedJuvenileIfDue(f, today);
+      syncFighterAge(f, today);
       if(f.age !== before) changed = true;
+      // A fighter locked out after a failed early-draft petition still ages toward
+      // natural eligibility over real time, even though they can't fight to trigger it.
+      if(f.juvenilePetitionStatus) ageLockedJuvenileIfDue(f, today);
     });
     if(changed) saveRoster(roster);
   }catch(err){}
   const lastSim = pools.juvenileLastSimDay || 0;
   if(lastSim >= today){ saveFieldPoolsSafely(pools); return pools; }
+  // Top-up + emergency cap-trim only run once per day (guarded by the same lastSim
+  // check as the rest of this catch-up) — these two used to run unconditionally on
+  // EVERY call, which meant just walking into a pit and back out again could add and
+  // then immediately trim a different random subset of fighters (topped-up entries all
+  // share one placeholder entryDay, so they tie with real old-timers for "first to get
+  // cut"), making a province's registered list visibly flicker with zero days passed.
+  PROVINCES.forEach(p=> seedJuvenilePoolInPlace(pools, p.id));
+  // Self-heal an already-bloated save from before the population cap existed — this is
+  // what fixes an existing QuotaExceededError-stuck save without the player having to
+  // clear site data by hand.
+  PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id));
   const MAX_CATCHUP_DAYS = 500;
   const startDay = Math.max(lastSim+1, today-MAX_CATCHUP_DAYS+1);
   for(let d=startDay; d<=today; d++){
@@ -7619,6 +7630,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V99 · 2026-07-23</div>
+<div class="version-badge">FREE ROAM · V100 · 2026-07-23</div>
 </body>
 </html>
