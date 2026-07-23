@@ -922,6 +922,38 @@ function loadJrStateReadOnly(){
   try{ const raw = localStorage.getItem(sk(JR_STATE_KEY)); return raw ? JSON.parse(raw) : { rosters:{} }; }
   catch(err){ return { rosters:{} }; }
 }
+function saveJrState(s){
+  try{ localStorage.setItem(sk(JR_STATE_KEY), JSON.stringify(s)); return true; }
+  catch(err){ console.error('IIFL jr state save failed:', err); return false; }
+}
+// Clears a deleted fighter's Junior League roster spot back to empty rather than leaving
+// a dead fighterId reference behind — ensureTeamRoster()'s repair pass in
+// iifl_junior_league.html regenerates it as a fresh NPC teammate next time that roster
+// is actually loaded there (same repair path already used for old no-stats slots).
+function vacateJuniorRosterSlot(leagueId, teamIndex, fighterId){
+  const s = loadJrStateReadOnly();
+  const key = leagueId + '_' + teamIndex;
+  const slot = s.rosters && s.rosters[key] && s.rosters[key].find(sl=> sl.isPlayer && sl.fighterId === fighterId);
+  if(!slot) return;
+  slot.isPlayer = false;
+  slot.fighterId = null;
+  slot.fighter = null;
+  slot.name = 'Vacant';
+  saveJrState(s);
+}
+// Deletes a non-playable roster fighter from THIS save only (the global created-fighters
+// catalog and every other save are untouched, matching deleteFighterFromRoster's existing
+// behavior in iifl_character_creator.html) — and vacates any Junior League roster spot
+// they held so no orphaned data is left sitting around.
+function deleteFighterAndCleanup(fighterId){
+  const roster = loadRoster();
+  const f = roster.find(r=> r.id === fighterId);
+  if(!f || f.isPlayable) return;
+  if(f.juniorLeagueId && (f.juniorTeamId !== null && f.juniorTeamId !== undefined)){
+    vacateJuniorRosterSlot(f.juniorLeagueId, f.juniorTeamId, f.id);
+  }
+  saveRoster(roster.filter(r=> r.id !== fighterId));
+}
 function readJrStandings(leagueId){
   const s = loadJrStateReadOnly();
   if(s.standings && s.standings[leagueId]) return s.standings[leagueId];
@@ -1673,7 +1705,7 @@ function renderApp(){
     if(f.age !== before) agedAnyone = true;
   });
   if(agedAnyone) saveRoster(roster);
-  const npcCount = roster.length - 1;
+  const npcs = roster.filter(f=> !f.isPlayable);
   const tier = fighterStatusLine(playable);
 
   // The stay/off-season/advance choice is anchored to Juvenile's phase since that's the
@@ -1842,7 +1874,12 @@ function renderApp(){
 
       <section>
         <div class="section-label">Roster</div>
-        <div class="info-row"><span>${npcCount ? `${npcCount} other created fighter${npcCount===1?'':'s'} in this world` : 'No other fighters in this world'}</span></div>
+        ${npcs.length ? npcs.map(f=> `
+          <div class="info-row" style="display:flex; justify-content:space-between; align-items:center;">
+            <span>${f.name} (${f.age}) — ${fighterStatusLine(f)}</span>
+            <button class="btn btn-small" data-delete-npc="${f.id}" style="color:var(--ink-red); border-color:var(--ink-red);" title="Remove ${f.name} from this save">🗑</button>
+          </div>
+        `).join('') : `<div class="info-row"><span>No other fighters in this world</span></div>`}
         <div class="btn-row"><span></span><a class="btn btn-small" href="iifl_character_creator.html">Add / Manage Fighters →</a></div>
       </section>
 
@@ -1869,7 +1906,7 @@ function renderApp(){
         <div class="btn-row"><span></span><button class="btn btn-small" id="btn-reset-island">🔄 Reset Island (Test Mode) →</button></div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V26 · 2026-07-22</div>
+        <div class="version-badge">HOME · V27 · 2026-07-23</div>
       </footer>
     </div>
   `;
@@ -1948,7 +1985,7 @@ function renderSaveSelectScreen(){
         </div>
       </section>
       <footer>dpuhockey.github.io/IronIsland
-        <div class="version-badge">HOME · V26 · 2026-07-22</div>
+        <div class="version-badge">HOME · V27 · 2026-07-23</div>
       </footer>
     </div>
   `;
@@ -2048,6 +2085,17 @@ function wireEvents(cycleYear, roster, playable){
     saveRoster(roster);
     renderApp();
   };
+
+  document.querySelectorAll('[data-delete-npc]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const id = btn.dataset.deleteNpc;
+      const f = roster.find(r=> r.id === id);
+      const ok = window.confirm(`Permanently remove ${f?f.name:'this fighter'} from this save? This can't be undone — their roster spot, any Junior League team slot, and all their data are gone for good.`);
+      if(!ok) return;
+      deleteFighterAndCleanup(id);
+      renderApp();
+    };
+  });
 
   const resetIslandBtn = document.getElementById('btn-reset-island');
   if(resetIslandBtn) resetIslandBtn.onclick = ()=>{
