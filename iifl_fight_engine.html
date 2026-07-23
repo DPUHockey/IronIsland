@@ -374,6 +374,14 @@ function buildSilhouetteSM(app){
   </svg>`;
 }
 
+// A real photo (f.photoUrl, set from the Character Creator's roster card) always wins
+// over the procedural silhouette. Falls back to buildSilhouetteSM for every fighter that
+// doesn't have one, which is still nearly all of them.
+function fighterAvatarHtml(f){
+  if(f && f.photoUrl) return `<img src="${f.photoUrl}" alt="" style="width:100%; height:100%; object-fit:cover; object-position:top center;">`;
+  return buildSilhouetteSM(f ? f.appearance : null);
+}
+
 /* ============================ ROSTER STORAGE ============================ */
 
 function loadRoster(){
@@ -901,7 +909,7 @@ function renderModal(){
         </div>
         <div class="modal-body">
           <div class="mf-head">
-            <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
+            <div class="mf-avatar">${fighterAvatarHtml(f)}</div>
             <div>
               <div class="mf-name">${f.name}</div>
               <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement||''}${prov?', '+prov.name:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
@@ -970,7 +978,7 @@ function fighterPickCard(f, slot){
   const disabled = otherSelectedId === f.id;
   return `
     <div class="pick-card ${selected?'selected':''} ${disabled?'disabled':''}" data-pick="${slot}" data-id="${f.id}" style="--pc-color:${prov?prov.color:'#C9A23C'}">
-      <div class="pick-avatar">${buildSilhouetteSM(f.appearance)}</div>
+      <div class="pick-avatar">${fighterAvatarHtml(f)}</div>
       <div>
         <div class="pick-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
         <div class="pick-meta">${DISCIPLINE_NAMES[f.primaryDisc]} · ${f.settlement} · ${f.record.wins}-${f.record.losses}</div>
@@ -1006,9 +1014,9 @@ function renderSetup(){
 
   return `
     <div class="vs-wrap">
-      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(fA.appearance)}</div><div class="vname clickable-name" data-open-fighter="${fA.id}">${fA.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fA.primaryDisc]}</div><div class="vovr">${calcOVR(fA.stats)}</div></div>
+      <div class="vs-fighter"><div class="vsa">${fighterAvatarHtml(fA)}</div><div class="vname clickable-name" data-open-fighter="${fA.id}">${fA.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fA.primaryDisc]}</div><div class="vovr">${calcOVR(fA.stats)}</div></div>
       <div class="vs-mid">VS</div>
-      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(fB.appearance)}</div><div class="vname clickable-name" data-open-fighter="${fB.id}">${fB.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fB.primaryDisc]}</div><div class="vovr">${calcOVR(fB.stats)}</div></div>
+      <div class="vs-fighter"><div class="vsa">${fighterAvatarHtml(fB)}</div><div class="vname clickable-name" data-open-fighter="${fB.id}">${fB.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fB.primaryDisc]}</div><div class="vovr">${calcOVR(fB.stats)}</div></div>
     </div>
 
     <div class="section-label">Home Arena</div>
@@ -1063,9 +1071,9 @@ function renderFight(){
     </div>
 
     <div class="vs-wrap" style="margin-top:0;">
-      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(fA.appearance)}</div><div class="vname clickable-name" data-open-fighter="${fA.id}">${fA.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fA.primaryDisc]}</div></div>
+      <div class="vs-fighter"><div class="vsa">${fighterAvatarHtml(fA)}</div><div class="vname clickable-name" data-open-fighter="${fA.id}">${fA.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fA.primaryDisc]}</div></div>
       <div class="vs-mid">VS</div>
-      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(fB.appearance)}</div><div class="vname clickable-name" data-open-fighter="${fB.id}">${fB.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fB.primaryDisc]}</div></div>
+      <div class="vs-fighter"><div class="vsa">${fighterAvatarHtml(fB)}</div><div class="vname clickable-name" data-open-fighter="${fB.id}">${fB.name}</div><div class="vdisc">${DISCIPLINE_NAMES[fB.primaryDisc]}</div></div>
     </div>
 
     <div class="fight-log">${logHtml}</div>
@@ -1196,6 +1204,6 @@ function applyResultToRoster(){
 
 render();
 </script>
-<div class="version-badge">FIGHT ENGINE · V16 · 2026-07-21</div>
+<div class="version-badge">FIGHT ENGINE · V17 · 2026-07-23</div>
 </body>
 </html>

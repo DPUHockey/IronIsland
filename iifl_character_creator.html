@@ -1812,7 +1812,7 @@ function renderModal(){
         </div>
         <div class="modal-body">
           <div class="mf-head">
-            <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
+            <div class="mf-avatar">${fighterAvatarHtml(f)}</div>
             <div>
               <div class="mf-name">${f.name}</div>
               <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${f.heightIn?heightLabel(f.heightIn):''}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement||''}${prov?', '+prov.name:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
@@ -1971,7 +1971,7 @@ function renderRosterScreen(){
     return `
       <div class="roster-card" style="--rc-color:${prov ? prov.color : '#C9A23C'}">
         <div style="display:flex; gap:12px; align-items:flex-start;">
-          <div class="rc-avatar">${buildSilhouetteSM(f.appearance)}</div>
+          <div class="rc-avatar">${fighterAvatarHtml(f)}</div>
           <div>
             <div class="rc-name clickable-name" data-open-fighter="${f.id}">${f.name}${f.age?` (${f.age})`:''}</div>
             <div class="rc-meta">${DISCIPLINE_NAMES[f.primaryDisc]} · ${prov ? `<span class="clickable-name" data-city-info="${prov.id}|${f.settlement}">${f.settlement}</span>, <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span>` : (f.settlement||'Unknown')} · POT ${f.potential} · ${f.trait}</div>
@@ -1982,6 +1982,7 @@ function renderRosterScreen(){
           <button class="rc-btn" data-replay="${f.id}">▶ Replay Intro</button>
           <a class="rc-btn" href="iifl_free_roam.html" style="text-decoration:none; display:inline-block;">🚶 Walk the City</a>
           ${f.mate ? `<button class="rc-btn" data-child="${f.id}">👶 Have a Child</button>` : `<button class="rc-btn" data-mate="${f.id}">💍 Find a Mate</button>`}
+          <button class="rc-btn" data-set-photo="${f.id}">📷 ${f.photoUrl?'Change':'Set'} Photo</button>
           <button class="rc-btn danger" data-delete="${f.id}">Delete</button>
         </div>
       </div>
@@ -2022,6 +2023,20 @@ function renderRosterScreen(){
   document.querySelectorAll('[data-delete]').forEach(btn=>{
     btn.onclick = ()=>{
       deleteFighterFromRoster(btn.dataset.delete);
+      renderRosterScreen();
+    };
+  });
+
+  document.querySelectorAll('[data-set-photo]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const roster = loadRoster();
+      const f = roster.find(r=> r.id === btn.dataset.setPhoto);
+      if(!f) return;
+      const suggested = f.photoUrl || (f.isPlayable ? 'portraits/player-portrait-1.webp' : '');
+      const url = window.prompt(`Image URL or relative path for ${f.name}'s profile picture (leave blank to clear it and go back to the silhouette):`, suggested);
+      if(url === null) return; // cancelled
+      f.photoUrl = url.trim() || null;
+      saveRoster(roster);
       renderRosterScreen();
     };
   });
@@ -2506,6 +2521,14 @@ function buildSilhouetteSM(app){
   </svg>`;
 }
 
+// A real photo (f.photoUrl) always wins over the procedural silhouette — set via the
+// "Set Photo" button on the roster card. Falls back to buildSilhouetteSM for every
+// fighter that doesn't have one, which is still nearly all of them.
+function fighterAvatarHtml(f){
+  if(f && f.photoUrl) return `<img src="${f.photoUrl}" alt="" style="width:100%; height:100%; object-fit:cover; object-position:top center;">`;
+  return buildSilhouetteSM(f ? f.appearance : null);
+}
+
 function buildSilhouetteLG(app){
   app = app || DEFAULT_APPEARANCE;
   const stroke = (4 * buildMult(app.build)).toFixed(1);
@@ -2717,6 +2740,6 @@ function updateNextBasicsDisabled(){
 
 render();
 </script>
-<div class="version-badge">CHARACTER CREATOR · V25 · 2026-07-23</div>
+<div class="version-badge">CHARACTER CREATOR · V26 · 2026-07-23</div>
 </body>
 </html>

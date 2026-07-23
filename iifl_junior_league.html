@@ -2560,6 +2560,14 @@ function buildSilhouetteSM(app){
   </svg>`;
 }
 
+// A real photo (f.photoUrl, set from the Character Creator's roster card) always wins
+// over the procedural silhouette. Falls back to buildSilhouetteSM for every fighter that
+// doesn't have one, which is still nearly all of them.
+function fighterAvatarHtml(f){
+  if(f && f.photoUrl) return `<img src="${f.photoUrl}" alt="" style="width:100%; height:100%; object-fit:cover; object-position:top center;">`;
+  return buildSilhouetteSM(f ? f.appearance : null);
+}
+
 /* ============================ FIGHT SIMULATION ENGINE ============================ */
 /* Ported from the Fight Pit — same math, same feel, so a Junior League team game
    resolves consistently with everything else in the world. */
@@ -3189,7 +3197,7 @@ function renderFighterModal(root){
         </div>
         <div class="modal-body">
           <div class="mf-head">
-            <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
+            <div class="mf-avatar">${fighterAvatarHtml(f)}</div>
             <div>
               <div class="mf-name">${f.name}</div>
               <div class="mf-meta">${f.age?'Age '+f.age+' · ':''}${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${(f.settlement||f.hometown)?`<span class="clickable-name" data-city-info="${f.provinceId}|${f.settlement||f.hometown}">${f.settlement||f.hometown}</span>`:''}${prov?`, <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span>`:''}</div>
@@ -3449,7 +3457,7 @@ function renderSelect(){
     const btnLabel = action==='roster' ? 'View Roster' : action==='contract' ? 'Sign Contract →' : action==='status' ? 'View Status →' : action==='offers' ? 'See Offers →' : action==='old-draft' ? 'Go →' : 'Go →';
     return `
       <div class="fighter-row" style="--fr-color:${prov?prov.color:'#C9A23C'}">
-        <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
+        <div class="fr-avatar">${fighterAvatarHtml(f)}</div>
         <div style="flex:1;">
           <div class="fr-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
           <div class="fr-meta">Age ${f.age} · ${DISCIPLINE_NAMES[f.primaryDisc]} · OVR ${calcOVR(f.stats)} · ${f.settlement?`<span class="clickable-name" data-city-info="${f.provinceId}|${f.settlement}">${f.settlement}</span>`:''}</div>
@@ -3509,7 +3517,7 @@ function recruitRowHtml(f, recruitNumber){
   return `
     <div class="fighter-row" style="--fr-color:${prov?prov.color:'#C9A23C'}">
       <div class="fr-status" style="min-width:64px; text-align:left;">Recruit<br>#${recruitNumber}</div>
-      <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
+      <div class="fr-avatar">${fighterAvatarHtml(f)}</div>
       <div style="flex:1;">
         <div class="fr-name clickable-name" data-open-fighter="${f.id}">${f.isPlayable ? '⭐ ' : ''}${f.name}</div>
         <div class="fr-meta">Age ${f.age} · ${(f.settlement||f.hometown)?`<span class="clickable-name" data-city-info="${f.provinceId}|${f.settlement||f.hometown}">${f.settlement||f.hometown}</span>`:'Unknown'}${prov ? `, <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span>` : ''} · ${DISCIPLINE_NAMES[f.primaryDisc]} · ${heightLabel(f.heightIn)} · Projects ${weightClassOf(doc.adultWeightLb)}weight</div>
@@ -4068,8 +4076,8 @@ function renderFightCard(){
     return `
       ${scoreboardHtml}
       <div class="tape-grid">
-        <div class="tape-side"><div class="tape-avatar">${buildSilhouetteSM(awayF.appearance)}</div><div class="tape-name clickable-name" data-open-fighter="${awayF.id}">${awayF.name}</div><div class="tape-disc">${DISCIPLINE_NAMES[awayF.primaryDisc]} · ${awayName}</div><div class="tape-ovr">${ovrA}</div></div>
-        <div class="tape-side"><div class="tape-avatar">${buildSilhouetteSM(homeF.appearance)}</div><div class="tape-name clickable-name" data-open-fighter="${homeF.id}">${homeF.name}</div><div class="tape-disc">${DISCIPLINE_NAMES[homeF.primaryDisc]} · ${homeName}</div><div class="tape-ovr">${ovrH}</div></div>
+        <div class="tape-side"><div class="tape-avatar">${fighterAvatarHtml(awayF)}</div><div class="tape-name clickable-name" data-open-fighter="${awayF.id}">${awayF.name}</div><div class="tape-disc">${DISCIPLINE_NAMES[awayF.primaryDisc]} · ${awayName}</div><div class="tape-ovr">${ovrA}</div></div>
+        <div class="tape-side"><div class="tape-avatar">${fighterAvatarHtml(homeF)}</div><div class="tape-name clickable-name" data-open-fighter="${homeF.id}">${homeF.name}</div><div class="tape-disc">${DISCIPLINE_NAMES[homeF.primaryDisc]} · ${homeName}</div><div class="tape-ovr">${ovrH}</div></div>
       </div>
       ${statRow('SPEED', awayF.stats.speed, homeF.stats.speed)}
       ${statRow('QUICKNESS', awayF.stats.quickness, homeF.stats.quickness)}
@@ -4816,7 +4824,7 @@ try{
   }
 }catch(e){ /* malformed URL param — just stay on overview */ }
 </script>
-<div class="version-badge">JUNIOR LEAGUE · V55 · 2026-07-23</div>
+<div class="version-badge">JUNIOR LEAGUE · V56 · 2026-07-23</div>
 </body>
 </html>
 

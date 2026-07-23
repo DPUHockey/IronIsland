@@ -2956,6 +2956,14 @@ function buildSilhouetteSM(app){
   </svg>`;
 }
 
+// A real photo (f.photoUrl, set from the Character Creator's roster card) always wins
+// over the procedural silhouette. Falls back to buildSilhouetteSM for every fighter that
+// doesn't have one, which is still nearly all of them.
+function fighterAvatarHtml(f){
+  if(f && f.photoUrl) return `<img src="${f.photoUrl}" alt="" style="width:100%; height:100%; object-fit:cover; object-position:top center;">`;
+  return buildSilhouetteSM(f ? f.appearance : null);
+}
+
 const ALEXANDRETTA_NORTH_SETTLEMENTS = ['Blackford','Mosshead','Cowborough','Wolverbridge'];
 const NAME_POOLS = {
   alexandretta_north: { // Irish
@@ -5832,7 +5840,7 @@ function renderModal(){
         </div>
         <div class="modal-body">
           <div class="mf-head">
-            <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
+            <div class="mf-avatar">${fighterAvatarHtml(f)}</div>
             <div>
               <div class="mf-name">${f.name}</div>
               <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${f.heightIn?heightLabel(f.heightIn):''}${f.weightLb?' · '+f.weightLb+' lb':''} · ${(f.settlement||f.hometown)?`<span class="clickable-name" data-city-info="${f.provinceId}|${f.settlement||f.hometown}">${f.settlement||f.hometown}</span>`:''}${prov?`, <span class="clickable-name" data-province-info="${prov.id}">${prov.name}</span>`:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
@@ -6402,7 +6410,7 @@ function renderRandomEvent(){
     </div>
     <p style="font-family:var(--body); font-size:13.5px; color:var(--bone-dim); margin-bottom:16px;">${flavor}</p>
     <div class="tape-side" style="margin-bottom:16px;">
-      <div class="tape-avatar">${buildSilhouetteSM(opp.appearance)}</div>
+      <div class="tape-avatar">${fighterAvatarHtml(opp)}</div>
       <div class="tape-name">${opp.name}</div>
       <div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div>
       <div class="tape-ovr">${ovr}</div>
@@ -6683,7 +6691,7 @@ function renderBookSlot(){
     const ovr = calcOVR(opp.stats);
     return `
       <div class="tape-side" style="cursor:default;">
-        <div class="tape-avatar">${buildSilhouetteSM(opp.appearance)}</div>
+        <div class="tape-avatar">${fighterAvatarHtml(opp)}</div>
         <div class="tape-name">${opp.name}</div>
         <div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div>
         <div class="tape-ovr">${ovr}</div>
@@ -6749,7 +6757,7 @@ function renderChooseOpponent(){
     const report = scouted ? generateScoutingReport(f, opp, agent.skill) : null;
     return `
       <div class="tape-side" style="cursor:default;">
-        <div class="tape-avatar">${buildSilhouetteSM(opp.appearance)}</div>
+        <div class="tape-avatar">${fighterAvatarHtml(opp)}</div>
         <div class="tape-name">${opp.name}</div>
         <div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div>
         <div class="tape-ovr">${ovr}</div>
@@ -6810,7 +6818,7 @@ function renderPreview(){
     ${boostNote}
     <div class="tape-grid">
       <div class="tape-side">
-        <div class="tape-avatar">${buildSilhouetteSM(f.appearance)}</div>
+        <div class="tape-avatar">${fighterAvatarHtml(f)}</div>
         <div class="tape-name">${f.name}</div>
         <div class="tape-disc">${DISCIPLINE_NAMES[f.primaryDisc]}</div>
         <div class="tape-ovr">${ovrF}</div>
@@ -6821,7 +6829,7 @@ function renderPreview(){
         </div>
       </div>
       <div class="tape-side">
-        <div class="tape-avatar">${buildSilhouetteSM(opp.appearance)}</div>
+        <div class="tape-avatar">${fighterAvatarHtml(opp)}</div>
         <div class="tape-name">${opp.name}</div>
         <div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div>
         <div class="tape-ovr">${ovrOpp}</div>
@@ -7611,6 +7619,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V98 · 2026-07-23</div>
+<div class="version-badge">FREE ROAM · V99 · 2026-07-23</div>
 </body>
 </html>

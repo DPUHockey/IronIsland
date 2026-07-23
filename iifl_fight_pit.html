@@ -420,6 +420,14 @@ function buildSilhouetteSM(app){
   </svg>`;
 }
 
+// A real photo (f.photoUrl, set from the Character Creator's roster card) always wins
+// over the procedural silhouette. Falls back to buildSilhouetteSM for every fighter that
+// doesn't have one, which is still nearly all of them.
+function fighterAvatarHtml(f){
+  if(f && f.photoUrl) return `<img src="${f.photoUrl}" alt="" style="width:100%; height:100%; object-fit:cover; object-position:top center;">`;
+  return buildSilhouetteSM(f ? f.appearance : null);
+}
+
 function rand(lo, hi){ return Math.floor(Math.random()*(hi-lo+1))+lo; }
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function clamp(v,lo,hi){ return Math.max(lo, Math.min(hi, v)); }
@@ -3139,7 +3147,7 @@ function renderModal(){
         </div>
         <div class="modal-body">
           <div class="mf-head">
-            <div class="mf-avatar">${buildSilhouetteSM(f.appearance)}</div>
+            <div class="mf-avatar">${fighterAvatarHtml(f)}</div>
             <div>
               <div class="mf-name">${f.name}</div>
               <div class="mf-meta">${f.age ? 'Age '+f.age+' · ' : ''}${heightLabel(f.heightIn)}${f.weightLb?' · '+f.weightLb+' lb':''} · ${f.settlement || f.hometown || ''}${prov?` · <img src="${prov.flag}" alt="" style="width:14px; height:14px; object-fit:cover; vertical-align:-2px; border-radius:2px; margin-right:2px;" onerror="this.style.display='none'">${prov.name}`:''}${f.talentTier==='generational'?' · ⚡ Generational Talent':f.talentTier==='prodigy'?' · Prodigy':''}</div>
@@ -3263,7 +3271,7 @@ function renderSelect(){
 
     return `
       <div class="fighter-row" style="--fr-color:${prov?prov.color:'#C9A23C'}">
-        <div class="fr-avatar">${buildSilhouetteSM(f.appearance)}</div>
+        <div class="fr-avatar">${fighterAvatarHtml(f)}</div>
         <div style="flex:1;">
           <div class="fr-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
           <div class="fr-meta">Age ${f.age} · ${DISCIPLINE_NAMES[f.primaryDisc]} · ${f.settlement} · ${weightClassOf(f.weightLb)} · Career ${f.record.wins}-${f.record.losses}</div>
@@ -3315,7 +3323,7 @@ function renderSeason(){
 
   return `
     <div class="season-head">
-      <div class="season-avatar">${buildSilhouetteSM(f.appearance)}</div>
+      <div class="season-avatar">${fighterAvatarHtml(f)}</div>
       <div>
         <div class="season-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
         <div class="season-meta">Age ${f.age} · ${s.pitName} · ${wClass} Weight · ${DISCIPLINE_NAMES[f.primaryDisc]}${halfLabel ? ' · '+halfLabel : ''}</div>
@@ -3412,7 +3420,7 @@ function renderRegionalFighters(){
     const tag = isAmateur ? x.sortKey : `Age ${x.sortKey}`;
     return `
       <div class="fighter-row" style="--fr-color:${province.color}">
-        <div class="fr-avatar">${buildSilhouetteSM(x.appearance)}</div>
+        <div class="fr-avatar">${fighterAvatarHtml(x)}</div>
         <div style="flex:1;">
           <div class="fr-name clickable-name" data-open-fighter="${x.id}">${x.name}${x.isField===false ? ' <span style="color:var(--brass); font-size:10px;">(Player Fighter)</span>' : ''}</div>
           <div class="fr-meta">${tag} · ${DISCIPLINE_NAMES[x.primaryDisc]} · OVR ${ovr} · ${x.hometown || x.settlement || ''} · ${x.record.wins}-${x.record.losses}</div>
@@ -3557,7 +3565,7 @@ function renderPreview(){
     <div class="section-label">Tale of the Tape</div>
     <div class="tape-grid">
       <div class="tape-side">
-        <div class="tape-avatar">${buildSilhouetteSM(f.appearance)}</div>
+        <div class="tape-avatar">${fighterAvatarHtml(f)}</div>
         <div class="tape-name clickable-name" data-open-fighter="${f.id}">${f.name}</div>
         <div class="tape-disc">${DISCIPLINE_NAMES[f.primaryDisc]}</div>
         <div class="tape-ovr">${ovrF}</div>
@@ -3568,7 +3576,7 @@ function renderPreview(){
         </div>
       </div>
       <div class="tape-side">
-        <div class="tape-avatar">${buildSilhouetteSM(opp.appearance)}</div>
+        <div class="tape-avatar">${fighterAvatarHtml(opp)}</div>
         <div class="tape-name clickable-name" data-open-fighter="${opp.id}">${opp.name}</div>
         <div class="tape-disc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div>
         <div class="tape-ovr">${ovrOpp}</div>
@@ -3622,9 +3630,9 @@ function renderBout(){
       <div class="arena-meta">${arena.name} · ${arena.capacity.toLocaleString()} capacity · ${arena.floor}</div>
     </div>
     <div class="vs-wrap">
-      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(f.appearance)}</div><div class="vname clickable-name" data-open-fighter="${f.id}">${f.name}</div><div class="vdisc">${DISCIPLINE_NAMES[f.primaryDisc]}</div></div>
+      <div class="vs-fighter"><div class="vsa">${fighterAvatarHtml(f)}</div><div class="vname clickable-name" data-open-fighter="${f.id}">${f.name}</div><div class="vdisc">${DISCIPLINE_NAMES[f.primaryDisc]}</div></div>
       <div class="vs-mid">VS</div>
-      <div class="vs-fighter"><div class="vsa">${buildSilhouetteSM(opp.appearance)}</div><div class="vname clickable-name" data-open-fighter="${opp.id}">${opp.name}</div><div class="vdisc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div></div>
+      <div class="vs-fighter"><div class="vsa">${fighterAvatarHtml(opp)}</div><div class="vname clickable-name" data-open-fighter="${opp.id}">${opp.name}</div><div class="vdisc">${DISCIPLINE_NAMES[opp.primaryDisc]}</div></div>
     </div>
     <div class="fight-log">${logHtml}</div>
     <div class="btn-row">
@@ -4324,6 +4332,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V52 · 2026-07-21</div>
+<div class="version-badge">FIGHT PIT · V53 · 2026-07-23</div>
 </body>
 </html>
