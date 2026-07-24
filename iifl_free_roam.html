@@ -559,6 +559,13 @@ const DISCIPLINE_NAMES = {
 const ALL_DISCIPLINES = Object.keys(DISCIPLINE_NAMES);
 const WEIGHT_CLASSES_3 = ['Light','Middle','Heavy']; // Juvenile-tier weight bands
 const WEIGHT_CLASSES_5 = ['Fly','Light','Middle','Heavy','Mega']; // Junior/Pro-tier weight bands
+// Juvenile fighters can ask a pit boss to move up ONE weight class (never two) when their
+// own class is too thin for a real card — Light->Middle or Middle->Heavy only. Heavy has
+// nothing above it to move up into.
+function nextWeightClassUp(wc){
+  const i = WEIGHT_CLASSES_3.indexOf(wc);
+  return (i>=0 && i<WEIGHT_CLASSES_3.length-1) ? WEIGHT_CLASSES_3[i+1] : null;
+}
 
 function rand(lo,hi){ return Math.floor(Math.random()*(hi-lo+1))+lo; }
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
@@ -670,7 +677,7 @@ const SETTLEMENT_MAPS = {
       splinterRoom: { type:'building', label:"The Splinter Room",         x:73, y:19, hook:null },
       arena:        { type:'building', label:'Anchor Point Arena',        x:85, y:11, hook:'jrStadium', hookData:{ leagueId:'northern_jr', teamIndex:0 } },
       foodStore:    { type:'building', label:'Food Store',                x:26, y:31, hook:null },
-      ejoesPotions: { type:'building', label:"Ejoe's Potions",            x:39, y:38, hook:null },
+      ejoesPotions: { type:'building', label:"Ejoe's Potions",            x:39, y:38, hook:'medicine' },
       depot:        { type:'building', label:'The Depot',                 x:63, y:34, hook:null },
       ballpark:     { type:'building', label:'The Ballpark',              x:87, y:38, hook:null },
       fightHouse:   { type:'building', label:'The Frontenac Fight House', x:22, y:49, hook:'pit' },
@@ -708,7 +715,7 @@ const SETTLEMENT_MAPS = {
       timberwolfDen:   { type:'building', label:'Timberwolf Den',             x:72, y:19, hook:'jrStadium', hookData:{ leagueId:'northern_jr', teamIndex:1 } },
       roadOut:         { type:'exit',     label:'Road to the Wilds',          x:89, y:27, hook:'travel' },
       foodStore:       { type:'building', label:'Food Store',                 x:26, y:34, hook:null },
-      potions:         { type:'building', label:'Madame Z Potions',           x:38, y:39, hook:null },
+      potions:         { type:'building', label:'Madame Z Potions',           x:38, y:39, hook:'medicine' },
       anvilRoom:       { type:'building', label:'The Anvil Room',             x:55, y:39, hook:'pit', hookData:{ pitIndex:0 } },
       cemetery:        { type:'building', label:'Restless Hollow Cemetery',   x:79, y:38, hook:null, note:"Just a graveyard — nothing to do here." },
       cutthroatCourt:  { type:'building', label:'The Cutthroat Court',        x:68, y:51, hook:'pit', hookData:{ pitIndex:1 } },
@@ -4118,6 +4125,20 @@ function ensureCityGrid(provinceId, settlementName){
         dirty = true;
       }
     }
+    // Repair pass: grids cached before the Medicine Store existed won't have one —
+    // backfill onto any free cell so already-explored settlements get one too.
+    if(!grid.locations.some(l=>l.type==='medicine')){
+      const occupied = new Set(grid.locations.map(l=>l.row+'_'+l.col));
+      occupied.add(grid.startCell.row+'_'+grid.startCell.col);
+      grid.roamingEvents.forEach(e=> occupied.add(e.row+'_'+e.col));
+      const free = [];
+      for(let r=0;r<grid.size;r++) for(let c=0;c<grid.size;c++){ if(!occupied.has(r+'_'+c)) free.push({row:r,col:c}); }
+      if(free.length){
+        const spot = free[Math.floor(Math.random()*free.length)];
+        grid.locations.push({ row:spot.row, col:spot.col, type:'medicine' });
+        dirty = true;
+      }
+    }
     if(dirty) saveRoamState(s);
     return grid;
   }
@@ -4148,6 +4169,7 @@ function ensureCityGrid(provinceId, settlementName){
     idx++;
   }
   if(idx < available.length){ locations.push({ ...available[idx], type:'minigames' }); idx++; }
+  if(idx < available.length){ locations.push({ ...available[idx], type:'medicine' }); idx++; }
 
   const roamingCount = tier==='Capital' ? 2 : 1;
   const grid = { size, startCell, locations, roamingEvents: [] };
@@ -4190,6 +4212,7 @@ const state = {
   position: null,
   visitingLocation: null,
   fightPitId: null,
+  pendingWeightUpPitId: null, // pit awaiting a pit-boss decision on fighting up a weight class
   opponentChoices: [],
   scoutedIndex: null,
   opponent: null, arena: null, boutResult: null, revealedCount: 0,
@@ -4690,6 +4713,8 @@ function render(){
   else if(state.screen==='black-market'){ body = renderBlackMarket(); title='BLACK MARKET'; }
   else if(state.screen==='league-standings'){ body = renderLeagueStandings(); title='STANDINGS'; }
   else if(state.screen==='loc-pit'){ body = renderLocPit(); title='FIGHT PIT'; }
+  else if(state.screen==='ask-fight-up'){ body = renderAskFightUp(); title='FIGHT PIT'; sub='PIT BOSS'; }
+  else if(state.screen==='loc-medicine'){ body = renderLocMedicine(); title='MEDICINE STORE'; }
   else if(state.screen==='loc-stadium'){ body = renderLocStadium(); title='STADIUM'; }
   else if(state.screen==='loc-stadium-game'){ body = renderLocStadiumGame(); title='MATCHUP'; }
   else if(state.screen==='choose-agent'){ body = renderChooseAgent(); title='YOUR CORNER'; }
@@ -4859,6 +4884,7 @@ function renderCityWalk(){
         else if(loc.type==='stadium'){ const t = getJrLeague(loc.leagueId).teams[loc.teamIndex]; icon='🏟️'; label = t.stadium; }
         else if(loc.type==='npc'){ icon='🗣️'; label = 'Local'; }
         else if(loc.type==='minigames'){ icon='🎲'; label = '???'; }
+        else if(loc.type==='medicine'){ icon='💊'; label = 'Medicine Store'; }
         else if(loc.type==='travel'){ icon='🛣️'; label = 'Road Out'; }
       } else if(roaming){ icon='❓'; label = '???'; }
       const cls = isYou ? 'you' : (loc||roaming ? '' : 'empty');
@@ -6445,6 +6471,40 @@ function renderLocMinigames(){
   `;
 }
 
+// The paid counterpart to the free "stranger with a bottle" random event (triggerRandomEvent's
+// rare potion-permanent case) — same kind of genuine, permanent +1, but here it's a real
+// purchase so the player picks WHICH stat instead of leaving it to chance. Same band-ceiling
+// cap as the free version — money can't buy past what your body can currently handle.
+const PERMANENT_POTION_PRICE = 40;
+function renderLocMedicine(){
+  const f = getFighterById(state.fighterId);
+  const ceiling = bandCeiling(f.age||12, f.talentTier||'normal');
+  const statKeys = ['speed','quickness','toughness','power','agility'];
+  const statLabels = { speed:'Speed', quickness:'Quickness', toughness:'Toughness', power:'Power', agility:'Agility' };
+  const rows = statKeys.map(k=>{
+    const atCeiling = f.stats[k] >= ceiling;
+    const canAfford = f.wallet >= PERMANENT_POTION_PRICE;
+    const disabled = atCeiling || !canAfford;
+    return `
+      <div class="fighter-row" style="justify-content:space-between; align-items:center;">
+        <span>${statLabels[k]} — ${f.stats[k]}${atCeiling?' <span style="color:var(--muted); font-size:10.5px;">(maxed for now)</span>':''}</span>
+        <button class="fr-btn" data-buy-potion="${k}" ${disabled?'disabled':''}>+1 → $${PERMANENT_POTION_PRICE}</button>
+      </div>
+    `;
+  }).join('');
+  return `
+    <div class="loc-head">
+      <div class="loc-name">Medicine Store</div>
+      <div class="loc-meta">Your wallet: $${f.wallet}</div>
+    </div>
+    <p style="font-family:var(--body); font-size:13px; color:var(--bone-dim); margin-bottom:14px;">
+      The real stuff, not a street-corner mystery bottle — a genuine, permanent point banked into whichever stat you pick, for $${PERMANENT_POTION_PRICE}. Won't push you past what your body can actually handle right now.
+    </p>
+    ${rows}
+    <div class="btn-row" style="margin-top:14px;"><button class="btn" id="back-to-walk">← Back</button><span></span></div>
+  `;
+}
+
 function renderLocPit(){
   const f = getFighterById(state.fighterId);
   if(hasAgedOutOfJuvenile(f)){
@@ -6686,6 +6746,29 @@ function renderTournamentNight(){
     <div class="btn-row" style="margin-top:14px;">
       <button class="btn" id="back-to-pit">← Back To Pit</button>
       <button class="btn btn-primary" id="call-it-a-night">Call It A Night →</button>
+    </div>
+  `;
+}
+
+// Shown when Register-to-Fight can't find at least 3 same-weight bodies at this pit but
+// there IS a real one-class-up pool to draw from — a deliberate ask, not an invisible
+// matchmaking fallback, so moving up in weight actually feels like a choice/risk.
+function renderAskFightUp(){
+  const f = getFighterById(state.fighterId);
+  const pit = currentPits().find(p=>p.id===state.pendingWeightUpPitId);
+  const myWc = weightClassOf(f.weightLb);
+  const upWc = nextWeightClassUp(myWc);
+  const sameCount = pit.roster.filter(r=>r.weightClass===myWc).length;
+  const upCount = pit.roster.filter(r=>r.weightClass===upWc).length;
+  return `
+    <div class="stub-screen">
+      <h2>${pit.bossName} Pulls You Aside</h2>
+      <p>"${sameCount ? `Only got ${sameCount} ${myWc.toLowerCase()}weight${sameCount===1?'':'s'} signed up right now` : `Nobody's signed up at ${myWc.toLowerCase()}weight tonight`} — not enough for a real card. I've got ${upCount} ${upWc.toLowerCase()}weight${upCount===1?'':'s'} looking for work, though. Bigger bodies, but if you want the reps, I'll sign off on it."</p>
+      <p style="font-family:var(--mono); font-size:11px; color:var(--muted);">You'd be fighting up a weight class tonight — ${myWc}weight → ${upWc}weight, this pit boss's call.</p>
+      <div class="btn-row">
+        <button class="btn" id="ask-fight-up-decline">Not Tonight</button>
+        <button class="btn btn-primary" id="ask-fight-up-confirm">Fight Up — ${upWc}weight →</button>
+      </div>
     </div>
   `;
 }
@@ -7000,6 +7083,8 @@ function wireEvents(){
         if(pit){ state.visitingLocation = { type:'pit', pitId: pit.id }; state.screen = 'loc-pit'; }
       } else if(node.hook === 'travel'){
         state.screen = 'loc-travel';
+      } else if(node.hook === 'medicine'){
+        state.screen = 'loc-medicine';
       } else if(Math.random() < ILLUSTRATED_ENCOUNTER_CHANCE){
         triggerRandomEvent();
       }
@@ -7024,6 +7109,7 @@ function wireEvents(){
         else if(loc.type==='stadium') state.screen = 'loc-stadium';
         else if(loc.type==='npc') state.screen = 'loc-npc';
         else if(loc.type==='minigames') state.screen = 'loc-minigames';
+        else if(loc.type==='medicine') state.screen = 'loc-medicine';
         else if(loc.type==='travel') state.screen = 'loc-travel';
       } else if(roaming){
         triggerRandomEvent();
@@ -7241,14 +7327,35 @@ function wireEvents(){
       return;
     }
     const myWc = weightClassOf(f.weightLb);
-    let candidates = pit.roster.filter(r=>r.weightClass===myWc);
-    if(candidates.length < 3) candidates = candidates.concat(pit.roster.filter(r=>r.weightClass!==myWc));
+    const sameClass = pit.roster.filter(r=>r.weightClass===myWc);
+    if(sameClass.length < 3){
+      const upWc = nextWeightClassUp(myWc);
+      const upPool = upWc ? pit.roster.filter(r=>r.weightClass===upWc) : [];
+      if(upPool.length){
+        // Not enough same-class bodies, but there IS a real up-class pool — ask the pit
+        // boss instead of silently dumping in fighters from every weight class (the old
+        // behavior), so moving up is a deliberate choice with real narrative weight
+        // rather than an invisible matchmaking fallback.
+        state.pendingWeightUpPitId = pitId;
+        state.screen = 'ask-fight-up';
+        render();
+        return;
+      }
+      // No class above (already Heavy) or that pool's empty too — last-resort fallback,
+      // same as before: pull from any weight class rather than blocking the player.
+    }
+    let candidates = sameClass.length ? sameClass : pit.roster.filter(r=>r.weightClass!==myWc);
+    if(candidates.length < 3) candidates = candidates.concat(pit.roster.filter(r=>r.weightClass!==myWc && !candidates.includes(r)));
     if(!candidates.length){
       state.flashMessage = "Nobody free to fight at this pit right now — try another pit, or check back after Monday's card.";
       state.screen = 'city-walk';
       render();
       return;
     }
+    finalizeOpponentChoices(pitId, candidates, f);
+  }
+
+  function finalizeOpponentChoices(pitId, candidates, f){
     const n = Math.min(opponentChoiceCount(f.freeRoamFightCount), candidates.length || 1);
     const chosen = [];
     const pool = [...candidates];
@@ -7264,6 +7371,38 @@ function wireEvents(){
 
   const registerFight = document.getElementById('register-fight');
   if(registerFight) registerFight.onclick = ()=> beginFightRegistration(registerFight.dataset.pitId);
+
+  const askFightUp = document.getElementById('ask-fight-up-confirm');
+  if(askFightUp) askFightUp.onclick = ()=>{
+    const pitId = state.pendingWeightUpPitId;
+    const f = getFighterById(state.fighterId);
+    const pit = currentPits().find(p=>p.id===pitId);
+    const myWc = weightClassOf(f.weightLb);
+    const upWc = nextWeightClassUp(myWc);
+    const candidates = pit.roster.filter(r=> r.weightClass===myWc || r.weightClass===upWc);
+    state.pendingWeightUpPitId = null;
+    finalizeOpponentChoices(pitId, candidates, f);
+  };
+  const declineFightUp = document.getElementById('ask-fight-up-decline');
+  if(declineFightUp) declineFightUp.onclick = ()=>{
+    state.pendingWeightUpPitId = null;
+    state.screen = 'loc-pit';
+    render();
+  };
+
+  document.querySelectorAll('[data-buy-potion]').forEach(btn=>{
+    btn.onclick = ()=>{
+      const key = btn.dataset.buyPotion;
+      updateFighter(state.fighterId, ff=>{
+        if(ff.wallet < PERMANENT_POTION_PRICE) return;
+        const ceiling = bandCeiling(ff.age||12, ff.talentTier||'normal');
+        if(ff.stats[key] >= ceiling) return;
+        ff.wallet -= PERMANENT_POTION_PRICE;
+        ff.stats[key] = clamp(ff.stats[key] + 1, 1, ceiling);
+      });
+      render();
+    };
+  });
 
   document.querySelectorAll('[data-book-slot]').forEach(btn=>{
     btn.onclick = ()=>{
@@ -7630,6 +7769,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V100 · 2026-07-23</div>
+<div class="version-badge">FREE ROAM · V101 · 2026-07-23</div>
 </body>
 </html>
