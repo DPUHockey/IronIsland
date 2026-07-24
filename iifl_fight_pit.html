@@ -1191,6 +1191,10 @@ function seedJuvenilePoolInPlace(pools, provinceId){
   if(!province) return;
   const weightClasses = ['Light','Middle','Heavy'];
   const pool = pools.juvenile[provinceId];
+  // Only a genuinely empty province (never seeded before) gets fighters with a fabricated
+  // "career so far" flavor record — every other top-up is a real kid just showing up for
+  // the first time, and should start 0-0 like organic Monday intake already does.
+  const isInitialSeed = pool.length === 0;
   // Tops up shortfalls instead of only ever seeding once from empty — this is what lets
   // a province actually recover after the emergency population cap trims it for storage
   // reasons, instead of being stuck rebuilding at intake's much slower weekly pace for
@@ -1209,7 +1213,8 @@ function seedJuvenilePoolInPlace(pools, provinceId){
       const wc = pick(weightClasses);
       const hometown = pick(loc.hometownPool);
       const f = generateJuvenileFieldFighter(wc, province, hometown);
-      f.entryDay = JUVENILE_SEASON_START_DAY;
+      f.entryDay = getCurrentDay();
+      if(!isInitialSeed) f.record = { wins:0, losses:0 };
       pool.push(f);
       totalsByHometown[hometown] = (totalsByHometown[hometown]||0) + 1;
     }
@@ -1801,7 +1806,9 @@ function runJuvenileIntake(pools, provinceId, day){
     f.entryDay = day;
     pools.juvenile[provinceId].push(f);
   }
-  enforceProvincePoolCap(pools, provinceId);
+  // No routine cap-trim here anymore — see catchUpJuvenileSimulation for why. A real,
+  // already-registered-this-season fighter should never get silently cut just because
+  // intake added a couple more names to the pool.
 }
 
 // Fixes fighters whose hometown points to a settlement that's since been removed
@@ -1847,11 +1854,6 @@ function catchUpJuvenileSimulation(){
   if(getActiveSaveId()) cleanupLegacyFlatKeys();
   const pools = loadFieldPools();
   if(!pools.juvenile) pools.juvenile = {};
-  PROVINCES.forEach(p=> seedJuvenilePoolInPlace(pools, p.id));
-  // Self-heal an already-bloated save from before the population cap existed — this is
-  // what fixes an existing QuotaExceededError-stuck save without the player having to
-  // clear site data by hand.
-  PROVINCES.forEach(p=> enforceProvincePoolCap(pools, p.id));
   repairOrphanedHometowns(pools);
   const today = getCurrentDay();
   syncJuvenilePoolAges(pools, today);
@@ -1870,6 +1872,20 @@ function catchUpJuvenileSimulation(){
   }catch(err){}
   const lastSim = pools.juvenileLastSimDay || 0;
   if(lastSim >= today){ saveFieldPoolsSafely(pools); return pools; }
+  // Top-up only runs once per day (guarded by the lastSim check above) — this used to run
+  // unconditionally on EVERY call, which meant just entering/leaving a pit screen could
+  // add a different random batch of fighters, making a province's registered list visibly
+  // flicker with zero days passed.
+  //
+  // Deliberately NOT calling enforceProvincePoolCap() here anymore. A kid who registers
+  // at a pit is supposed to stay there for the whole season, dropping out only by getting
+  // drafted or aging out — the population cap was evicting real, currently-fighting,
+  // still-in-season registrants purely to manage storage size, silently breaking that
+  // promise every single day. The cap's real job (emergency last-resort trimming when a
+  // save write is actually about to fail from a full localStorage quota) still happens —
+  // see saveFieldPools()'s catch block — this only removes the ROUTINE, non-emergency
+  // trim that ran on every healthy save regardless of whether storage pressure existed.
+  PROVINCES.forEach(p=> seedJuvenilePoolInPlace(pools, p.id));
   const MAX_CATCHUP_DAYS = 500; // safety cap so a long-idle save can't spin forever
   const startDay = Math.max(lastSim+1, today-MAX_CATCHUP_DAYS+1);
   for(let d=startDay; d<=today; d++){
@@ -4332,6 +4348,6 @@ function finalizeAmateurSeason(wentToTournament, tournamentResult){
 
 render();
 </script>
-<div class="version-badge">FIGHT PIT · V53 · 2026-07-23</div>
+<div class="version-badge">FIGHT PIT · V54 · 2026-07-24</div>
 </body>
 </html>
