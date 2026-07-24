@@ -3664,6 +3664,7 @@ function bookScheduleSlot(pit, day, slotIndex, opponentId){
   if(!schedule) return null;
   schedule.slots[slotIndex].matchup = { aId: 'player', bId: opponentId };
   schedule.slots[slotIndex].bookedByPlayer = true;
+  schedule.slots[slotIndex].resolved = false;
   schedule.freeAgents = schedule.freeAgents.filter(id=> id !== opponentId);
   saveRoamState(s);
   return schedule;
@@ -4494,11 +4495,22 @@ function showMainEventInviteModal(invite){
     if(pit){
       const schedule = ensurePitSchedule(pit, getCurrentDay());
       const f = getFighterById(state.fighterId);
-      const opp = pit.roster.filter(r=> r.id !== f.id).sort((a,b)=> Math.abs(calcOVR(a.stats)-calcOVR(f.stats)) - Math.abs(calcOVR(b.stats)-calcOVR(f.stats)))[0];
+      // Picking purely by closest OVR used to ignore who was already paired into another
+      // slot's matchup that same night — a fighter could get handed the main event AND
+      // still be sitting in their original regular-card pairing, fighting twice. Exclude
+      // anyone already booked into any slot (as either side) before picking.
+      const alreadyBooked = new Set();
+      schedule.slots.forEach(sl=>{
+        if(!sl.matchup) return;
+        if(sl.matchup.aId !== 'player') alreadyBooked.add(sl.matchup.aId);
+        if(sl.matchup.bId !== 'player') alreadyBooked.add(sl.matchup.bId);
+      });
+      const opp = pit.roster.filter(r=> r.id !== f.id && !alreadyBooked.has(r.id)).sort((a,b)=> Math.abs(calcOVR(a.stats)-calcOVR(f.stats)) - Math.abs(calcOVR(b.stats)-calcOVR(f.stats)))[0];
       if(opp){
         const lastIdx = schedule.slots.length - 1;
         schedule.slots[lastIdx].matchup = { aId:'player', bId: opp.id };
         schedule.slots[lastIdx].bookedByPlayer = true;
+        schedule.slots[lastIdx].resolved = false;
         schedule.freeAgents = (schedule.freeAgents||[]).filter(id=> id !== opp.id);
         const s = loadRoamState();
         s.pitSchedules[pit.id+'|'+getCurrentDay()] = schedule;
@@ -4554,7 +4566,7 @@ function findTodaysHeadlineBooking(){
     const sched = s.pitSchedules[key];
     if(!sched || !sched.slots) continue;
     const mainEventSlots = sched.slots.length >= 6 ? 2 : 1;
-    const idx = sched.slots.findIndex(sl=> sl.bookedByPlayer);
+    const idx = sched.slots.findIndex(sl=> sl.bookedByPlayer && !sl.resolved);
     if(idx >= 0 && idx >= sched.slots.length - mainEventSlots){
       return { time: sched.slots[idx].time };
     }
@@ -6541,6 +6553,7 @@ function renderLocPit(){
   }).join('');
 
   let scheduleHtml = '';
+  let bookedSlot = null; // player's own Monday League Night slot, if they have one tonight
   if(!juvenileInSeason){
     scheduleHtml = `
       <div class="section-label" style="margin-top:18px;">Off-Season</div>
@@ -6552,7 +6565,8 @@ function renderLocPit(){
   } else if(weekday === 'Monday'){
     const schedule = ensurePitSchedule(pit, day);
     const canBook = isSignedHere && !locked;
-    const alreadyBookedTonight = schedule.slots.some(s=> s.bookedByPlayer);
+    bookedSlot = schedule.slots.find(s=> s.bookedByPlayer) || null;
+    const alreadyBookedTonight = !!bookedSlot;
     const rows = schedule.slots.map((slot, i)=>{
       if(!slot.matchup){
         return `
@@ -6577,7 +6591,7 @@ function renderLocPit(){
       <div class="section-label" style="margin-top:18px;">Tonight's Card — Juvenile League Fight Night</div>
       <div class="sched-list">${rows}</div>
       ${!canBook && !locked ? `<p style="font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-top:8px;">Sign here to book yourself a slot.</p>` : ''}
-      ${alreadyBookedTonight ? `<p style="font-family:var(--mono); font-size:10.5px; color:var(--brass); margin-top:8px;">You're already on tonight's card.</p>` : ''}
+      ${alreadyBookedTonight ? `<p style="font-family:var(--mono); font-size:10.5px; color:var(--brass); margin-top:8px;">${bookedSlot.resolved ? "You already fought tonight's card." : "You're on tonight's card — fight it below."}</p>` : ''}
     `;
   } else if(weekday === 'Tuesday'){
     const tourney = getPitTournament(pit, day, myWc);
@@ -6626,6 +6640,10 @@ function renderLocPit(){
       </p>
       <div class="btn-row"><span></span><button class="btn btn-primary" id="sim-to-fight-night" data-days="${daysToMonday}">Sim Ahead to Monday →</button></div>
     `;
+  } else if(bookedSlot && !bookedSlot.resolved){
+    actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="fight-league-slot" data-pit-id="${pit.id}">Fight Your Match →</button></div>`;
+  } else if(bookedSlot && bookedSlot.resolved){
+    actionHtml = `<p style="font-family:var(--mono); font-size:11px; color:var(--muted); text-align:center;">You already fought tonight's card at this pit.</p>`;
   } else {
     actionHtml = `<div class="btn-row"><span></span><button class="btn btn-primary" id="register-fight" data-pit-id="${pit.id}">Register to Fight →</button></div>`;
   }
@@ -7497,6 +7515,41 @@ function wireEvents(){
     render();
   };
 
+  // Plays a booked Monday League Night slot (walk-in "Book This Slot" or an accepted
+  // main-event headline invite) — previously there was no way to actually fight a booked
+  // slot at all; the schedule just displayed it and "Register to Fight" ignored it.
+  const fightLeagueSlot = document.getElementById('fight-league-slot');
+  if(fightLeagueSlot) fightLeagueSlot.onclick = ()=>{
+    const f = getFighterById(state.fighterId);
+    const pit = currentPits().find(p=>p.id===fightLeagueSlot.dataset.pitId);
+    const day = getCurrentDay();
+    const schedule = ensurePitSchedule(pit, day);
+    const slotIdx = schedule.slots.findIndex(sl=> sl.bookedByPlayer && !sl.resolved);
+    if(slotIdx < 0) return;
+    const slot = schedule.slots[slotIdx];
+    const oppId = slot.matchup.aId==='player' ? slot.matchup.bId : slot.matchup.aId;
+    const opp = tournamentFighterById(pit, f, oppId);
+    if(!opp){
+      // Opponent's genuinely gone (e.g. hit their career cap in the same day's
+      // island-wide catch-up sim) — forfeit win rather than a dead-end button.
+      slot.resolved = true;
+      const s = loadRoamState();
+      s.pitSchedules[pit.id+'|'+day] = schedule;
+      saveRoamState(s);
+      render();
+      return;
+    }
+    state.fightPitId = pit.id;
+    state.opponent = opp;
+    state.arena = { name: pit.name + ' — League Night' };
+    state.isBlackMarket = false;
+    const fighterForBout = f.tempBoost ? { ...f, stats: addTempBoost(f.stats, f.tempBoost.amount) } : f;
+    state.boutResult = simulateBout(fighterForBout, opp, { arena:{floor:'dirt'}, hometownPit:true });
+    state.revealedCount = 0;
+    state.screen = 'preview';
+    render();
+  };
+
   document.querySelectorAll('[data-book-opponent]').forEach(card=>{
     card.onclick = ()=>{
       const opponentId = card.dataset.bookOpponent;
@@ -7659,10 +7712,15 @@ function wireEvents(){
       // main event pays the most. Fights that didn't come from a scheduled slot (a
       // casual walk-in fight on a non-Monday) just use a neutral 1x.
       let payMultiplier = 1;
-      const daySched = (loadRoamState().pitSchedules || {})[pit.id + '|' + getCurrentDay()];
+      const roamStateForSched = loadRoamState();
+      const daySched = (roamStateForSched.pitSchedules || {})[pit.id + '|' + getCurrentDay()];
       if(daySched){
-        const slotIdx = daySched.slots.findIndex(sl=> sl.matchup && sl.matchup.aId==='player');
-        if(slotIdx >= 0) payMultiplier = paySlotMultiplier(slotIdx, daySched.slots.length);
+        const slotIdx = daySched.slots.findIndex(sl=> sl.matchup && sl.matchup.aId==='player' && !sl.resolved);
+        if(slotIdx >= 0){
+          payMultiplier = paySlotMultiplier(slotIdx, daySched.slots.length);
+          daySched.slots[slotIdx].resolved = true;
+          saveRoamState(roamStateForSched);
+        }
       }
       prize = won ? Math.round((entryFee*3 + rand(0,5)) * payMultiplier) : Math.round(entryFee*0.5 * payMultiplier);
       fameGain = computeFameGain(won, r.method==='Decision' ? 1 : 2, myOVR, oppOVR);
@@ -7769,6 +7827,6 @@ function tryAutoEnterFromUrl(){
 tryAutoEnterFromUrl();
 render();
 </script>
-<div class="version-badge">FREE ROAM · V101 · 2026-07-23</div>
+<div class="version-badge">FREE ROAM · V102 · 2026-07-23</div>
 </body>
 </html>
